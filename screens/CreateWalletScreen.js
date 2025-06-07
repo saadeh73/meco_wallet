@@ -1,133 +1,83 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as CryptoJS from 'crypto-js';
-import * as Crypto from 'expo-crypto';
-import { Buffer } from 'buffer';
+import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
+import * as bip39 from 'bip39';
+import * as SecureStore from 'expo-secure-store';
+import { Keypair } from '@solana/web3.js';
+import * as LocalAuthentication from 'expo-local-authentication';
 
-function CreateWalletScreen({ navigation }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [walletCreated, setWalletCreated] = useState(false);
+export default function CreateWalletScreen({ navigation }) {
+  const [mnemonic, setMnemonic] = useState('');
+  const [keypair, setKeypair] = useState(null);
 
   const generateWallet = async () => {
-    const randomBytes = await Crypto.getRandomBytesAsync(32);
-    const privateKey = Buffer.from(randomBytes).toString('hex');
-    const publicKey = CryptoJS.SHA256(privateKey).toString(CryptoJS.enc.Hex).substring(0, 44);
-    return { privateKey, publicKey };
+    try {
+      const words = bip39.generateMnemonic();
+      setMnemonic(words);
+
+      const seed = await bip39.mnemonicToSeed(words);
+      const wallet = Keypair.fromSeed(seed.slice(0, 32));
+      setKeypair(wallet);
+    } catch (error) {
+      console.log('❌ خطأ في توليد المحفظة:', error);
+      Alert.alert('خطأ', 'فشل في توليد المحفظة');
+    }
   };
 
-  const handleCreateWallet = async () => {
-    if (!email || !password) {
-      Alert.alert('خطأ', 'يرجى إدخال البريد وكلمة المرور');
-      return;
-    }
-
+  const confirmAndSave = async () => {
     try {
-      console.log('🚀 بدء إنشاء المحفظة');
-      await createUserWithEmailAndPassword(auth, email, password);
-      console.log('✅ تم إنشاء المستخدم في Firebase');
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const supported = await LocalAuthentication.isEnrolledAsync();
 
-      const { privateKey, publicKey } = await generateWallet();
-      const encryptedKey = CryptoJS.AES.encrypt(privateKey, password).toString();
-
-      await AsyncStorage.setItem('wallet_public_key', publicKey);
-      await AsyncStorage.setItem('wallet_private_key', encryptedKey);
-
-      Alert.alert('نجاح', `تم إنشاء المحفظة:\n${publicKey}`);
-      setWalletCreated(true);
-    } catch (error) {
-      console.log('❌ خطأ أثناء إنشاء المحفظة:', error);
-
-      if (error.code === 'auth/email-already-in-use') {
-        Alert.alert(
-          'الحساب موجود',
-          'هذا البريد الإلكتروني مسجّل مسبقًا. يرجى استخدام "استيراد محفظة" لتسجيل الدخول أو إعادة المحاولة بكلمة مرور صحيحة.'
-        );
-      } else {
-        Alert.alert('خطأ', error.message || 'حدث خطأ غير متوقع');
+      if (!hasHardware || !supported) {
+        Alert.alert('❌ الجهاز لا يدعم البصمة');
+        return;
       }
+
+      const auth = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'تأكيد بالبصمة لحفظ المحفظة',
+      });
+
+      if (!auth.success) {
+        Alert.alert('❌ فشل في التحقق بالبصمة');
+        return;
+      }
+
+      await SecureStore.setItemAsync('wallet_mnemonic', mnemonic);
+      await SecureStore.setItemAsync('wallet_private_key', Buffer.from(keypair.secretKey).toString('hex'));
+      await SecureStore.setItemAsync('wallet_public_key', keypair.publicKey.toBase58());
+
+      Alert.alert('✅ تم إنشاء المحفظة بنجاح');
+      navigation.navigate('Wallet');
+    } catch (error) {
+      console.log('❌ خطأ في تأكيد المحفظة:', error);
+      Alert.alert('خطأ', 'حدث خطأ أثناء الحفظ');
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>إنشاء محفظة جديدة</Text>
-
-      <TextInput
-        placeholder="البريد الإلكتروني"
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-      />
-
-      <TextInput
-        placeholder="كلمة المرور"
-        style={styles.input}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      <TouchableOpacity style={styles.button} onPress={handleCreateWallet}>
-        <Text style={styles.buttonText}>إنشاء المحفظة</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      <TouchableOpacity style={styles.button} onPress={generateWallet}>
+        <Text style={styles.buttonText}>🔐 إنشاء محفظة جديدة</Text>
       </TouchableOpacity>
 
-      {walletCreated && (
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#444' }]}
-          onPress={() => navigation.navigate('LoginWithGoogle')}
-        >
-          <Text style={styles.buttonText}>📥 حفظ نسخة احتياطية على Google Drive</Text>
-        </TouchableOpacity>
-      )}
-
-      <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-        <Text style={styles.link}>هل نسيت كلمة المرور؟</Text>
-      </TouchableOpacity>
-    </View>
+      {mnemonic ? (
+        <>
+          <View style={styles.mnemonicBox}>
+            <Text style={styles.mnemonic}>{mnemonic}</Text>
+          </View>
+          <TouchableOpacity style={styles.button} onPress={confirmAndSave}>
+            <Text style={styles.buttonText}>✔️ لقد خزّنت الكلمات، متابعة</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
+    </ScrollView>
   );
 }
 
-export default CreateWalletScreen;
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1b1b1b',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    color: '#ff0000',
-    fontSize: 22,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: '#ff0000',
-    padding: 14,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  buttonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  link: {
-    color: '#ff0000',
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-    marginTop: 10,
-  },
+  container: { flexGrow:1, justifyContent:'center', alignItems:'center', padding:20 },
+  button: { backgroundColor:'#ff0000', padding:14, borderRadius:8, marginBottom:20 },
+  buttonText: { color:'#fff', fontSize:16 },
+  mnemonicBox: { backgroundColor:'#fff', padding:10, borderRadius:8, marginBottom:20 },
+  mnemonic: { color:'#000', fontSize:16, textAlign:'center' }
 });

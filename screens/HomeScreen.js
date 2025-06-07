@@ -15,9 +15,6 @@ export default function HomeScreen({ navigation }) {
       <TouchableOpacity style={styles.buttonOutline} onPress={() => navigation.navigate('ImportWallet')}>
       <Text style={styles.buttonOutlineText}>استيراد محفظة</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-       <Text style={{ color: '#ff0000', marginTop: 30 }}>⚙️ الإعدادات</Text>
-       </TouchableOpacity>
      </View>
   );
 }
