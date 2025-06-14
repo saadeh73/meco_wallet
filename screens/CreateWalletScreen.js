@@ -29,9 +29,14 @@ export default function CreateWalletScreen() {
 
       await SecureStore.setItemAsync('wallet_private_key', privateKey);
       await SecureStore.setItemAsync('wallet_public_key', publicKey);
+      await SecureStore.setItemAsync('wallet_initialized', 'true');
 
       console.log('✅ تم إنشاء المحفظة');
-      navigation.navigate('Backup', { mnemonic });
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Backup', params: { mnemonic } }],
+      });
 
     } catch (error) {
       console.log('❌ خطأ أثناء إنشاء المحفظة:', error);

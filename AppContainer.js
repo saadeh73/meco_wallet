@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { ActivityIndicator, View } from 'react-native';
 
 import HomeScreen from './screens/HomeScreen';
 import CreateWalletScreen from './screens/CreateWalletScreen';
@@ -48,10 +51,51 @@ function BottomTabs() {
 
 export default function AppContainer() {
   const theme = useAppStore((state) => state.theme);
+  const [initialRoute, setInitialRoute] = useState(null); // null تعني أن التحقق قيد التنفيذ
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const initialized = await SecureStore.getItemAsync('wallet_initialized');
+
+        if (initialized === 'true') {
+          const biometricAvailable = await LocalAuthentication.hasHardwareAsync();
+          const savedBiometrics = await LocalAuthentication.isEnrolledAsync();
+
+          if (biometricAvailable && savedBiometrics) {
+            const result = await LocalAuthentication.authenticateAsync({
+              promptMessage: 'تأكيد الهوية بالبصمة',
+              fallbackLabel: 'استخدام رمز المرور',
+            });
+
+            if (result.success) {
+              setInitialRoute('BottomTabs');
+              return;
+            }
+          }
+        }
+
+        setInitialRoute('Home');
+      } catch (e) {
+        console.error('Auth error:', e);
+        setInitialRoute('Home');
+      }
+    };
+
+    init();
+  }, []);
+
+  if (!initialRoute) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme === 'dark' ? '#000' : '#fff' }}>
+        <ActivityIndicator size="large" color="#ff0000" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer theme={theme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack.Navigator initialRouteName="Home">
+      <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CreateWallet" component={CreateWalletScreen} />
         <Stack.Screen name="ImportWallet" component={ImportWalletScreen} />

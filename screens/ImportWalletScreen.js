@@ -20,9 +20,15 @@ export default function ImportWalletScreen({ navigation }) {
       await SecureStore.setItemAsync('wallet_mnemonic', mnemonic);
       await SecureStore.setItemAsync('wallet_private_key', Buffer.from(keypair.secretKey).toString('hex'));
       await SecureStore.setItemAsync('wallet_public_key', keypair.publicKey.toBase58());
+      await SecureStore.setItemAsync('wallet_initialized', 'true');
 
       Alert.alert('✅ تم استيراد المحفظة بنجاح');
-      navigation.navigate('BottomTabs', { screen: 'Wallet' }); // ✅ تعديل التنقل الصحيح
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'BottomTabs', params: { screen: 'Wallet' } }],
+      });
+
     } catch (error) {
       console.error('❌ خطأ أثناء الاستيراد:', error);
       Alert.alert('خطأ', 'فشل في استيراد المحفظة');
