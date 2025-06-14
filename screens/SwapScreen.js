@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import * as SecureStore from 'expo-secure-store';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 const tokens = [
   {
@@ -21,7 +23,7 @@ const tokens = [
   {
     id: 'MECO',
     name: 'MECO',
-    image: 'https://dummyimage.com/64x64/ff0000/ffffff&text=M', // رمز ثابت مؤقت
+    image: 'https://dummyimage.com/64x64/ff0000/ffffff&text=M',
   },
   {
     id: 'USDT',
@@ -34,6 +36,10 @@ const tokens = [
     image: 'https://assets.coingecko.com/coins/images/28600/large/bonk.jpg',
   },
 ];
+
+const FEE_SOL = 0.001;
+const SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
+const connection = new Connection(SOLANA_RPC_URL);
 
 export default function SwapScreen() {
   const { t } = useTranslation();
@@ -68,20 +74,48 @@ export default function SwapScreen() {
     }
   };
 
-  const handleSwap = () => {
+  const handleSwap = async () => {
     if (fromToken === toToken) {
       Alert.alert('⚠️', t('same_token_error'));
       return;
     }
 
-    const fromPrice = prices[fromToken] || 0;
-    const toPrice = prices[toToken] || 1;
-    const convertedAmount = ((parseFloat(amount) * fromPrice) / toPrice).toFixed(4);
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= FEE_SOL) {
+      Alert.alert(t('error'), 'المبلغ غير كافٍ بعد خصم الرسوم');
+      return;
+    }
 
-    Alert.alert(
-      t('success'),
-      `${amount} ${fromToken} ≈ ${convertedAmount} ${toToken}`
-    );
+    try {
+      const publicKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+      if (!publicKeyStr) {
+        Alert.alert(t('error'), 'لم يتم العثور على عنوان المحفظة');
+        return;
+      }
+
+      const publicKey = new PublicKey(publicKeyStr);
+      const balanceLamports = await connection.getBalance(publicKey);
+      const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
+
+      if (numericAmount > balanceSol - FEE_SOL) {
+        Alert.alert(t('error'), 'الرصيد غير كافٍ لإتمام المبادلة بعد خصم الرسوم');
+        return;
+      }
+
+      const fromPrice = prices[fromToken] || 0;
+      const toPrice = prices[toToken] || 1;
+      const convertedAmount = ((numericAmount * fromPrice) / toPrice).toFixed(4);
+
+      Alert.alert(
+        t('success'),
+        `${numericAmount} ${fromToken} ≈ ${convertedAmount} ${toToken} (تم خصم ${FEE_SOL} SOL كرسوم)`
+      );
+
+      setAmount('');
+    } catch (err) {
+      console.error('❌ Swap error:', err);
+      Alert.alert(t('error'), 'فشل تنفيذ المبادلة أو التحقق من الرصيد');
+    }
   };
 
   const renderTokenOptions = (selectedToken, setToken) => (

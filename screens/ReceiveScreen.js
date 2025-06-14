@@ -4,12 +4,12 @@ import * as Clipboard from 'expo-clipboard';
 import * as SecureStore from 'expo-secure-store';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
-import QRCode from 'react-native-qrcode-svg'; // ✅ تم الاستدعاء
+import QRCode from 'react-native-qrcode-svg';
 
 export default function ReceiveScreen() {
   const { theme } = useAppStore();
   const { t } = useTranslation();
-  const [walletAddress, setWalletAddress] = useState('');
+  const [walletAddress, setWalletAddress] = useState(null);
 
   const isDark = theme === 'dark';
   const bg = isDark ? '#000' : '#fff';
@@ -18,7 +18,11 @@ export default function ReceiveScreen() {
   const loadWalletAddress = async () => {
     try {
       const address = await SecureStore.getItemAsync('wallet_public_key');
-      if (address) setWalletAddress(address);
+      if (address) {
+        setWalletAddress(address);
+      } else {
+        console.warn('⚠️ لم يتم العثور على عنوان محفظة');
+      }
     } catch (err) {
       console.log('❌ خطأ في تحميل عنوان المحفظة:', err);
     }
@@ -39,15 +43,16 @@ export default function ReceiveScreen() {
     <View style={[styles.container, { backgroundColor: bg }]}>
       <Text style={[styles.title, { color: fg }]}>{t('receive')}</Text>
 
-      {/* ✅ رمز الاستلام QR */}
       {walletAddress ? (
         <View style={styles.qrContainer}>
           <QRCode value={walletAddress} size={180} backgroundColor={bg} color={fg} />
         </View>
-      ) : null}
+      ) : (
+        <Text style={{ color: fg, marginBottom: 20 }}>...جارٍ تحميل عنوان المحفظة</Text>
+      )}
 
       <Text style={[styles.address, { color: fg }]}>
-        {walletAddress || '...جارٍ التحميل'}
+        {walletAddress || '---'}
       </Text>
 
       <TouchableOpacity onPress={copyToClipboard}>

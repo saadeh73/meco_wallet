@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
-import { logTransaction } from '../services/transactionLogger'; // ✅ إضافة
+import * as SecureStore from 'expo-secure-store';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { logTransaction } from '../services/transactionLogger';
+
+const connection = new Connection('https://api.mainnet-beta.solana.com');
 
 export default function SendScreen() {
   const [recipient, setRecipient] = useState('');
@@ -13,35 +17,57 @@ export default function SendScreen() {
   const bg = isDark ? '#000' : '#fff';
   const fg = isDark ? '#fff' : '#000';
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!recipient || !amount) {
       Alert.alert(t('error'), t('fill_fields'));
       return;
     }
 
     const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount) || numericAmount <= 0.001) {
+    const fee = 0.001;
+
+    if (isNaN(numericAmount) || numericAmount <= fee) {
       Alert.alert(t('error'), 'المبلغ غير كافٍ بعد خصم الرسوم');
       return;
     }
 
-    const amountAfterFee = (numericAmount - 0.001).toFixed(6);
+    try {
+      const publicKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+      if (!publicKeyStr) {
+        Alert.alert(t('error'), 'لم يتم العثور على عنوان المحفظة');
+        return;
+      }
 
-    logTransaction({
-      type: 'send',
-      to: recipient,
-      amount: amountAfterFee,
-      fee: 0.001,
-      timestamp: new Date().toISOString(),
-    }); // ✅ تسجيل العملية
+      const publicKey = new PublicKey(publicKeyStr);
+      const balanceLamports = await connection.getBalance(publicKey);
+      const balanceSol = balanceLamports / LAMPORTS_PER_SOL;
 
-    Alert.alert(
-      t('success'),
-      `${t('sent')} ${amountAfterFee} ${t('to')} ${recipient} (تم خصم 0.001 كرسوم)`
-    );
+      if (numericAmount > balanceSol - fee) {
+        Alert.alert(t('error'), 'الرصيد غير كافٍ لإتمام العملية بعد خصم الرسوم');
+        return;
+      }
 
-    setRecipient('');
-    setAmount('');
+      const amountAfterFee = (numericAmount - fee).toFixed(6);
+
+      logTransaction({
+        type: 'send',
+        to: recipient,
+        amount: amountAfterFee,
+        fee,
+        timestamp: new Date().toISOString(),
+      });
+
+      Alert.alert(
+        t('success'),
+        `${t('sent')} ${amountAfterFee} ${t('to')} ${recipient} (تم خصم ${fee} كرسوم)`
+      );
+
+      setRecipient('');
+      setAmount('');
+    } catch (err) {
+      console.error('❌ فشل التحقق من الرصيد:', err);
+      Alert.alert(t('error'), 'حدث خطأ أثناء التحقق من الرصيد');
+    }
   };
 
   return (
