@@ -43,10 +43,19 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "^4.11.1",
-    "zustand": "^5.0.5"
+    "zustand": "^5.0.5",
+    "@expo/config-plugins": "~10.0.0",
+    "@expo/prebuild-config": "~9.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "listUnknownPackages": false
+      }
+    }
+  }
 }
