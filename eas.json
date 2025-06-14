@@ -1,0 +1,18 @@
+{
+  "cli": {
+    "version": ">= 6.3.0"
+  },
+  "build": {
+    "production": {
+      "env": {
+        "JAVA_HOME": "/usr/lib/jvm/java-11-openjdk"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "meco_wallet",
+    "slug": "meco_wallet",
+    "version": "1.0.0",
+    "scheme": "meco-wallet",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.meco.wallet"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.meco.wallet",
+      "versionCode": 1,
+      "permissions": []
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      "expo-secure-store"
+    ],
+    "owner": "saadeh73",
+    "extra": {
+      "eas": {
+        "projectId": "5f8b9038-faa1-43aa-aa18-051dceea01a8"
+      }
+    }
+  }
+}
