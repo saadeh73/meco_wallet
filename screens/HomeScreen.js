@@ -13,7 +13,7 @@ export default function HomeScreen() {
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#000' : '#fff' }]}>
       <Image
-        source={require('../assets/logo.jpg')}
+        source={require('../assets/logo.png')}
         style={styles.logo}
       />
       <Text style={[styles.title, { color: '#ff0000' }]}>{t('welcome')}</Text>

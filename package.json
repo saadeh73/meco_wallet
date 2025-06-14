@@ -10,6 +10,8 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo/config-plugins": "~10.0.0",
+    "@expo/prebuild-config": "~9.0.0",
     "@react-native-async-storage/async-storage": "2.1.2",
     "@react-native-google-signin/google-signin": "^14.0.1",
     "@react-navigation/bottom-tabs": "^7.3.14",
@@ -43,9 +45,7 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "^4.11.1",
-    "zustand": "^5.0.5",
-    "@expo/config-plugins": "~10.0.0",
-    "@expo/prebuild-config": "~9.0.0"
+    "zustand": "^5.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
