@@ -1,0 +1,42 @@
+[33mcommit bd574ce0c2e37ce34802660f750b916f7b103780[m
+Author: saadeh73 <saadeh7380@gmail.com>
+Date:   Mon Mar 2 05:05:00 2026 +0200
+
+    تحديث package.json و package-lock.json
+
+[33mcommit cc6d60d3265bf469742906fc93f8354e704e5807[m
+Author: saadeh73 <saadeh7380@gmail.com>
+Date:   Mon Mar 2 04:57:29 2026 +0200
+
+     Addressing errors and repairing the construction process
+
+[33mcommit acbc9ef3e09c08fa518d4b30205c0d036c293c26[m
+Author: محمد سعادة <40901955+MonyCoin@users.noreply.github.com>
+Date:   Tue Feb 17 03:42:57 2026 +0200
+
+    Delete core
+
+[33mcommit eabe2b29e27fe3a6eaa745f1389f05551fa85625[m
+Author: saadeh73 <saadeh7380@gmail.com>
+Date:   Mon Feb 16 00:25:52 2026 +0200
+
+     Expo Release Update
+
+[33mcommit d51b566917af2207e7de6424e0aa5eff331f1ef9[m
+Merge: 881b1d2 fbd8c2f
+Author: saadeh73 <saadeh7380@gmail.com>
+Date:   Wed Jul 16 01:44:20 2025 +0200
+
+    Merge remote-tracking branch 'origin/main'
+
+[33mcommit fbd8c2f58bc1a1f6b039e117c3f62f0d2ee1ccd1[m
+Author: محمد سعاده <40901955+saadeh73@users.noreply.github.com>
+Date:   Wed Jul 16 00:54:20 2025 +0200
+
+    Delete core
+
+[33mcommit 0f064a748966b852a4c83633781efb80ed5d7b54[m
+Author: saadeh73 <saadeh7380@gmail.com>
+Date:   Wed Jul 16 00:41:59 2025 +0200
+
+    🔥 تحديث شامل للمشروع - حذف ملفات قديمة ومزامنة Termux
