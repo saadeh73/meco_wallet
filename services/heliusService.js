@@ -7,7 +7,7 @@ import * as splToken from '@solana/spl-token';
 const MECO_MINT_ADDRESS = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 
 // ✅ قائمة RPCs مع أولويات
-const RPC_ENDPOINTS = [
+const RPC_ENDPOINTS =[
   { url: 'https://api.mainnet-beta.solana.com', priority: 1 },
   { url: 'https://solana-api.projectserum.com', priority: 2 },
   { url: 'https://rpc.ankr.com/solana', priority: 3 }
@@ -187,6 +187,7 @@ export async function getLatestBlockhash(forceRefresh = false) {
   }
 }
 
+// 🔥 تم إزالة هيدر User-Agent لحل مشكلة الخطأ 401 بشكل جذري
 export const getTokenMarketPrice = async (tokenSymbol) => {
   try {
     const cached = CACHE.prices.get(tokenSymbol);
@@ -202,26 +203,26 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
 
     console.log(`🔄 Fetching price for ${tokenSymbol}...`);
 
-    // قائمة endpoints مع ترتيب المحاولة
-    const endpoints = [
+    // تحديث نقاط Jupiter للنسخة v6 المستقرة
+    const endpoints =[
       {
         url: `https://api.jup.ag/price/v2?ids=${mintAddress}`,
         parser: (data) => data?.data?.[mintAddress]?.price,
       },
       {
-        url: `https://price.jup.ag/v4/price?ids=${mintAddress}`,
+        url: `https://price.jup.ag/v6/price?ids=${mintAddress}`,
         parser: (data) => data?.data?.[mintAddress]?.price,
       },
     ];
 
-    // محاولة Jupiter أولاً (للرموز ذات السيولة)
     for (const { url, parser } of endpoints) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // مهلة 5 ثوان
+        const timeoutId = setTimeout(() => controller.abort(), 5000); 
 
+        // ✅ تم إزالة 'User-Agent'
         const response = await fetch(url, {
-          headers: { 'User-Agent': 'MecoWallet/1.0', Accept: 'application/json' },
+          headers: { 'Accept': 'application/json' },
           signal: controller.signal,
         });
 
@@ -229,7 +230,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
 
         if (response.ok) {
           const data = await response.json();
-          // 🔥 التعديل: تحويل السعر إلى Float لأن Jupiter يرجعه كـ String
           const rawPrice = parser(data);
           const price = parseFloat(rawPrice); 
           
@@ -246,14 +246,14 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
       }
     }
 
-    // إذا فشل Jupiter، ننتقل إلى CoinGecko (يدعم معظم الرموز)
     try {
       const coingeckoUrl = `https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${mintAddress}&vs_currencies=usd`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
+      // ✅ تم إزالة 'User-Agent'
       const response = await fetch(coingeckoUrl, {
-        headers: { 'User-Agent': 'MecoWallet/1.0' },
+        headers: { 'Accept': 'application/json' },
         signal: controller.signal,
       });
 
@@ -261,7 +261,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
 
       if (response.ok) {
         const data = await response.json();
-        // 🔥 التعديل: استخدام parseFloat لضمان النوع
         const price = parseFloat(data[mintAddress]?.usd);
         
         if (price && !isNaN(price) && price > 0) {
@@ -274,13 +273,11 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
       console.warn(`⚠️ CoinGecko fetch failed for ${tokenSymbol}:`, e.message);
     }
 
-    // إذا كان MECO، نعيد القيمة الافتراضية (حتى لو لم نجد سعرًا حقيقيًا)
     if (tokenSymbol === 'MECO') {
       console.log('⚠️ Using fallback price for MECO');
       return 0.00613;
     }
 
-    // للرموز الأخرى، نعيد 0 (سيتم التعامل معه في الواجهة)
     return 0;
 
   } catch (error) {
@@ -356,7 +353,7 @@ export async function getTokenBalance(mintAddress, forceRefresh = false) {
 export async function getTokenAccounts() {
   try {
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) return [];
+    if (!pubKeyStr) return[];
     
     const pubKey = new web3.PublicKey(pubKeyStr);
     const tokenAccounts = await withRetry(
@@ -372,7 +369,7 @@ export async function getTokenAccounts() {
       decimals: account.account.data.parsed.info.tokenAmount.decimals
     }));
   } catch (error) {
-    return [];
+    return[];
   }
 }
 
@@ -428,7 +425,7 @@ export async function sendSolTransaction(fromKeypair, toAddress, amount, fee = 0
     
     const signature = await web3.sendAndConfirmTransaction(
       connection,
-      transaction, [fromKeypair],
+      transaction,[fromKeypair],
       { commitment: 'confirmed' }
     );
     
@@ -458,7 +455,7 @@ export async function sendTokenTransaction(fromKeypair, toAddress, mintAddress, 
     const tokenBalance = await getTokenBalance(mintAddress, true);
     if (tokenBalance < amount) throw new Error('INSUFFICIENT_BALANCE');
     
-    const instructions = [];
+    const instructions =[];
     const toAccountInfo = await connection.getAccountInfo(toATA);
     if (!toAccountInfo) {
       instructions.push(
@@ -498,7 +495,7 @@ export async function sendTokenTransaction(fromKeypair, toAddress, mintAddress, 
   }
 }
 
-export async function heliusRpcRequest(method, params = []) {
+export async function heliusRpcRequest(method, params =[]) {
   try {
     const connection = await rpcManager.getConnection();
     switch(method) {
@@ -534,22 +531,20 @@ export function clearBalanceCache(mintAddress) {
   CACHE.blockhashTime = 0;
 }
 
-// ✅ دالة السجل المحدثة نهائياً والمدعومة بخوارزمية هجينة دقيقة جداً
 export async function getTransactionHistory(limit = 20) {
   try {
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) return [];
+    if (!pubKeyStr) return[];
     
     const connection = await rpcManager.getConnection();
     const pubKey = new web3.PublicKey(pubKeyStr);
     
-    // جلب التوقيعات
     const signatures = await connection.getSignaturesForAddress(pubKey, { 
       limit,
       commitment: 'confirmed' 
     });
     
-    const transactions = [];
+    const transactions =[];
     
     for (const sig of signatures) {
       try {
@@ -568,15 +563,13 @@ export async function getTransactionHistory(limit = 20) {
 
         const isFeePayer = userIndex === 0;
         const fee = tx.meta?.fee ? tx.meta.fee / web3.LAMPORTS_PER_SOL : 0;
-        const preToken = tx.meta?.preTokenBalances || [];
-        const postToken = tx.meta?.postTokenBalances || [];
+        const preToken = tx.meta?.preTokenBalances ||[];
+        const postToken = tx.meta?.postTokenBalances ||[];
 
         const instructions = tx.transaction.message.instructions;
         let found = false;
         
-        // 1️⃣ المحاولة الأولى: البحث المباشر في التعليمات لمعرفة المستلم الفعلي
         for (const ix of instructions) {
-          // تحويلات SOL
           if (ix.program === 'system' && ix.parsed?.type === 'transfer') {
             const from = ix.parsed.info.source;
             const to = ix.parsed.info.destination;
@@ -601,14 +594,12 @@ export async function getTransactionHistory(limit = 20) {
             }
           }
           
-          // تحويلات التوكنات (الحل الجذري لمشكلة الـ ATA)
           if (ix.program === 'spl-token' && (ix.parsed?.type === 'transfer' || ix.parsed?.type === 'transferChecked')) {
             const parsedInfo = ix.parsed.info;
             const from = parsedInfo.authority || parsedInfo.owner || pubKeyStr;
             const destinationAta = parsedInfo.destination; 
             const mint = parsedInfo.mint || preToken.find(t => t.accountIndex === accountKeys.indexOf(destinationAta))?.mint;
             
-            // استخراج عنوان المستلم الحقيقي من بيانات الحسابات
             let toOwner = destinationAta;
             let exactAmount = 0;
 
@@ -616,9 +607,8 @@ export async function getTransactionHistory(limit = 20) {
             if (destIndex !== -1) {
                const tokenData = postToken.find(t => t.accountIndex === destIndex);
                if (tokenData && tokenData.owner) {
-                  toOwner = tokenData.owner; // هذا هو المحفظة الحقيقية
+                  toOwner = tokenData.owner;
                }
-               // جلب الكمية بدقة
                if (tokenData && tokenData.uiTokenAmount) {
                   const preAmt = preToken.find(t => t.accountIndex === destIndex)?.uiTokenAmount?.uiAmount || 0;
                   const postAmt = tokenData.uiTokenAmount.uiAmount || 0;
@@ -663,7 +653,6 @@ export async function getTransactionHistory(limit = 20) {
           }
         }
         
-        // 2️⃣ الخطة البديلة: خوارزمية فارق الرصيد (Delta) للمعاملات المعقدة
         if (!found) {
           const userPreTokens = preToken.filter(t => t.owner === pubKeyStr || t.accountIndex === userIndex);
           const userPostTokens = postToken.filter(t => t.owner === pubKeyStr || t.accountIndex === userIndex);
@@ -759,6 +748,6 @@ export async function getTransactionHistory(limit = 20) {
     return transactions;
   } catch (error) {
     console.error('❌ Error in getTransactionHistory:', error.message);
-    return [];
+    return [];  // <-- التعديل هنا: إرجاع مصفوفة فارغة مع فاصلة منقوطة
   }
 }
