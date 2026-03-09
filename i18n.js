@@ -28,8 +28,33 @@ const resources = {
       ok: 'موافق',
       back: 'رجوع',
       version: 'الإصدار',
+      swap_title: 'تبادل',
 
-      // ========== HomeScreen.js (مع مفتاح اختيار اللغة الجديد) ==========
+      // ========== مفاتيح Web3 (WalletConnect) ==========
+      web3: {
+        disconnect_success: 'تم قطع الاتصال بنجاح.',
+        connected_apps: 'التطبيقات المتصلة',
+        disconnect: 'قطع الاتصال',
+        no_active_sessions: 'لا توجد اتصالات نشطة',
+        connect_new_dapp: 'ربط تطبيق جديد',
+      },
+
+      // ========== مفاتيح WalletConnect للرسائل ==========
+      walletConnect: {
+        connection_request: 'طلب اتصال 🔗',
+        connection_request_message: 'يرغب موقع "{{name}}" ({{url}}) في الاتصال بمحفظتك (Solana).',
+        reject: 'رفض',
+        approve: 'موافقة',
+        connection_success: 'نجاح ✅',
+        connection_success_message: 'تم الاتصال بشبكة سولانا بنجاح.',
+        pairing_error: 'خطأ في الربط',
+        pairing_error_message: 'فشل قراءة الباركود أو انتهت صلاحيته. الرجاء تحديث الموقع والمحاولة مجدداً.',
+        sign_request: 'تنبيه',
+        sign_request_message: 'طلب توقيع على شبكة سولانا',
+        connection_failed: 'فشل الاتصال',
+      },
+
+      // ========== HomeScreen.js ==========
       first_arab_wallet: 'أول محفظة عملات رقمية عربية',
       secure_and_encrypted: 'آمن ومشفر',
       fast_transactions: 'معاملات سريعة',
@@ -51,16 +76,13 @@ const resources = {
       market_title: "سوق العملات",
       market_subtitle: "أسعار حقيقية • تحديث مباشر",
       market_track_prices: "تتبع الأسعار والعملات",
-      market_all_coins: "جميع العملات",
       market_solana_tokens: "رموز سولانا",
       market_top_gainers: "الأعلى ارتفاعاً",
       current_prices: "الأسعار الحالية",
-      loading_market_data: "جاري تحميل بيانات السوق...",
       error_loading: "خطأ في تحميل البيانات",
       try_again: "حاول مرة أخرى",
       market_search: 'بحث عن عملة',
       market_search_placeholder: 'ابحث عن عملة...',
-      // مفاتيح Market إضافية
       all_tokens: "جميع العملات",
       solana_tokens: "سولانا",
       stablecoins: "مستقرة",
@@ -71,27 +93,27 @@ const resources = {
       market_last_update: "آخر تحديث",
       market_unavailable: "غير متاح",
       market_balance: "رصيد",
-      
-       // ========== TokenDetailsScreen.js ==========
-       token_details: 'تفاصيل العملة',
-       market_cap: 'القيمة السوقية',
-       volume_24h: 'حجم التداول (24h)',
-       about_token: 'عن العملة',
-       official_links: 'الروابط الرسمية',
-       no_description: 'لا يوجد وصف متاح لهذه العملة',
-       copied_to_clipboard: 'تم نسخ العنوان إلى الحافظة',
-       price_change_24h: 'التغير (24 ساعة)',
-       statistics: 'الإحصائيات',
-       rank: 'الترتيب',
-       high_24h: 'أعلى سعر (24 ساعة)',
-       chart_coming_soon: 'الرسم البياني قريباً',
-       contract_address: 'عنوان العقد',
-       copy_contract: 'نسخ العنوان',
-       website: 'الموقع الرسمي',
-       twitter: 'تويتر',
-       telegram: 'تلغرام',
-       explorer: 'المستكشف',
-       meco_description: 'MECO هي عملة رقمية مبنية على شبكة سولانا، مصممة للمدفوعات الصغيرة السريعة والآمنة ومنخفضة التكلفة.',
+
+      // ========== TokenDetailsScreen.js ==========
+      token_details: 'تفاصيل العملة',
+      market_cap: 'القيمة السوقية',
+      volume_24h: 'حجم التداول (24h)',
+      about_token: 'عن العملة',
+      official_links: 'الروابط الرسمية',
+      no_description: 'لا يوجد وصف متاح لهذه العملة',
+      copied_to_clipboard: 'تم نسخ العنوان إلى الحافظة',
+      price_change_24h: 'التغير (24 ساعة)',
+      statistics: 'الإحصائيات',
+      rank: 'الترتيب',
+      high_24h: 'أعلى سعر (24 ساعة)',
+      chart_coming_soon: 'الرسم البياني قريباً',
+      contract_address: 'عنوان العقد',
+      copy_contract: 'نسخ العنوان',
+      website: 'الموقع الرسمي',
+      twitter: 'تويتر',
+      telegram: 'تلغرام',
+      explorer: 'المستكشف',
+      meco_description: 'MECO هي عملة رقمية مبنية على شبكة سولانا، مصممة للمدفوعات الصغيرة السريعة والآمنة ومنخفضة التكلفة.',
 
       // ========== SettingsScreen.js ==========
       settings: 'الإعدادات',
@@ -125,8 +147,8 @@ const resources = {
       color_change_applies_immediately: 'سيطبق تغيير اللون فوراً',
       close: 'إغلاق',
       secure_crypto_wallet_description: 'محفظة تشفير آمنة مصممة للعملات الرقمية مع دعم متعدد اللغات وميزات أمان متقدمة.',
-      
-      // ✅ مفاتيح قسم Safety (بعد التنظيف - فقط عبارة الاسترداد)
+
+      // ✅ مفاتيح قسم Safety
       safety: 'الأمان',
       show_recovery_phrase: 'عرض عبارة الاسترداد',
       view_your_secret_phrase: 'اعرض عبارتك السرية للنسخ أو الحفظ',
@@ -135,7 +157,7 @@ const resources = {
       warning_phrase: '⚠️ لا تشارك هذه العبارة مع أي شخص. يمكن لأي شخص يملكها الوصول إلى أموالك.',
       copy: 'نسخ',
 
-      // ملاحظة: المفاتيح التالية كانت موجودة سابقاً وتم الاحتفاظ بها لتجنب الحذف
+      // مفاتيح إضافية قديمة
       change_language: "تغيير اللغة",
       toggle_theme: "تبديل النمط",
       biometric: "المصادقة الحيوية",
@@ -278,28 +300,36 @@ const resources = {
           close: "إغلاق"
         }
       },
-      
-       // ========== SwapScreen.js ==========
-       swap_title: 'تبادل',
-       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
-       swap_from: 'من',
-       swap_max: 'أقصى',
-       swap_balance: 'الرصيد',
-       swap_to: 'إلى',
-       swap_rate: 'السعر',
-       swap_receive: 'تستلم',
-       swap_confirm: 'تأكيد التبادل',
-       swap_completed: 'تم التبادل بنجاح',
-       swap_enter_amount: 'الرجاء إدخال مبلغ صحيح',
-       swap_insufficient_balance: 'رصيد غير كافٍ',
-       swap_loading_quote: 'جاري الحصول على أفضل سعر...',
-       swap_error: 'فشل في الحصول على السعر',
-       select_token: 'اختر العملة',
-       view_on_solscan: 'عرض على Solscan',
 
-      // ========== TransactionHistoryScreen.js ==========
-      transaction_history: "سجل المعاملات",
-      transaction_history_title: "سجل المعاملات",
+      // ========== SwapScreen.js ==========
+      swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
+      swap_from: 'من',
+      swap_max: 'أقصى',
+      swap_balance: 'الرصيد',
+      swap_to: 'إلى',
+      swap_rate: 'السعر',
+      swap_receive: 'تستلم',
+      swap_confirm: 'تأكيد التبادل',
+      swap_completed: 'تم التبادل بنجاح',
+      swap_enter_amount: 'الرجاء إدخال مبلغ صحيح',
+      swap_insufficient_balance: 'رصيد غير كافٍ',
+      swap_loading_quote: 'جاري الحصول على أفضل سعر...',
+      swap_error: 'فشل في الحصول على السعر',
+      select_token: 'اختر العملة',
+      view_on_solscan: 'عرض على Solscan',
+
+      // ========== TransactionHistoryScreen.js (محدث) ==========
+      // الإضافات الجديدة
+      all: 'الكل',
+      fee: 'الرسوم',
+      fees: 'الرسوم',
+      count: 'العدد',
+      other_tokens: 'عملات أخرى',
+      transaction: 'معاملة',
+      
+      // المفاتيح الأساسية لسجل المعاملات
+      transaction_history: 'سجل المعاملات',
+      transaction_history_title: 'سجل المعاملات',
       transaction_analytics: 'تحليلات المعاملات',
       recent_activity: 'النشاط الأخير',
       no_activity_yet: 'لا يوجد نشاط بعد',
@@ -313,6 +343,7 @@ const resources = {
       from: 'من',
       to: 'إلى',
       time: 'الوقت',
+      status: 'الحالة',
       view_on_solscan: 'عرض على Solscan',
       signature_copied: 'تم نسخ التوقيع',
       address_copied: 'تم نسخ العنوان',
@@ -386,13 +417,13 @@ const resources = {
         rescan: 'مسح مرة أخرى',
       },
 
-      // ========== Meco World ========== 🌍 (تم التحديث)
+      // ========== Meco World ========== 🌍
       meco_world: 'عالم ميكو',
       mecoWorld: {
         tab_title: "عالم ميكو",
         banner_title: "مؤسسة MonyCoin للتطوير",
-        banner_desc: "تعرف على سعر MECO الحالي، وقم بالشراء والمبادلة فوراً عبر Jupiter.", // ✅ النص الجديد
-        buy_on_jupiter: "شراء ومبادلة MECO 🪐", // ✅ الزر الجديد
+        banner_desc: "تعرف على سعر MECO الحالي، وقم بالشراء والمبادلة فوراً عبر Jupiter.",
+        buy_on_jupiter: "شراء ومبادلة MECO 🪐",
         community: "انضم للمجتمع",
         desc_twitter: "تابع آخر الأخبار والتحديثات",
         desc_telegram: "تواصل مع المجتمع والدعم الفني",
@@ -429,8 +460,33 @@ const resources = {
       ok: 'OK',
       back: 'Back',
       version: 'Version',
+      swap_title: 'Swap',
 
-      // ========== HomeScreen.js (with new language key) ==========
+      // ========== Web3 (WalletConnect) keys ==========
+      web3: {
+        disconnect_success: 'Disconnected successfully.',
+        connected_apps: 'Connected Apps',
+        disconnect: 'Disconnect',
+        no_active_sessions: 'No active connections',
+        connect_new_dapp: 'Connect New DApp',
+      },
+
+      // ========== WalletConnect alert messages ==========
+      walletConnect: {
+        connection_request: 'Connection Request 🔗',
+        connection_request_message: 'Website "{{name}}" ({{url}}) wants to connect to your wallet (Solana).',
+        reject: 'Reject',
+        approve: 'Approve',
+        connection_success: 'Success ✅',
+        connection_success_message: 'Connected to Solana network successfully.',
+        pairing_error: 'Pairing Error',
+        pairing_error_message: 'Failed to read QR code or it has expired. Please refresh the website and try again.',
+        sign_request: 'Alert',
+        sign_request_message: 'Signature request on Solana network',
+        connection_failed: 'Connection failed',
+      },
+
+      // ========== HomeScreen.js ==========
       first_arab_wallet: 'The first Arabic cryptocurrency wallet',
       secure_and_encrypted: 'Secure and encrypted',
       fast_transactions: 'Fast transactions',
@@ -452,17 +508,13 @@ const resources = {
       market_title: "Market",
       market_subtitle: "Real prices • Live updates",
       market_track_prices: "Track prices and tokens",
-      market_all_coins: "All Coins",
       market_solana_tokens: "Solana Tokens",
       market_top_gainers: "Top Gainers",
       current_prices: "Current Prices",
-      loading_market_data: "Loading market data...",
       error_loading: "Error loading data",
       try_again: "Try Again",
       market_search: 'Search token',
       market_search_placeholder: 'Search for a token...',
-
-      // Additional Market keys
       all_tokens: "All Tokens",
       solana_tokens: "Solana",
       stablecoins: "Stable",
@@ -473,28 +525,28 @@ const resources = {
       market_last_update: "Last update",
       market_unavailable: "Unavailable",
       market_balance: "Balance",
-      
+
       // ========== TokenDetailsScreen.js ==========
-       token_details: 'Token Details',
-       market_cap: 'Market Cap',
-       volume_24h: 'Volume (24h)',
-       about_token: 'About',
-       official_links: 'Official Links',
-       no_description: 'No description available',
-       copied_to_clipboard: 'Address copied to clipboard',
-       price_change_24h: '24h Change',
-       statistics: 'Statistics',
-       rank: 'Rank',
-       high_24h: '24h High',
-       chart_coming_soon: 'Chart coming soon',
-       contract_address: 'Contract Address',
-       copy_contract: 'Copy Address',
-       website: 'Website',
-       twitter: 'Twitter',
-       telegram: 'Telegram',
-       explorer: 'Explorer',
-       meco_description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments.',
-       
+      token_details: 'Token Details',
+      market_cap: 'Market Cap',
+      volume_24h: 'Volume (24h)',
+      about_token: 'About',
+      official_links: 'Official Links',
+      no_description: 'No description available',
+      copied_to_clipboard: 'Address copied to clipboard',
+      price_change_24h: '24h Change',
+      statistics: 'Statistics',
+      rank: 'Rank',
+      high_24h: '24h High',
+      chart_coming_soon: 'Chart coming soon',
+      contract_address: 'Contract Address',
+      copy_contract: 'Copy Address',
+      website: 'Website',
+      twitter: 'Twitter',
+      telegram: 'Telegram',
+      explorer: 'Explorer',
+      meco_description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments.',
+
       // ========== SettingsScreen.js ==========
       settings: 'Settings',
       manage_your_wallet_preferences: 'Manage your wallet preferences',
@@ -527,8 +579,8 @@ const resources = {
       color_change_applies_immediately: 'Color change applies immediately',
       close: 'Close',
       secure_crypto_wallet_description: 'Secure crypto wallet designed for digital currencies with multi-language support and advanced security features.',
-      
-      // ✅ New Safety section keys (cleaned - only recovery phrase)
+
+      // ✅ New Safety section keys
       safety: 'Safety',
       show_recovery_phrase: 'Show Recovery Phrase',
       view_your_secret_phrase: 'View your secret phrase to copy or save',
@@ -536,8 +588,6 @@ const resources = {
       phrase_copied: 'Recovery phrase copied',
       warning_phrase: '⚠️ Do not share this phrase with anyone. Anyone with it can access your funds.',
       copy: 'Copy',
-
- 
 
       // ========== SendScreen.js ==========
       sendScreen: {
@@ -675,28 +725,36 @@ const resources = {
           close: "Close"
         }
       },
-      
-      // ========== SwapScreen.js ==========
-swap_title: 'Swap',
-swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
-swap_from: 'From',
-swap_max: 'MAX',
-swap_balance: 'Balance',
-swap_to: 'To',
-swap_rate: 'Rate',
-swap_receive: 'You receive',
-swap_confirm: 'Confirm Swap',
-swap_completed: 'Swap completed successfully',
-swap_enter_amount: 'Please enter a valid amount',
-swap_insufficient_balance: 'Insufficient balance',
-swap_loading_quote: 'Getting best price...',
-swap_error: 'Failed to get quote',
-select_token: 'Select Token',
-view_on_solscan: 'View on Solscan',
 
-      // ========== TransactionHistoryScreen.js ==========
-      transaction_history: "Transaction History",
-      transaction_history_title: "Transaction History",
+      // ========== SwapScreen.js ==========
+      swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
+      swap_from: 'From',
+      swap_max: 'MAX',
+      swap_balance: 'Balance',
+      swap_to: 'To',
+      swap_rate: 'Rate',
+      swap_receive: 'You receive',
+      swap_confirm: 'Confirm Swap',
+      swap_completed: 'Swap completed successfully',
+      swap_enter_amount: 'Please enter a valid amount',
+      swap_insufficient_balance: 'Insufficient balance',
+      swap_loading_quote: 'Getting best price...',
+      swap_error: 'Failed to get quote',
+      select_token: 'Select Token',
+      view_on_solscan: 'View on Solscan',
+
+      // ========== TransactionHistoryScreen.js (Updated) ==========
+      // New additions
+      all: 'All',
+      fee: 'Fee',
+      fees: 'Fees',
+      count: 'Count',
+      other_tokens: 'Other Tokens',
+      transaction: 'Transaction',
+      
+      // Core transaction history keys
+      transaction_history: 'Transaction History',
+      transaction_history_title: 'Transaction History',
       transaction_analytics: 'Transaction Analytics',
       recent_activity: 'Recent Activity',
       no_activity_yet: 'No activity yet',
@@ -710,6 +768,7 @@ view_on_solscan: 'View on Solscan',
       from: 'From',
       to: 'To',
       time: 'Time',
+      status: 'Status',
       view_on_solscan: 'View on Solscan',
       signature_copied: 'Signature copied',
       address_copied: 'Address copied',
@@ -736,7 +795,7 @@ view_on_solscan: 'View on Solscan',
       wallet_created: "Wallet Created",
       keep_secret: "Keep this information in a safe place",
 
-      // ========== CreateWalletScreen.js و ImportWalletScreen.js ==========
+      // ========== CreateWalletScreen.js & ImportWalletScreen.js ==========
       fill_fields: "Please fill all fields",
       confirm_send: "Confirm Send",
       create_wallet_failed: 'Failed to create wallet',
@@ -783,13 +842,13 @@ view_on_solscan: 'View on Solscan',
         rescan: 'Scan again',
       },
 
-      // ========== Meco World ========== 🌍 (Updated)
+      // ========== Meco World ========== 🌍
       meco_world: 'Meco World',
       mecoWorld: {
         tab_title: "Meco World",
         banner_title: "MonyCoin Foundation",
-        banner_desc: "Track MECO price, buy and swap instantly via Jupiter.", // ✅ New Text
-        buy_on_jupiter: "Buy & Swap MECO 🪐", // ✅ New Button
+        banner_desc: "Track MECO price, buy and swap instantly via Jupiter.",
+        buy_on_jupiter: "Buy & Swap MECO 🪐",
         community: "Join Community",
         desc_twitter: "Follow latest news & updates",
         desc_telegram: "Chat with community & support",

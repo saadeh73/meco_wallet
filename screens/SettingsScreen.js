@@ -421,7 +421,7 @@ export default function SettingsScreen() {
         {/* App Version */}
         <View style={styles.versionContainer}>
           <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-            MECO Wallet {t('version')} 1.4.0
+            MECO Wallet {t('version')} 1.5.0
           </Text>
         </View>
       </Animated.View>
@@ -564,7 +564,7 @@ export default function SettingsScreen() {
               <Text style={[styles.appName, { color: colors.text }]}>MECO Wallet</Text>
               
               <Text style={[styles.appVersion, { color: colors.textSecondary }]}>
-                {t('version')} 1.4.0
+                {t('version')} 1.5.0
               </Text>
               
               <Text style={[styles.appDescription, { color: colors.textSecondary }]}>
