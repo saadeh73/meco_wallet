@@ -41,8 +41,8 @@ export default function WalletScreen() {
     border: isDark ? '#2A2A3E' : '#E5E5EA',
   };
 
-  const [walletName, setWalletName] = useState(t('my_wallet') || 'My Wallet');
-  const [walletAddress, setWalletAddress] = useState('');
+  const[walletName, setWalletName] = useState(t('my_wallet') || 'My Wallet');
+  const[walletAddress, setWalletAddress] = useState('');
   const[totalBalanceUSD, setTotalBalanceUSD] = useState(0);
   const [assets, setAssets] = useState([]); 
   const [refreshing, setRefreshing] = useState(false);
@@ -269,25 +269,17 @@ export default function WalletScreen() {
             </TouchableOpacity>
             
             <View style={styles.headerIcons}>
-              {/* أيقونة Web3 للاتصالات النشطة */}
+              {/* ✅ الزر الذكي الوحيد (الكوكب): يفتح الماسح إذا لم يكن هناك اتصال، أو الجلسات إذا كان متصلاً */}
               <TouchableOpacity 
-                onPress={() => setWcModalVisible(true)} 
+                onPress={() => activeSessions.length > 0 ? setWcModalVisible(true) : navigation.navigate('QRScanner')} 
                 style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7', position: 'relative' }]}
               >
                 <Ionicons 
-                  name="planet-outline" 
-                  size={20} 
+                  name={activeSessions.length > 0 ? "planet" : "planet-outline"} 
+                  size={22} 
                   color={activeSessions.length > 0 ? '#4CAF50' : primaryColor} 
                 />
                 {activeSessions.length > 0 && <View style={[styles.activeBadge, { borderColor: colors.card }]} />}
-              </TouchableOpacity>
-
-              {/* ✅ زر الماسح الضوئي المستقل */}
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('QRScanner')} 
-                style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
-              >
-                <Ionicons name="qr-code-outline" size={20} color={primaryColor} />
               </TouchableOpacity>
 
               {/* زر النسخ */}
@@ -364,7 +356,7 @@ export default function WalletScreen() {
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
               <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16}}>
                 <Ionicons name="planet" size={24} color="#4CAF50" style={{marginRight: 8}} />
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('web3.connected_apps', 'التطبيقات المتصلة')}</Text>
+                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('web3.connected_apps')}</Text>
               </View>
               
               {activeSessions.length > 0 ? (
@@ -381,7 +373,7 @@ export default function WalletScreen() {
                       style={[styles.disconnectBtn, { backgroundColor: '#FF3B3015' }]} 
                       onPress={() => disconnectSession(session.topic)}
                     >
-                      <Text style={{ color: '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>{t('web3.disconnect', 'قطع الاتصال')}</Text>
+                      <Text style={{ color: '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>{t('web3.disconnect')}</Text>
                     </TouchableOpacity>
                   </View>
                 ))
@@ -389,7 +381,7 @@ export default function WalletScreen() {
                 <View style={{alignItems: 'center', paddingVertical: 10}}>
                   <Ionicons name="link-outline" size={40} color={colors.textSecondary} style={{marginBottom: 10}} />
                   <Text style={{color: colors.textSecondary, textAlign: 'center', marginBottom: 20}}>
-                    {t('web3.no_active_sessions', 'لا توجد اتصالات نشطة')}
+                    {t('web3.no_active_sessions')}
                   </Text>
                   <TouchableOpacity 
                     style={[styles.modalBtn, { backgroundColor: primaryColor, width: '100%', borderColor: primaryColor }]}
@@ -399,14 +391,14 @@ export default function WalletScreen() {
                     }}
                   >
                     <Text style={{ color: '#FFF', fontWeight: 'bold', textAlign: 'center' }}>
-                      {t('web3.connect_new_dapp', 'ربط تطبيق جديد')}
+                      {t('web3.connect_new_dapp')}
                     </Text>
                   </TouchableOpacity>
                 </View>
               )}
 
               <TouchableOpacity style={[styles.closeModalBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]} onPress={() => setWcModalVisible(false)}>
-                <Text style={{ color: colors.text, fontWeight: 'bold' }}>{t('close', 'إغلاق')}</Text>
+                <Text style={{ color: colors.text, fontWeight: 'bold' }}>{t('close')}</Text>
               </TouchableOpacity>
             </View>
           </View>

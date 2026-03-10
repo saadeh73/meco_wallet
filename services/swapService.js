@@ -14,10 +14,7 @@ export const TOKEN_MINTS = {
 
 // ✅ الأصفار العشرية محلياً لتجاوز خطأ RPC
 export const TOKEN_DECIMALS = {
-  SOL: 9,
-  MECO: 9,
-  USDT: 6,
-  USDC: 6,
+  SOL: 9, MECO: 9, USDT: 6, USDC: 6,
 };
 
 const JUPITER_QUOTE_API = 'https://quote-api.jup.ag/v6/quote';
@@ -41,13 +38,15 @@ async function getKeypair() {
 }
 
 async function getConnection() {
-  return new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+  // ✅ استخدام سيرفر Ankr لضمان عدم حدوث Rate Limit في وضع الإنتاج
+  return new web3.Connection('https://rpc.ankr.com/solana', 'confirmed');
 }
 
 export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 50) {
   try {
     const url = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&swapMode=ExactIn&onlyDirectRoutes=false`;
 
+    // ✅ الاعتماد على الـ Headers الأساسية فقط لتجنب حظر Cloudflare (كما فعلت في الأسعار)
     const response = await fetch(url, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
@@ -69,7 +68,7 @@ export async function buildSwapTransaction(quote, userPublicKey) {
   try {
     const response = await fetch(JUPITER_SWAP_API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
         quoteResponse: quote,
         userPublicKey: userPublicKey.toString(),
@@ -102,25 +101,28 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
     const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
 
     const quote = await getSwapQuote(
-      TOKEN_MINTS[inputSymbol],
-      TOKEN_MINTS[outputSymbol],
-      amountInSmallestUnit,
-      slippageBps
+      TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit, slippageBps
     );
 
     const swapData = await buildSwapTransaction(quote, keypair.publicKey);
 
-    // استخدام Buffer صراحةً
     const transactionBuffer = Buffer.from(swapData.swapTransaction, 'base64');
     const transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
     transaction.sign([keypair]);
 
-    const signature = await connection.sendTransaction(transaction, {
+    // ✅ إرسال المعاملة بطريقة تتجاوز الفشل الوهمي للشبكة
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
       skipPreflight: true,
       preflightCommitment: 'confirmed',
     });
 
-    const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+    const latestBlockhash = await connection.getLatestBlockhash();
+    const confirmation = await connection.confirmTransaction({
+      signature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+    }, 'confirmed');
+
     if (confirmation.value.err) throw new Error(`فشلت المعاملة على الشبكة`);
 
     const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
@@ -145,11 +147,7 @@ export async function getSwapRate(inputSymbol, outputSymbol, amount) {
     const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
     const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
 
-    const quote = await getSwapQuote(
-      TOKEN_MINTS[inputSymbol],
-      TOKEN_MINTS[outputSymbol],
-      amountInSmallestUnit
-    );
+    const quote = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit);
 
     const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
     const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
