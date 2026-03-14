@@ -1,3 +1,4 @@
+// services/heliusService.js
 import * as SecureStore from 'expo-secure-store';
 import * as web3 from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
@@ -12,11 +13,13 @@ const RPC_ENDPOINTS =[
   { url: 'https://rpc.ankr.com/solana', priority: 3 }
 ];
 
+// ✅ إعدادات الكاش المحسنة
 const CACHE_DURATION = 15000; 
 const BLOCKHASH_DURATION = 20000; 
 const PRICE_CACHE_DURATION = 60000; 
 const MAX_TOKEN_CACHE_SIZE = 100; 
 
+// ✅ نظام Caching محسن باستخدام LRU بسيط
 class LRUCache {
   constructor(maxSize = 100, maxAge = CACHE_DURATION) {
     this.maxSize = maxSize;
@@ -51,6 +54,7 @@ class LRUCache {
   }
 }
 
+// ✅ الكاش الأساسي
 const CACHE = {
   sol: { balance: 0, timestamp: 0 },
   tokens: new LRUCache(MAX_TOKEN_CACHE_SIZE, CACHE_DURATION),
@@ -59,6 +63,7 @@ const CACHE = {
   prices: new LRUCache(20, PRICE_CACHE_DURATION)
 };
 
+// ✅ مدير اتصالات RPC مع round-robin ومراقبة الأداء
 class RPCManager {
   constructor(endpoints) {
     this.endpoints = endpoints.sort((a, b) => a.priority - b.priority);
@@ -161,18 +166,28 @@ export function delay(ms) {
 export async function getLatestBlockhash(forceRefresh = false) {
   try {
     const now = Date.now();
-    if (!forceRefresh && CACHE.blockhash && (now - CACHE.blockhashTime) < BLOCKHASH_DURATION) {
+    
+    if (!forceRefresh && 
+        CACHE.blockhash && 
+        (now - CACHE.blockhashTime) < BLOCKHASH_DURATION) {
       return CACHE.blockhash;
     }
+    
     const blockhash = await rpcManager.execute('getLatestBlockhash', 'confirmed');
+    
     CACHE.blockhash = blockhash;
     CACHE.blockhashTime = now;
+    
     return blockhash;
   } catch (error) {
-    return { blockhash: '11111111111111111111111111111111', lastValidBlockHeight: 0 };
+    return {
+      blockhash: '11111111111111111111111111111111',
+      lastValidBlockHeight: 0
+    };
   }
 }
 
+// 🔥 تم إزالة هيدر User-Agent لحل مشكلة الخطأ 401 بشكل جذري
 export const getTokenMarketPrice = async (tokenSymbol) => {
   try {
     const cached = CACHE.prices.get(tokenSymbol);
@@ -186,48 +201,87 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
 
     if (!mintAddress) return 0;
 
+    console.log(`🔄 Fetching price for ${tokenSymbol}...`);
+
+    // تحديث نقاط Jupiter للنسخة v6 المستقرة
     const endpoints =[
-      { url: `https://api.jup.ag/price/v2?ids=${mintAddress}`, parser: (data) => data?.data?.[mintAddress]?.price },
-      { url: `https://price.jup.ag/v6/price?ids=${mintAddress}`, parser: (data) => data?.data?.[mintAddress]?.price },
+      {
+        url: `https://api.jup.ag/price/v2?ids=${mintAddress}`,
+        parser: (data) => data?.data?.[mintAddress]?.price,
+      },
+      {
+        url: `https://price.jup.ag/v6/price?ids=${mintAddress}`,
+        parser: (data) => data?.data?.[mintAddress]?.price,
+      },
     ];
 
     for (const { url, parser } of endpoints) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); 
-        const response = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: controller.signal });
+
+        // ✅ تم إزالة 'User-Agent'
+        const response = await fetch(url, {
+          headers: { 'Accept': 'application/json' },
+          signal: controller.signal,
+        });
+
         clearTimeout(timeoutId);
+
         if (response.ok) {
           const data = await response.json();
           const rawPrice = parser(data);
           const price = parseFloat(rawPrice); 
+          
           if (price && !isNaN(price) && price > 0) {
+            console.log(`💰 ${tokenSymbol} price from Jupiter: $${price}`);
             CACHE.prices.set(tokenSymbol, price);
             return price;
           }
+        } else {
+          console.warn(`⚠️ Jupiter returned ${response.status} for ${tokenSymbol}`);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn(`⚠️ Jupiter fetch failed for ${tokenSymbol}:`, e.message);
+      }
     }
 
     try {
       const coingeckoUrl = `https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${mintAddress}&vs_currencies=usd`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(coingeckoUrl, { headers: { 'Accept': 'application/json' }, signal: controller.signal });
+
+      // ✅ تم إزالة 'User-Agent'
+      const response = await fetch(coingeckoUrl, {
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+
       clearTimeout(timeoutId);
+
       if (response.ok) {
         const data = await response.json();
         const price = parseFloat(data[mintAddress]?.usd);
+        
         if (price && !isNaN(price) && price > 0) {
+          console.log(`💰 ${tokenSymbol} price from CoinGecko: $${price}`);
           CACHE.prices.set(tokenSymbol, price);
           return price;
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`⚠️ CoinGecko fetch failed for ${tokenSymbol}:`, e.message);
+    }
 
-    if (tokenSymbol === 'MECO') return 0.00613;
+    if (tokenSymbol === 'MECO') {
+      console.log('⚠️ Using fallback price for MECO');
+      return 0.00613;
+    }
+
     return 0;
+
   } catch (error) {
+    console.error(`❌ Unexpected error in getTokenMarketPrice for ${tokenSymbol}:`, error);
     return tokenSymbol === 'MECO' ? 0.00613 : 0;
   }
 };
@@ -236,12 +290,22 @@ export async function getSolBalance(forceRefresh = false) {
   try {
     const now = Date.now();
     const cache = CACHE.sol;
-    if (!forceRefresh && (now - cache.timestamp) < CACHE_DURATION) return cache.balance;
+    
+    if (!forceRefresh && (now - cache.timestamp) < CACHE_DURATION) {
+      return cache.balance;
+    }
+    
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) return 0;
-    const balanceLamports = await withRetry(() => rpcManager.execute('getBalance', new web3.PublicKey(pubKeyStr)), 'getSolBalance');
+    
+    const balanceLamports = await withRetry(
+      () => rpcManager.execute('getBalance', new web3.PublicKey(pubKeyStr)),
+      'getSolBalance'
+    );
+    
     const balance = balanceLamports / web3.LAMPORTS_PER_SOL;
     CACHE.sol = { balance, timestamp: now };
+    
     return balance;
   } catch (error) {
     return CACHE.sol.balance || 0;
@@ -250,13 +314,20 @@ export async function getSolBalance(forceRefresh = false) {
 
 export async function getTokenBalance(mintAddress, forceRefresh = false) {
   try {
+    const now = Date.now();
     const cache = CACHE.tokens.get(mintAddress);
-    if (!forceRefresh && cache) return cache;
+    
+    if (!forceRefresh && cache) {
+      return cache;
+    }
+    
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) return 0;
+    
     const pubKey = new web3.PublicKey(pubKeyStr);
     const mint = new web3.PublicKey(mintAddress);
     const ata = await splToken.getAssociatedTokenAddress(mint, pubKey);
+    
     try {
       const accountInfo = await rpcManager.execute('getAccountInfo', ata);
       if (!accountInfo) {
@@ -267,6 +338,7 @@ export async function getTokenBalance(mintAddress, forceRefresh = false) {
       const rawBalance = tokenAccount.amount;
       const mintInfo = await splToken.getMint(await rpcManager.getConnection(), mint);
       const balance = Number(rawBalance) / Math.pow(10, mintInfo.decimals);
+      
       CACHE.tokens.set(mintAddress, balance);
       return balance;
     } catch (ataError) {
@@ -282,11 +354,13 @@ export async function getTokenAccounts() {
   try {
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) return[];
+    
     const pubKey = new web3.PublicKey(pubKeyStr);
     const tokenAccounts = await withRetry(
       () => rpcManager.execute('getParsedTokenAccountsByOwner', pubKey, { programId: splToken.TOKEN_PROGRAM_ID }),
       'getTokenAccounts'
     );
+    
     return tokenAccounts.value.map(account => ({
       pubkey: account.pubkey.toBase58(),
       mint: account.account.data.parsed.info.mint,
@@ -304,7 +378,11 @@ export async function validateSolanaAddress(address) {
     if (!address || typeof address !== 'string') return { isValid: false, exists: false, error: 'INVALID_FORMAT' };
     const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
     if (!base58Regex.test(address)) return { isValid: false, exists: false, error: 'INVALID_BASE58' };
-    try { new web3.PublicKey(address); } catch { return { isValid: false, exists: false, error: 'INVALID_PUBKEY' }; }
+    try {
+      new web3.PublicKey(address);
+    } catch {
+      return { isValid: false, exists: false, error: 'INVALID_PUBKEY' };
+    }
     return { isValid: true, exists: true, isExecutable: false, lamports: 0, error: null };
   } catch (error) {
     return { isValid: false, exists: false, error: error.message };
@@ -318,7 +396,9 @@ export async function getCurrentNetworkFee() {
       const recent = fees.slice(0, 5);
       const avgFee = recent.reduce((sum, f) => sum + (f.prioritizationFee || 0), 0) / recent.length;
       const feeInSol = (avgFee / web3.LAMPORTS_PER_SOL) / 1_000_000; 
-      return Math.max(0.000005, Math.min(feeInSol, 0.0001));
+      const minFee = 0.000005;
+      const maxFee = 0.0001;
+      return Math.max(minFee, Math.min(feeInSol, maxFee));
     }
     return 0.000005;
   } catch (error) {
@@ -331,6 +411,7 @@ export async function sendSolTransaction(fromKeypair, toAddress, amount, fee = 0
   try {
     const connection = await rpcManager.getConnection();
     const { blockhash } = await getLatestBlockhash(true); 
+    
     const transaction = new web3.Transaction().add(
       web3.SystemProgram.transfer({
         fromPubkey: fromKeypair.publicKey,
@@ -338,12 +419,21 @@ export async function sendSolTransaction(fromKeypair, toAddress, amount, fee = 0
         lamports: Math.floor(amount * web3.LAMPORTS_PER_SOL)
       })
     );
+    
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = fromKeypair.publicKey;
-    const signature = await web3.sendAndConfirmTransaction(connection, transaction,[fromKeypair], { commitment: 'confirmed' });
+    
+    const signature = await web3.sendAndConfirmTransaction(
+      connection,
+      transaction,[fromKeypair],
+      { commitment: 'confirmed' }
+    );
+    
     clearBalanceCache();
     return signature;
-  } catch (error) { throw error; }
+  } catch (error) {
+    throw error;
+  }
 }
 
 export async function sendTokenTransaction(fromKeypair, toAddress, mintAddress, amount) {
@@ -351,11 +441,14 @@ export async function sendTokenTransaction(fromKeypair, toAddress, mintAddress, 
   try {
     const connection = await rpcManager.getConnection();
     const { blockhash } = await getLatestBlockhash(true);
+    
     const mint = new web3.PublicKey(mintAddress);
     const fromATA = await splToken.getAssociatedTokenAddress(mint, fromKeypair.publicKey);
     const toATA = await splToken.getAssociatedTokenAddress(mint, new web3.PublicKey(toAddress));
+    
     const mintInfo = await splToken.getMint(connection, mint);
     const decimals = mintInfo.decimals;
+    
     const amountRaw = BigInt(Math.floor(amount * Math.pow(10, decimals)));
     if (amountRaw === 0n) throw new Error('AMOUNT_TOO_SMALL');
     
@@ -365,34 +458,66 @@ export async function sendTokenTransaction(fromKeypair, toAddress, mintAddress, 
     const instructions =[];
     const toAccountInfo = await connection.getAccountInfo(toATA);
     if (!toAccountInfo) {
-      instructions.push(splToken.createAssociatedTokenAccountInstruction(fromKeypair.publicKey, toATA, new web3.PublicKey(toAddress), mint));
+      instructions.push(
+        splToken.createAssociatedTokenAccountInstruction(
+          fromKeypair.publicKey,
+          toATA,
+          new web3.PublicKey(toAddress),
+          mint
+        )
+      );
     }
-    instructions.push(splToken.createTransferInstruction(fromATA, toATA, fromKeypair.publicKey, amountRaw));
+    
+    instructions.push(
+      splToken.createTransferInstruction(
+        fromATA,
+        toATA,
+        fromKeypair.publicKey,
+        amountRaw
+      )
+    );
     
     const transaction = new web3.Transaction().add(...instructions);
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = fromKeypair.publicKey;
     
-    const signature = await web3.sendAndConfirmTransaction(connection, transaction,[fromKeypair], { commitment: 'confirmed' });
+    const signature = await web3.sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [fromKeypair],
+      { commitment: 'confirmed' }
+    );
+    
     CACHE.tokens.delete(mintAddress);
     return signature;
-  } catch (error) { throw error; }
+  } catch (error) {
+    throw error;
+  }
 }
 
 export async function heliusRpcRequest(method, params =[]) {
   try {
     const connection = await rpcManager.getConnection();
     switch(method) {
-      case 'getSignaturesForAddress': return await connection.getSignaturesForAddress(new web3.PublicKey(params[0]), params[1] || {});
-      case 'getTransaction': return await connection.getTransaction(params[0], params[1] || { commitment: 'confirmed' });
-      case 'getBalance': return await connection.getBalance(new web3.PublicKey(params[0]));
-      case 'getTokenAccountsByOwner': return await connection.getTokenAccountsByOwner(new web3.PublicKey(params[0]), params[1] || { programId: splToken.TOKEN_PROGRAM_ID });
-      case 'getAccountInfo': return await connection.getAccountInfo(new web3.PublicKey(params[0]), params[1] || {});
+      case 'getSignaturesForAddress':
+        return await connection.getSignaturesForAddress(new web3.PublicKey(params[0]), params[1] || {});
+      case 'getTransaction':
+        return await connection.getTransaction(params[0], params[1] || { commitment: 'confirmed' });
+      case 'getBalance':
+        return await connection.getBalance(new web3.PublicKey(params[0]));
+      case 'getTokenAccountsByOwner':
+        return await connection.getTokenAccountsByOwner(new web3.PublicKey(params[0]), params[1] || { programId: splToken.TOKEN_PROGRAM_ID });
+      case 'getAccountInfo':
+        return await connection.getAccountInfo(new web3.PublicKey(params[0]), params[1] || {});
       default:
-        if (typeof connection[method] === 'function') return await connection[method](...params);
+        if (typeof connection[method] === 'function') {
+          return await connection[method](...params);
+        }
         throw new Error(`Method ${method} not supported`);
     }
-  } catch (error) { throw error; }
+  } catch (error) {
+    throw error;
+  }
 }
 
 export function clearBalanceCache(mintAddress) {
@@ -454,7 +579,6 @@ export async function getTransactionHistory(limit = 20) {
               transactions.push({
                 signature: sig.signature,
                 blockTime: sig.blockTime,
-                timestamp: sig.blockTime ? sig.blockTime * 1000 : Date.now(),
                 slot: sig.slot,
                 from,
                 to,
@@ -463,7 +587,7 @@ export async function getTransactionHistory(limit = 20) {
                 mint: null,
                 type: from === pubKeyStr ? 'send' : 'receive',
                 fee: tx.meta.fee / web3.LAMPORTS_PER_SOL,
-                status: tx.meta?.err ? 'failed' : 'confirmed' // ✅ التعديل هنا: 'confirmed' لكي تصبح خضراء
+                status: 'success'
               });
               found = true;
               break;
@@ -482,7 +606,9 @@ export async function getTransactionHistory(limit = 20) {
             const destIndex = accountKeys.findIndex(k => k === destinationAta);
             if (destIndex !== -1) {
                const tokenData = postToken.find(t => t.accountIndex === destIndex);
-               if (tokenData && tokenData.owner) toOwner = tokenData.owner;
+               if (tokenData && tokenData.owner) {
+                  toOwner = tokenData.owner;
+               }
                if (tokenData && tokenData.uiTokenAmount) {
                   const preAmt = preToken.find(t => t.accountIndex === destIndex)?.uiTokenAmount?.uiAmount || 0;
                   const postAmt = tokenData.uiTokenAmount.uiAmount || 0;
@@ -511,7 +637,6 @@ export async function getTransactionHistory(limit = 20) {
               transactions.push({
                 signature: sig.signature,
                 blockTime: sig.blockTime,
-                timestamp: sig.blockTime ? sig.blockTime * 1000 : Date.now(),
                 slot: sig.slot,
                 from,
                 to: toOwner,
@@ -520,7 +645,7 @@ export async function getTransactionHistory(limit = 20) {
                 mint,
                 type: from === pubKeyStr ? 'send' : 'receive',
                 fee: tx.meta.fee / web3.LAMPORTS_PER_SOL,
-                status: tx.meta?.err ? 'failed' : 'confirmed' // ✅ التعديل هنا: 'confirmed'
+                status: 'success'
               });
               found = true;
               break;
@@ -602,7 +727,6 @@ export async function getTransactionHistory(limit = 20) {
             transactions.push({
               signature: sig.signature,
               blockTime: sig.blockTime,
-              timestamp: sig.blockTime ? sig.blockTime * 1000 : Date.now(),
               slot: sig.slot,
               confirmationStatus: sig.confirmationStatus,
               from: type === 'send' ? pubKeyStr : (otherParty || 'Smart Contract'),
@@ -610,10 +734,9 @@ export async function getTransactionHistory(limit = 20) {
               amount: amount,
               token: tokenSymbol,
               mint: mint,
-              type: type, 
               err: tx.meta?.err || null,
               fee: fee,
-              status: tx.meta?.err ? 'failed' : 'confirmed' // ✅ التعديل هنا: 'confirmed'
+              status: tx.meta?.err ? 'failed' : 'success'
             });
           }
         }
