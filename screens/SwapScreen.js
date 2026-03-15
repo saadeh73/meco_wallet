@@ -40,7 +40,7 @@ const SUPPORTED_TOKENS = [
     name: 'MonyCoin',
     mint: SwapAPI.TOKEN_MINTS.MECO,
     decimals: 9,
-    icon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco-logo.png',
+    icon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png',
   },
   */
 ];

@@ -29,7 +29,7 @@ const TOKEN_LIST = [
   },
   {
     id: 'MonyCoin', symbol: 'MECO', name: 'MonyCoin', decimals: 9, swapAvailable: true,
-    image: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco-logo.png',
+    image: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png',
     mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
   },
   { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', decimals: 8, swapAvailable: false, image: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png' },

@@ -21,7 +21,7 @@ const { width } = Dimensions.get('window');
 
 const SUPPORTED_ASSETS =[
   { symbol: 'SOL', name: 'Solana', mint: null, icon: 'https://assets.coingecko.com/coins/images/4128/large/solana.png' },
-  { symbol: 'MECO', name: 'MonyCoin', mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', icon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco-logo.png' },
+  { symbol: 'MECO', name: 'MonyCoin', mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', icon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png' },
   { symbol: 'USDT', name: 'Tether', mint: 'Es9vMFrzaCERc8Foa8XfRduKiSfrhEL5c7qr2WXXBWY5', icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
   { symbol: 'USDC', name: 'USD Coin', mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', icon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png' },
 ];
