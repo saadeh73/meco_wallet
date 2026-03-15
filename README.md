@@ -2,145 +2,103 @@
 
 <div align="center">
   
-  [![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/MonyCoin/meco_wallet/releases)
+  [![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/MonyCoin/meco_wallet/releases)
   [![License](https://img.shields.io/badge/license-0BSD-green.svg)](LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](https://play.google.com)
+  [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](https://monycoin.github.io/meco_wallet-app/)
   [![Network](https://img.shields.io/badge/network-Solana-9945FF.svg)](https://solana.com)
   
 </div>
 
-**MECO Wallet** هو التطبيق الرسمي لإدارة واستخدام عملة **MonyCoin (MECO)**  
-وهو جزء أساسي من منظومة MECO المبنية على شبكة **Solana**.
+**MECO Wallet** هو التطبيق الرسمي لإدارة واستخدام عملة **MonyCoin (MECO)**.  
+وهو جزء أساسي من منظومة MECO اللامركزية المبنية على شبكة **Solana**.
 
-يهدف التطبيق إلى توفير تجربة استخدام بسيطة، آمنة، وسريعة لإدارة الأصول الرقمية،  
-مع دعم مباشر لإرسال واستقبال العملات، متابعة تحركات السوق لحظة بلحظة،  
-وإضافة **الرموز المخصصة (Custom Tokens)** لأول مرة في المحافظ العربية.
+يهدف التطبيق إلى توفير تجربة استخدام بسيطة، آمنة، وسريعة لإدارة الأصول الرقمية، مع دعم مباشر لإرسال واستقبال العملات، التبادل الفوري (Swap)، والربط الآمن مع تطبيقات الـ Web3 اللامركزية.
 
 ---
 
-## 🚀 **ما الجديد في الإصدار 1.4.0**
+## 🚀 **ما الجديد في الإصدار 1.5.0 (تحديث Web3 الضخم)**
 
-### 📸 **ماسح QR**
-- مسح عناوين المحافظ مباشرة بالكاميرا
-- تعبئة تلقائية لحقل العنوان في شاشة الإرسال
-- دعم الإضاءة الخلفية (Torch)
+### 🌍 **دعم كامل لـ WalletConnect v2**
+- **ربط سلس:** مسح باركود الـ DApps للاتصال الفوري والآمن بأي تطبيق لامركزي على شبكة Solana.
+- **إدارة الجلسات:** نافذة مخصصة لعرض التطبيقات المتصلة وإمكانية قطع الاتصال بنقرة واحدة.
+- **أيقونة ذكية:** زر تفاعلي في الواجهة الرئيسية يجمع بين الماسح الضوئي وإدارة جلسات الـ Web3.
 
-### 🪙 **الرموز المخصصة (Custom Tokens)**
-- **✨ ميزة حصرية:** أضف أي توكن على شبكة Solana عبر عنوان العقد
-- تحقق تلقائي من صحة التوكن وعرض معلوماته
-- يظهر في السوق والمحفظة مع شارة "Custom"
-- حفظ تلقائي في التخزين المحلي
+### 🔄 **التبادل اللامركزي (Swap) المدمج**
+- **تكامل مع Jupiter v6:** الحصول على أفضل أسعار الصرف لتبديل العملات (SOL, USDC, USDT, MECO) مباشرة من داخل المحفظة.
+- **تجاوز القيود:** نظام اتصال ذكي يتجاوز حظر الشبكات لضمان تنفيذ الصفقات بسرعة وموثوقية في بيئة الإنتاج.
 
-### 🔐 **ميزة الأمان (Safety)**
-- عرض عبارة الاسترداد مع مصادقة بيومترية
-- نسخ آمن إلى الحافظة
-- تحذيرات أمنية لحماية المستخدمين
+### 📊 **سجل معاملات متقدم (Advanced History)**
+- **تحليل دقيق:** قراءة ذكية لبيانات البلوكتشين لتصنيف المعاملات إلى (مرسل ⬆️) و (مستلم ⬇️) بدقة متناهية.
+- **فلاتر سريعة:** أزرار لتصفية السجل (الكل، مرسل، مستلم).
+- **إحصائيات أفقية:** بطاقات إحصائية أنيقة تعرض حجم التداول والرسوم لكل عملة على حدة.
 
-### 📊 **شاشة سوق مطورة**
-- شريط بحث للعثور على العملات بسرعة
-- دعم كامل للتوكنات المخصصة
-- أسعار محدثة من CoinGecko
-- تبويبات ذكية للتصنيف
-
-### 💼 **محفظة شاملة**
-- عرض الرصيد الإجمالي بالدولار لجميع الأصول
-- دعم التوكنات المخصصة مع شارة تعريفية
-- حساب دقيق للقيمة السوقية
+### 🔐 **ميزات الأمان والتخصيص (من 1.4.0)**
+- عرض عبارة الاسترداد مع مصادقة بيومترية (بصمة/وجه).
+- إضافة التوكنات المخصصة عبر عنوان العقد الذكي.
+- دعم الوضع الليلي/الفاتح، واللغتين العربية والإنجليزية.
 
 ---
 
-## 🏛️ الانتماء المؤسسي
+## 🏛️ **الانتماء المؤسسي**
 
 🔹 **MonyCoin Digital Development Foundation**  
-الواجهة العملية الرسمية (Client Application) لرمز MECO.
+الواجهة العملية الرسمية (Client Application) لنظام MECO البيئي.
 
 ---
 
-## 🔗 المستودعات الرسمية
+## 🔗 **المستودعات والروابط الرسمية**
 
-| المستودع | الرابط | الوصف |
-|:--------|:------|:------|
-| 🪙 **MECO Token** | [GitHub](https://github.com/monycoin/meco-token) | المستودع الرئيسي للتوكنوميكس والمحافظ |
-| 📱 **MECO Wallet** | [GitHub](https://github.com/monycoin/meco_wallet) | هذا المستودع - كود التطبيق |
-| ⬇️ **تحميل التطبيق** | [APK / Web](https://monycoin.github.io/meco_wallet-app/) | تنزيل أحدث إصدار |
-
----
-
-## ✨ **الميزات الرئيسية**
-
-| الميزة | الحالة |
-|--------|--------|
-| 🔐 إنشاء واستيراد المحافظ | ✅ |
-| 💸 إرسال واستقبال رموز SPL | ✅ |
-| 📊 شاشة Market مع أسعار حقيقية | ✅ |
-| 📸 ماسح QR للمعاملات السريعة | ✅ |
-| 🪙 إضافة الرموز المخصصة | ✅ **(جديد)** |
-| 🔐 عرض عبارة الاسترداد مع بصمة | ✅ **(جديد)** |
-| 📱 سجل معاملات مفصل | ✅ |
-| 💰 عرض الرصيد الإجمالي بالدولار | ✅ |
-| 🌗 دعم الوضع الليلي/الفاتح | ✅ |
-| 🌐 دعم عربي/إنجليزي كامل | ✅ |
-| 🔄 WalletConnect | 🔜 قريباً |
-| ⚡ Staking | 🔜 قريباً |
+| المكون | الرابط | الوصف |
+| :--- | :--- | :--- |
+| 🪙 **MECO Token** |[GitHub Repository](https://github.com/monycoin/meco-token) | المستودع الرئيسي للتوكنوميكس والعقود الذكية |
+| 📱 **MECO Wallet** | [GitHub Repository](https://github.com/monycoin/meco_wallet) | هذا المستودع - الكود المصدري للتطبيق |
+| ⬇️ **تحميل التطبيق** | [Official App Store](https://monycoin.github.io/meco_wallet-app/) | تنزيل أحدث إصدار (APK) |
 
 ---
 
-## 🧱 **التقنيات المستخدمة**
+## ✨ **الميزات وحالة التطوير**
 
-- **React Native** & **Expo** (SDK 54)
-- **Solana Web3.js** للتكامل مع البلوكتشين
-- **SecureStore** للتخزين الآمن للمفاتيح
-- **i18next** للترجمة المتعددة اللغات
-- **WalletConnect** للربط مع DApps (قيد التطوير)
+| الميزة | الحالة | ملاحظات |
+| :--- | :---: | :--- |
+| 🔐 إنشاء واستيراد المحافظ | ✅ | بيئة لامركزية بالكامل (Non-custodial) |
+| 💸 إرسال واستقبال رموز SPL | ✅ | دعم MECO ورموز Solana |
+| 🔄 التبادل الداخلي (Swap) | ✅ | مدعوم عبر Jupiter API |
+| 🌐 WalletConnect (Web3) | ✅ | **(مكتمل 1.5.0)** اتصال آمن بـ DApps |
+| 📱 سجل معاملات ذكي | ✅ | **(مكتمل 1.5.0)** تحليل دقيق للصادر والوارد |
+| 📊 شاشة السوق (Market) | ✅ | أسعار حقيقية عبر CoinGecko & Jupiter |
+| 📸 ماسح QR ذكي | ✅ | يميز بين عناوين الإرسال وطلبات Web3 |
+| 🪙 إضافة الرموز المخصصة | ✅ | جلب التوكنات يدوياً عبر العقد |
+| 🌗 تخصيص الواجهة | ✅ | وضع ليلي/نهاري + دعم عربي/إنجليزي |
+| ⚡ التخزين المؤقت (Staking) | 🔜 | مخطط في التحديثات القادمة |
 
 ---
 
-## 📡 **معلومات الشبكة**
+## 🧱 **التقنيات المستخدمة (Tech Stack)**
+
+- **React Native & Expo** (SDK 54)
+- **Solana Web3.js** & **SPL-Token** (للتكامل مع البلوكتشين)
+- **WalletConnect v2 Core** (لربط التطبيقات اللامركزية)
+- **SecureStore & AsyncStorage** (للتخزين المحلي الآمن)
+- **i18next** (للترجمة وتعدد اللغات)
+- **Helius & Ankr RPCs** (لاتصالات الشبكة السريعة)
+
+---
+
+## 📡 **معلومات الشبكة (Network Info)**
 
 - **Blockchain:** Solana
-- **Network:** Mainnet
-- **Token Mint (MECO):**  
-  `7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i`
-- **مستكشف Solscan:** [عرض التوكن](https://solscan.io/token/7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i)
+- **Network:** Mainnet-Beta
+- **Token Mint (MECO):** `7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i`
+- **مستكشف Solscan:** [عرض عقد العملة](https://solscan.io/token/7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i)
 
 ---
 
-## 📱 **لقطات من التطبيق**
+## 🔐 **الأمان والخصوصية (Security)**
 
-<div align="center">
-  
-| المحفظة | السوق | إضافة توكن |
-|:-------:|:-----:|:----------:|
-| ![Wallet](https://via.placeholder.com/200x400?text=Wallet+Screen) | ![Market](https://via.placeholder.com/200x400?text=Market+Screen) | ![Add Token](https://via.placeholder.com/200x400?text=Add+Token) |
-
-</div>
-
-*(سيتم تحديث الصور الفعلية قريباً)*
-
----
-
-## 🛠️ **حالة التطوير**
-
-| المكون | الحالة | ملاحظات |
-|--------|--------|---------|
-| إنشاء المحفظة | ✅ | مكتمل |
-| الإرسال والاستقبال | ✅ | مكتمل |
-| شاشة السوق (Market) | ✅ | مكتمل مع CoinGecko |
-| ماسح QR | ✅ | مكتمل |
-| الرموز المخصصة | ✅ | **جديد 1.4.0** |
-| ميزة الأمان (Safety) | ✅ | **جديد 1.4.0** |
-| سجل المعاملات | ✅ | محدث |
-| WalletConnect | 🔄 | قيد المراجعة |
-| Staking | ⏳ | مخطط مستقبلاً |
-
----
-
-## 🔐 **الأمان**
-
-- **المفاتيح الخاصة:** مخزنة محلياً باستخدام `expo-secure-store` ولا تغادر الجهاز أبداً
-- **المصادقة:** دعم كامل للمصادقة البيومترية (بصمة/Face ID)
-- **الشفافية:** جميع المعاملات على السلسلة وقابلة للتتبع عبر Solscan
-- **الصلاحيات:** لا توجد صلاحيات Mint أو Freeze على توكن MECO
+- **المفاتيح الخاصة (Private Keys):** مشفرة ومخزنة محلياً باستخدام `expo-secure-store` ولا تغادر جهاز المستخدم أبداً.
+- **المصادقة (Authentication):** دعم كامل للمصادقة البيومترية (بصمة الإصبع / Face ID) لحماية التطبيق وعبارة الاسترداد.
+- **اللامركزية:** لا توجد خوادم وسيطة تمتلك صلاحية الوصول لأموالك.
+- **الشفافية:** كود مفتوح المصدر (Open Source) لضمان أعلى معايير الثقة المجتمعية.
 
 ---
 
@@ -148,40 +106,39 @@
 
 <div align="center">
 
-[![Download APK](https://img.shields.io/badge/📲_تحميل_APK-6C63FF?style=for-the-badge&logo=android&logoColor=white)](https://monycoin.github.io/meco_wallet-app/)
+[![Download APK](https://img.shields.io/badge/📲_تحميل_تطبيق_ميكو-6C63FF?style=for-the-badge&logo=android&logoColor=white)](https://monycoin.github.io/meco_wallet-app/)
 
-**آخر إصدار:** `1.4.0 (6)`  
-**تاريخ الإصدار:** 1 مارس 2026  
-**الحجم:** ~100  MB
+**الإصدار الحالي:** `v1.5.0`  
+**تاريخ التحديث:** مارس 2026  
 
 </div>
 
 ---
 
-## 📬 **التواصل الرسمي**
+## 📬 **المجتمع والتواصل الرسمي**
 
 <div align="center">
   
 | المنصة | الرابط |
 |:------:|:------:|
-| ![X](https://img.shields.io/badge/X-1DA1F2?style=flat-square&logo=x&logoColor=white) | [@MoniCoinMECO](https://x.com/MoniCoinMECO) |
-| ![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white) | [monycoin1](https://t.me/monycoin1) |
-| ![Web](https://img.shields.io/badge/Website-6C63FF?style=flat-square&logo=google-chrome&logoColor=white) | [monycoin1.blogspot.com](https://monycoin1.blogspot.com/) |
-| ![Facebook](https://img.shields.io/badge/Facebook-1877F2?style=flat-square&logo=facebook&logoColor=white) | [MonyCoin](https://www.facebook.com/share/1ZUbCbssCU/) |
+| ![X](https://img.shields.io/badge/X_Twitter-1DA1F2?style=flat-square&logo=x&logoColor=white) | [@MoniCoinMECO](https://x.com/MoniCoinMECO) |
+| ![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white) | [@monycoin1](https://t.me/monycoin1) |
+| ![Web](https://img.shields.io/badge/Website-6C63FF?style=flat-square&logo=google-chrome&logoColor=white) | [MonyCoin Blog](https://monycoin1.blogspot.com/) |
+| ![Facebook](https://img.shields.io/badge/Facebook-1877F2?style=flat-square&logo=facebook&logoColor=white) |[MonyCoin Community](https://www.facebook.com/share/1ZUbCbssCU/) |
 
 </div>
 
 ---
 
-## 🤝 **المساهمة**
+## 🤝 **المساهمة (Contributing)**
 
-نرحب بمساهماتكم! يرجى قراءة [CONTRIBUTING.md](https://github.com/MonyCoin/meco-token/blob/main/CONTRIBUTING.md) للمزيد من التفاصيل.
+نرحب بمساهمات المطورين من كافة أنحاء العالم! يرجى قراءة [CONTRIBUTING.md](https://github.com/MonyCoin/meco-token/blob/main/CONTRIBUTING.md) للمزيد من التفاصيل حول كيفية المساعدة في تطوير المحفظة.
 
 ---
 
 <div align="center">
   
-**© 2025 — MECO Wallet**  
+**© 2026 — MECO Wallet**  
 An Official Application of **MonyCoin Digital Development Foundation**  
 Founder: **Mohamed Saadeh**
 
