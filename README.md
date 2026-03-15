@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/MonyCoin/meco_wallet/refs/heads/main/assets/logo.png" width="30" height="30" style="vertical-align: middle;"> MECO Wallet
+# <img src="https://raw.githubusercontent.com/MonyCoin/meco_wallet/refs/heads/main/assets/icon.png" width="30" height="30" style="vertical-align: middle;"> MECO Wallet
 
 <div align="center">
   
