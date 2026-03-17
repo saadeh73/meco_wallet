@@ -12,6 +12,7 @@ import {
   Animated,
   TextInput,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
@@ -19,9 +20,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Linking from 'expo-linking';
-import { Ionicons, MaterialIcons, Feather, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as Clipboard from 'expo-clipboard';
+import Constants from 'expo-constants'; // استيراد لقراءة بيانات التطبيق
 
 const { width } = Dimensions.get('window');
 
@@ -49,21 +51,18 @@ export default function SettingsScreen() {
     warning: '#F59E0B',
   };
 
-  const [colorModalVisible, setColorModalVisible] = useState(false);
-  const [safetyModalVisible, setSafetyModalVisible] = useState(false);
+  const[colorModalVisible, setColorModalVisible] = useState(false);
+  const[safetyModalVisible, setSafetyModalVisible] = useState(false);
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
+  
+  // State للتحقق من التحديثات
+  const[isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
-  const colorsPalette = [
-    '#3B82F6', // Blue
-    '#10B981', // Emerald
-    '#F59E0B', // Amber
-    '#EF4444', // Red
-    '#8B5CF6', // Violet
-    '#EC4899', // Pink
-    '#06B6D4', // Cyan
-    '#84CC16', // Lime
+  const colorsPalette =[
+    '#3B82F6', '#10B981', '#F59E0B', '#EF4444',
+    '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16',
   ];
 
   useEffect(() => {
@@ -80,9 +79,8 @@ export default function SettingsScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  },[]);
 
-  // ✅ دالة المصادقة الموحدة (بصمة أو رمز الهاتف)
   const authenticateUser = async (onSuccess) => {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
@@ -103,7 +101,7 @@ export default function SettingsScreen() {
         }
       } else {
         const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: t('authenticate_with_passcode'),
+          promptMessage: t('authenticate_with_passcode', 'المصادقة برمز المرور'),
           cancelLabel: t('cancel'),
           disableDeviceFallback: false,
         });
@@ -174,15 +172,51 @@ export default function SettingsScreen() {
     Linking.openURL('mailto:mecowallet@gmail.com');
   };
 
-  const handleCheckUpdates = () => {
-    Linking.openURL('https://monycoin.github.io/meco_wallet-app/');
+  // ✅ دالة التحقق الذكي من التحديثات
+  const checkForUpdates = async () => {
+    try {
+      setIsCheckingUpdate(true);
+      
+      // جلب ملف version.json من مستودع جيثب الخاص بصفحة الهبوط
+      const response = await fetch('https://raw.githubusercontent.com/MonyCoin/meco_wallet-app/main/version.json');
+      const data = await response.json();
+
+      // قراءة رقم البناء (Build Number) للتطبيق المثبت حالياً، أو استخدام رقم 8 كافتراضي
+      const currentBuild = Constants.expoConfig?.ios?.buildNumber 
+                        || Constants.expoConfig?.android?.versionCode 
+                        || 8;
+
+      const latestBuild = data.buildNumber;
+
+      if (latestBuild > currentBuild) {
+        Alert.alert(
+          t('update_available', 'تحديث جديد متوفر! 🚀'),
+          `${t('version', 'الإصدار')} ${data.latestVersion} متاح الآن.\n\n${data.releaseNotes}`,[
+            { text: t('cancel', 'لاحقاً'), style: 'cancel' },
+            { 
+              text: t('update_now', 'تحديث الآن'), 
+              onPress: () => Linking.openURL(data.downloadUrl) 
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          t('up_to_date', 'التطبيق مُحدّث ✅'),
+          t('latest_version_installed', 'أنت تستخدم أحدث إصدار من meco wallet.')
+        );
+      }
+    } catch (error) {
+      console.log('Update check error:', error);
+      Alert.alert(t('error'), t('check_update_failed', 'تعذر التحقق من التحديثات. تحقق من اتصالك بالإنترنت.'));
+    } finally {
+      setIsCheckingUpdate(false);
+    }
   };
 
   const handleLogout = async () => {
     Alert.alert(
       t('confirm_logout'),
-      t('logout_confirmation_message'),
-      [
+      t('logout_confirmation_message'),[
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('logout'),
@@ -218,6 +252,7 @@ export default function SettingsScreen() {
       style={[styles.settingItem, { backgroundColor: colors.card }]}
       onPress={onPress}
       activeOpacity={0.7}
+      disabled={!onPress}
     >
       <View style={styles.settingItemLeft}>
         <View style={[styles.iconContainer, { backgroundColor: primaryColor + '20' }]}>
@@ -266,6 +301,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView style={{ backgroundColor: colors.background, flex: 1 }} showsVerticalScrollIndicator={false}>
       <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{t('settings')}</Text>
@@ -328,7 +364,7 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Support Section (بدون About App) */}
+        {/* Support Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('support').toUpperCase()}</Text>
           <SettingItem
@@ -338,12 +374,19 @@ export default function SettingsScreen() {
             onPress={handleSupport}
             rightComponent={<Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
           />
+          {/* ✅ زر التحقق من التحديثات الجديد */}
           <SettingItem
             icon={<Ionicons name="cloud-download-outline" size={22} color={primaryColor} />}
-            title={t('check_for_updates')}
-            subtitle={t('check_for_updates_desc')}
-            onPress={handleCheckUpdates}
-            rightComponent={<Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+            title={t('check_for_updates', 'التحقق من وجود تحديثات')}
+            subtitle={t('check_for_updates_desc', 'التأكد من استخدامك لأحدث إصدار')}
+            onPress={isCheckingUpdate ? null : checkForUpdates}
+            rightComponent={
+              isCheckingUpdate ? (
+                <ActivityIndicator size="small" color={primaryColor} />
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              )
+            }
           />
         </View>
 
@@ -374,7 +417,7 @@ export default function SettingsScreen() {
 
         {/* App Version */}
         <View style={styles.versionContainer}>
-          <Text style={[styles.versionText, { color: colors.textSecondary }]}>MECO Wallet {t('version')} 1.5.0</Text>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>MECO Wallet {t('version')} 1.6.0</Text>
         </View>
       </Animated.View>
 
@@ -410,11 +453,11 @@ export default function SettingsScreen() {
               styles.safetyModalContainer,
               {
                 backgroundColor: colors.card,
-                transform: [
+                transform:[
                   {
                     translateY: fadeAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [300, 0],
+                      outputRange:[300, 0],
                     }),
                   },
                 ],
