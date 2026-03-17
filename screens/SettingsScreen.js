@@ -50,7 +50,6 @@ export default function SettingsScreen() {
   };
 
   const [colorModalVisible, setColorModalVisible] = useState(false);
-  const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [safetyModalVisible, setSafetyModalVisible] = useState(false);
   const [recoveryPhrase, setRecoveryPhrase] = useState('');
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -67,10 +66,7 @@ export default function SettingsScreen() {
     '#84CC16', // Lime
   ];
 
-  // ✅ تم تعديل هذا الـ useEffect لحل مشكلة اللغة
   useEffect(() => {
-    // لا نغير اللغة هنا لأنها تتحكم من HomeScreen
-    // فقط نقوم بتشغيل الأنيميشن
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -84,10 +80,10 @@ export default function SettingsScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []); // ✅ إزالة language من الـ dependencies
+  }, []);
 
-  // دالة المصادقة البيومترية
-  const authenticateWithBiometrics = async (onSuccess) => {
+  // ✅ دالة المصادقة الموحدة (بصمة أو رمز الهاتف)
+  const authenticateUser = async (onSuccess) => {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
@@ -97,6 +93,7 @@ export default function SettingsScreen() {
           promptMessage: t('authenticate_to_view'),
           cancelLabel: t('cancel'),
           disableDeviceFallback: false,
+          fallbackLabel: t('use_device_passcode'),
         });
 
         if (result.success) {
@@ -105,7 +102,17 @@ export default function SettingsScreen() {
           Alert.alert(t('error'), t('authentication_failed'));
         }
       } else {
-        Alert.alert(t('biometric_not_available'), t('biometric_not_supported_message'));
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: t('authenticate_with_passcode'),
+          cancelLabel: t('cancel'),
+          disableDeviceFallback: false,
+        });
+
+        if (result.success) {
+          onSuccess();
+        } else {
+          Alert.alert(t('error'), t('authentication_failed'));
+        }
       }
     } catch (error) {
       console.error('Authentication error:', error);
@@ -113,7 +120,6 @@ export default function SettingsScreen() {
     }
   };
 
-  // دالة جلب العبارة السرية
   const loadRecoveryPhrase = async () => {
     try {
       const phrase = await SecureStore.getItemAsync('wallet_mnemonic');
@@ -128,15 +134,13 @@ export default function SettingsScreen() {
     }
   };
 
-  // دالة عرض العبارة السرية
   const handleShowRecoveryPhrase = () => {
-    authenticateWithBiometrics(async () => {
+    authenticateUser(async () => {
       await loadRecoveryPhrase();
       setSafetyModalVisible(true);
     });
   };
 
-  // دالة نسخ النص
   const copyToClipboard = (text, message) => {
     Clipboard.setStringAsync(text);
     Alert.alert(t('success'), message);
@@ -155,23 +159,13 @@ export default function SettingsScreen() {
       Alert.alert(
         result.success ? t('success') : t('error'),
         result.success ? t('authentication_successful') : t('authentication_failed'),
-        [
-          {
-            text: t('ok'),
-            style: 'default',
-          },
-        ]
+        [{ text: t('ok') }]
       );
     } else {
       Alert.alert(
         t('biometric_not_available'),
         t('biometric_not_supported_message'),
-        [
-          {
-            text: t('ok'),
-            style: 'default',
-          },
-        ]
+        [{ text: t('ok') }]
       );
     }
   };
@@ -180,15 +174,16 @@ export default function SettingsScreen() {
     Linking.openURL('mailto:mecowallet@gmail.com');
   };
 
+  const handleCheckUpdates = () => {
+    Linking.openURL('https://monycoin.github.io/meco_wallet-app/');
+  };
+
   const handleLogout = async () => {
     Alert.alert(
       t('confirm_logout'),
       t('logout_confirmation_message'),
       [
-        {
-          text: t('cancel'),
-          style: 'cancel',
-        },
+        { text: t('cancel'), style: 'cancel' },
         {
           text: t('logout'),
           style: 'destructive',
@@ -197,10 +192,7 @@ export default function SettingsScreen() {
               await AsyncStorage.removeItem('wallet_private_key');
               await AsyncStorage.removeItem('wallet_public_key');
               logout();
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-              });
+              navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
             } catch (error) {
               Alert.alert(t('error'), t('logout_failed'));
             }
@@ -272,19 +264,8 @@ export default function SettingsScreen() {
   );
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.background, flex: 1 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <Animated.View 
-        style={[
-          styles.container,
-          { 
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          }
-        ]}
-      >
+    <ScrollView style={{ backgroundColor: colors.background, flex: 1 }} showsVerticalScrollIndicator={false}>
+      <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{t('settings')}</Text>
@@ -295,24 +276,14 @@ export default function SettingsScreen() {
 
         {/* Wallet Settings Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {t('wallet_settings').toUpperCase()}
-          </Text>
-          
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('wallet_settings').toUpperCase()}</Text>
           <SettingItem
             icon={<Ionicons name="list-outline" size={22} color={primaryColor} />}
             title={t('transaction_history')}
             subtitle={t('view_all_transactions')}
-            onPress={() => {
-              try {
-                navigation.navigate('TransactionHistory');
-              } catch (error) {
-                console.error('Navigation error:', error);
-              }
-            }}
+            onPress={() => navigation.navigate('TransactionHistory')}
             rightComponent={<Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
           />
-          
           <SettingItem
             icon={<Ionicons name="language-outline" size={22} color={primaryColor} />}
             title={t('language')}
@@ -320,13 +291,10 @@ export default function SettingsScreen() {
             onPress={toggleLanguage}
             rightComponent={
               <View style={styles.languageBadge}>
-                <Text style={[styles.languageText, { color: colors.text }]}>
-                  {language === 'ar' ? 'AR' : 'EN'}
-                </Text>
+                <Text style={[styles.languageText, { color: colors.text }]}>{language === 'ar' ? 'AR' : 'EN'}</Text>
               </View>
             }
           />
-          
           <SettingItem
             icon={<MaterialIcons name="fingerprint" size={22} color={primaryColor} />}
             title={t('biometric_authentication')}
@@ -338,10 +306,7 @@ export default function SettingsScreen() {
 
         {/* Appearance Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {t('appearance').toUpperCase()}
-          </Text>
-          
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('appearance').toUpperCase()}</Text>
           <SwitchItem
             icon={<Ionicons name="moon-outline" size={22} color={primaryColor} />}
             title={t('dark_mode')}
@@ -349,7 +314,6 @@ export default function SettingsScreen() {
             value={theme === 'dark'}
             onValueChange={toggleTheme}
           />
-          
           <SettingItem
             icon={<Ionicons name="color-palette-outline" size={22} color={primaryColor} />}
             title={t('accent_color')}
@@ -364,12 +328,9 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Support Section */}
+        {/* Support Section (بدون About App) */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {t('support').toUpperCase()}
-          </Text>
-          
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('support').toUpperCase()}</Text>
           <SettingItem
             icon={<Feather name="mail" size={22} color={primaryColor} />}
             title={t('contact_support')}
@@ -377,22 +338,18 @@ export default function SettingsScreen() {
             onPress={handleSupport}
             rightComponent={<Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
           />
-          
           <SettingItem
-            icon={<FontAwesome name="info-circle" size={22} color={primaryColor} />}
-            title={t('about_app')}
-            subtitle={t('version_and_information')}
-            onPress={() => setAboutModalVisible(true)}
+            icon={<Ionicons name="cloud-download-outline" size={22} color={primaryColor} />}
+            title={t('check_for_updates')}
+            subtitle={t('check_for_updates_desc')}
+            onPress={handleCheckUpdates}
             rightComponent={<Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
           />
         </View>
 
-        {/* ✅ Safety Section (محدث - بدون عرض المفتاح الخاص) */}
+        {/* Safety Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {t('safety').toUpperCase()}
-          </Text>
-          
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('safety').toUpperCase()}</Text>
           <SettingItem
             icon={<Ionicons name="key-outline" size={22} color={primaryColor} />}
             title={t('show_recovery_phrase')}
@@ -404,10 +361,7 @@ export default function SettingsScreen() {
 
         {/* Account Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {t('account').toUpperCase()}
-          </Text>
-          
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{t('account').toUpperCase()}</Text>
           <SettingItem
             icon={<Ionicons name="log-out-outline" size={22} color={colors.danger} />}
             title={t('logout')}
@@ -420,97 +374,67 @@ export default function SettingsScreen() {
 
         {/* App Version */}
         <View style={styles.versionContainer}>
-          <Text style={[styles.versionText, { color: colors.textSecondary }]}>
-            MECO Wallet {t('version')} 1.5.0
-          </Text>
+          <Text style={[styles.versionText, { color: colors.textSecondary }]}>MECO Wallet {t('version')} 1.5.0</Text>
         </View>
       </Animated.View>
 
       {/* Color Picker Modal */}
       <Modal visible={colorModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <Animated.View 
-            style={[
-              styles.modalContainer,
-              { 
-                backgroundColor: colors.card,
-                transform: [{ scale: fadeAnim }]
-              }
-            ]}
-          >
+          <Animated.View style={[styles.modalContainer, { backgroundColor: colors.card, transform: [{ scale: fadeAnim }] }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {t('choose_accent_color')}
-              </Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('choose_accent_color')}</Text>
               <TouchableOpacity onPress={() => setColorModalVisible(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-            
             <View style={styles.colorsGrid}>
               {colorsPalette.map((color, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.colorItem}
-                  onPress={() => handleColorSelect(color)}
-                >
+                <TouchableOpacity key={index} style={styles.colorItem} onPress={() => handleColorSelect(color)}>
                   <View style={[styles.colorCircle, { backgroundColor: color }]}>
-                    {primaryColor === color && (
-                      <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                    )}
+                    {primaryColor === color && <Ionicons name="checkmark" size={20} color="#FFFFFF" />}
                   </View>
                 </TouchableOpacity>
               ))}
             </View>
-            
-            <Text style={[styles.colorHint, { color: colors.textSecondary }]}>
-              {t('color_change_applies_immediately')}
-            </Text>
+            <Text style={[styles.colorHint, { color: colors.textSecondary }]}>{t('color_change_applies_immediately')}</Text>
           </Animated.View>
         </View>
       </Modal>
 
-      {/* ✅ Safety Modal (محدث - يعرض العبارة السرية فقط) */}
+      {/* Safety Modal (Recovery Phrase) */}
       <Modal visible={safetyModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <Animated.View 
+          <Animated.View
             style={[
               styles.safetyModalContainer,
-              { 
+              {
                 backgroundColor: colors.card,
-                transform: [{ translateY: fadeAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [300, 0]
-                }) }]
-              }
+                transform: [
+                  {
+                    translateY: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [300, 0],
+                    }),
+                  },
+                ],
+              },
             ]}
           >
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {t('show_recovery_phrase')}
-              </Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('show_recovery_phrase')}</Text>
               <TouchableOpacity onPress={() => setSafetyModalVisible(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-            
             <View style={styles.safetyContent}>
-              {/* تحذير أمني */}
               <View style={[styles.warningBox, { backgroundColor: colors.warning + '20', borderColor: colors.warning }]}>
                 <Ionicons name="warning" size={24} color={colors.warning} />
-                <Text style={[styles.warningText, { color: colors.warning }]}>
-                  {t('warning_phrase')}
-                </Text>
+                <Text style={[styles.warningText, { color: colors.warning }]}>{t('warning_phrase')}</Text>
               </View>
-
-              {/* عرض العبارة */}
               <View style={[styles.textBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <Text style={[styles.monospaceText, { color: colors.text }]}>
-                  {recoveryPhrase}
-                </Text>
+                <Text style={[styles.monospaceText, { color: colors.text }]}>{recoveryPhrase}</Text>
               </View>
-
-              {/* أزرار الإجراءات */}
               <View style={styles.safetyActions}>
                 <TouchableOpacity
                   style={[styles.safetyButton, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -521,85 +445,11 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.safetyCloseButton, { backgroundColor: primaryColor }]}
               onPress={() => setSafetyModalVisible(false)}
             >
               <Text style={styles.safetyCloseButtonText}>{t('close')}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* About Modal */}
-      <Modal visible={aboutModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <Animated.View 
-            style={[
-              styles.aboutModalContainer,
-              { 
-                backgroundColor: colors.card,
-                transform: [{ translateY: fadeAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [300, 0]
-                }) }]
-              }
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {t('about_app')}
-              </Text>
-              <TouchableOpacity onPress={() => setAboutModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.aboutContent}>
-              <View style={[styles.appLogo, { backgroundColor: primaryColor + '20' }]}>
-                <MaterialCommunityIcons name="wallet" size={60} color={primaryColor} />
-              </View>
-              
-              <Text style={[styles.appName, { color: colors.text }]}>MECO Wallet</Text>
-              
-              <Text style={[styles.appVersion, { color: colors.textSecondary }]}>
-                {t('version')} 1.5.0
-              </Text>
-              
-              <Text style={[styles.appDescription, { color: colors.textSecondary }]}>
-                {t('secure_crypto_wallet_description')}
-              </Text>
-              
-              <View style={styles.featureList}>
-                <View style={styles.featureItem}>
-                  <Ionicons name="shield-checkmark" size={20} color={colors.success} />
-                  <Text style={[styles.featureText, { color: colors.text }]}>
-                    {t('secure_and_encrypted')}
-                  </Text>
-                </View>
-                
-                <View style={styles.featureItem}>
-                  <Ionicons name="flash" size={20} color={primaryColor} />
-                  <Text style={[styles.featureText, { color: colors.text }]}>
-                    {t('fast_transactions')}
-                  </Text>
-                </View>
-                
-                <View style={styles.featureItem}>
-                  <Ionicons name="globe" size={20} color={primaryColor} />
-                  <Text style={[styles.featureText, { color: colors.text }]}>
-                    {t('multi_language_support')}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            
-            <TouchableOpacity 
-              style={[styles.aboutCloseButton, { backgroundColor: primaryColor }]}
-              onPress={() => setAboutModalVisible(false)}
-            >
-              <Text style={styles.aboutCloseButtonText}>{t('close')}</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -609,33 +459,12 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-    paddingTop: 10,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  section: {
-    marginBottom: 28,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 12,
-    letterSpacing: 1,
-  },
+  container: { padding: 20, paddingBottom: 40 },
+  header: { alignItems: 'center', marginBottom: 32, paddingTop: 10 },
+  headerTitle: { fontSize: 32, fontWeight: '700', marginBottom: 8 },
+  headerSubtitle: { fontSize: 14, textAlign: 'center' },
+  section: { marginBottom: 28 },
+  sectionTitle: { fontSize: 12, fontWeight: '600', marginBottom: 12, letterSpacing: 1 },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -649,234 +478,34 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  settingItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  settingTextContainer: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  settingSubtitle: {
-    fontSize: 12,
-  },
-  languageBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  languageText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  colorPreviewContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  colorPreview: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  versionContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-    padding: 20,
-  },
-  versionText: {
-    fontSize: 12,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContainer: {
-    width: '100%',
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.25,
-    shadowRadius: 40,
-    elevation: 10,
-  },
-  aboutModalContainer: {
-    width: '100%',
-    borderRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  safetyModalContainer: {
-    width: '100%',
-    borderRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  colorsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  colorItem: {
-    width: '23%',
-    aspectRatio: 1,
-    marginBottom: 12,
-  },
-  colorCircle: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  colorHint: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  aboutContent: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  appLogo: {
-    width: 100,
-    height: 100,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  appName: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  appVersion: {
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  appDescription: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  featureList: {
-    width: '100%',
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureText: {
-    fontSize: 14,
-    marginLeft: 12,
-    flex: 1,
-  },
-  aboutCloseButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  aboutCloseButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // أنماط Safety Modal
-  safetyContent: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 20,
-    gap: 12,
-  },
-  warningText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  textBox: {
-    width: '100%',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 20,
-  },
-  monospaceText: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    fontSize: 14,
-    textAlign: 'left',
-  },
-  safetyActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  safetyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-    minWidth: 120,
-  },
-  safetyButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  safetyCloseButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  safetyCloseButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  settingItemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  iconContainer: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  settingTextContainer: { flex: 1 },
+  settingTitle: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  settingSubtitle: { fontSize: 12 },
+  languageBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.05)' },
+  languageText: { fontSize: 12, fontWeight: '600' },
+  colorPreviewContainer: { flexDirection: 'row', alignItems: 'center' },
+  colorPreview: { width: 24, height: 24, borderRadius: 12, marginRight: 8 },
+  versionContainer: { alignItems: 'center', marginTop: 20, padding: 20 },
+  versionText: { fontSize: 12 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContainer: { width: '100%', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.25, shadowRadius: 40, elevation: 10 },
+  safetyModalContainer: { width: '100%', borderRadius: 24, padding: 24, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  modalTitle: { fontSize: 20, fontWeight: '600' },
+  colorsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 20 },
+  colorItem: { width: '23%', aspectRatio: 1, marginBottom: 12 },
+  colorCircle: { width: '100%', height: '100%', borderRadius: 50, justifyContent: 'center', alignItems: 'center' },
+  colorHint: { fontSize: 12, textAlign: 'center', marginTop: 8 },
+  safetyContent: { alignItems: 'center', marginBottom: 24 },
+  warningBox: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 20, gap: 12 },
+  warningText: { flex: 1, fontSize: 14, fontWeight: '500' },
+  textBox: { width: '100%', padding: 16, borderRadius: 12, borderWidth: 1, marginBottom: 20 },
+  monospaceText: { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 14, textAlign: 'left' },
+  safetyActions: { flexDirection: 'row', justifyContent: 'center', width: '100%' },
+  safetyButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, borderWidth: 1, gap: 8, minWidth: 120 },
+  safetyButtonText: { fontSize: 16, fontWeight: '500' },
+  safetyCloseButton: { paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+  safetyCloseButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

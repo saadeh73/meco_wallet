@@ -32,13 +32,12 @@ export default function TransactionHistoryScreen() {
     info: '#3B82F6',
   }),[isDark]);
 
-  const [transactions, setTransactions] = useState([]);
+  const[transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const[refreshing, setRefreshing] = useState(false);
   const[selectedTx, setSelectedTx] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   
-  // ✅ فلتر التصنيف الجديد (الكل، مرسل، مستلم)
   const[activeFilter, setActiveFilter] = useState('all');
 
   const [stats, setStats] = useState({
@@ -53,7 +52,8 @@ export default function TransactionHistoryScreen() {
     loadTransactions();
   },[]);
 
-  const withTimeout = (promise, ms = 10000) => {
+  // ✅ تعديل المهلة (Timeout) هنا أساسي جداً لنجاح الوضع الإنتاجي
+  const withTimeout = (promise, ms = 30000) => {
     return Promise.race([
       promise,
       new Promise((_, reject) =>
@@ -75,10 +75,11 @@ export default function TransactionHistoryScreen() {
 
       let onChain =[];
       try {
-        const chainData = await withTimeout(getTransactionHistory(20), 10000);
+        // ✅ رفع المهلة إلى 30 ثانية لتناسب سيرفرك المتسلسل في الإنتاج
+        const chainData = await withTimeout(getTransactionHistory(20), 30000);
         if (chainData && chainData.length > 0) {
           onChain = chainData.map(tx => ({
-            type: 'onchain',
+            type: tx.type || 'onchain', // ✅ الحل القاطع لمنع طمس نوع المعاملة
             signature: tx.signature,
             blockTime: tx.blockTime,
             slot: tx.slot,
@@ -134,7 +135,7 @@ export default function TransactionHistoryScreen() {
         else if (currency === 'usdc') target = newStats.usdc;
         else target = newStats.other;
 
-        const isSuccess = !tx.err && (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === undefined);
+        const isSuccess = !tx.err && (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success' || tx.status === undefined);
         if (isSuccess) {
           if (tx.type === 'send') {
             target.totalSent += (tx.amount || 0);
@@ -250,13 +251,15 @@ export default function TransactionHistoryScreen() {
     }
   }, [t]);
 
+  // ✅ الحل القاطع لمشكلة "قيد الانتظار": التعرف على كلمة 'success'
   const getStatusInfo = useCallback((tx) => {
     if (tx.err) return { color: colors.error, label: t('failed'), bg: colors.error + '20' };
-    if (tx.status === 'confirmed' || tx.status === 'finalized') return { color: colors.success, label: t('confirmed'), bg: colors.success + '20' };
+    if (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success') {
+      return { color: colors.success, label: t('confirmed'), bg: colors.success + '20' };
+    }
     return { color: colors.warning, label: t('pending'), bg: colors.warning + '20' };
   }, [colors, t]);
 
-  // ✅ تم تحويل الإحصائيات لتدعم التمرير الأفقي لتبدو أنيقة جداً
   const renderStats = () => {
     const statsToShow =[];
     if (stats.sol.count > 0 || stats.sol.totalSent > 0 || stats.sol.totalReceived > 0) {
@@ -401,7 +404,6 @@ export default function TransactionHistoryScreen() {
     );
   };
 
-  // ✅ تطبيق الفلترة على المعاملات قبل عرضها
   const filteredTransactions = transactions.filter(tx => {
     if (activeFilter === 'all') return true;
     return tx.type === activeFilter;
@@ -418,7 +420,6 @@ export default function TransactionHistoryScreen() {
 
       {!loading && transactions.length > 0 && renderStats()}
 
-      {/* ✅ أزرار الفلترة الأنيقة */}
       <View style={styles.filtersWrapper}>
         <TouchableOpacity 
           style={[styles.filterChip, activeFilter === 'all' ? { backgroundColor: primaryColor } : { backgroundColor: colors.card }]}
@@ -477,25 +478,18 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
   headerTitle: { fontSize: 28, fontWeight: '800' },
   refreshBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
-  
-  // Stats Styles
   statsContainer: { paddingHorizontal: 16, paddingBottom: 16, gap: 12 },
   statCard: { width: 140, padding: 16, borderRadius: 20, borderWidth: 1, elevation: 2, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5 },
   statIconBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 12 },
   statCurrency: { fontSize: 14, fontWeight: '800' },
   statRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   statValue: { fontSize: 15, fontWeight: '700' },
-
-  // Filters Styles
   filtersWrapper: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 10 },
   filterChip: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 },
   filterText: { fontSize: 13, fontWeight: '600' },
-
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, fontSize: 14, fontWeight: '500' },
-
-  // List Item Styles
   itemContainer: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
   iconContainer: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   detailsContainer: { flex: 1 },
@@ -505,8 +499,6 @@ const styles = StyleSheet.create({
   date: { fontSize: 13, fontWeight: '500' },
   statusContainer: { flexDirection: 'row', alignItems: 'center' },
   statusText: { fontSize: 12, fontWeight: '600' },
-
-  // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 40 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
@@ -523,7 +515,6 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   modalButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 20, gap: 10, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
   modalButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
-
   emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   emptyIcon: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
   emptyTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },

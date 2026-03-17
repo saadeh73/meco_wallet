@@ -133,6 +133,11 @@ const resources = {
       get_help_or_report_issues: 'احصل على مساعدة أو أبلغ عن مشاكل',
       about_app: 'عن التطبيق',
       version_and_information: 'الإصدار والمعلومات',
+      check_for_updates: 'التحقق من التحديثات',
+      check_for_updates_desc: 'انتقل إلى صفحة التحميل للتحقق من آخر إصدار',
+      // ✅ مفاتيح جديدة للمصادقة برمز الهاتف
+      use_device_passcode: 'استخدام رمز الهاتف',
+      authenticate_with_passcode: 'الرجاء إدخال رمز الهاتف للمتابعة',
       account: 'الحساب',
       sign_out_from_wallet: 'الخروج من المحفظة',
       authenticate_to_continue: 'قم بالمصادقة للمتابعة',
@@ -565,6 +570,11 @@ const resources = {
       get_help_or_report_issues: 'Get help or report issues',
       about_app: 'About App',
       version_and_information: 'Version and information',
+      check_for_updates: 'Check for Updates',
+      check_for_updates_desc: 'Go to download page to check latest version',
+      // ✅ New keys for passcode authentication
+      use_device_passcode: 'Use device passcode',
+      authenticate_with_passcode: 'Please enter device passcode to continue',
       account: 'Account',
       sign_out_from_wallet: 'Sign out from wallet',
       authenticate_to_continue: 'Authenticate to continue',
