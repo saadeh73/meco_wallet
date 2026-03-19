@@ -1,7 +1,7 @@
 import { LogBox } from 'react-native';
 LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -13,6 +13,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppStore } from './store';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
+
+// ✅ استدعاءات الإشعارات
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 
 // ✅ استيراد خدمة WalletConnect
 import { initWalletConnect } from './services/walletConnectService';
@@ -32,8 +37,16 @@ import PresaleScreen from './screens/PresaleScreen';
 import MecoWorldScreen from './screens/MecoWorldScreen';
 import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
-// ✅ إضافة شاشة التبادل
 import SwapScreen from './screens/SwapScreen';
+
+// ✅ إعداد الإشعارات لتظهر حتى والتطبيق مفتوح أمام المستخدم
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -102,13 +115,17 @@ export default function AppContainer() {
   const [initialRoute, setInitialRoute] = useState(null);
   const { t } = useTranslation();
 
-  // ✅ تحميل اللغة المحفوظة عند بدء التشغيل
+  // ✅ متغيرات الإشعارات
+  const [expoPushToken, setExpoPushToken] = useState('');
+  const notificationListener = useRef();
+  const responseListener = useRef();
+
   useEffect(() => {
     const loadSettings = async () => {
       await useAppStore.getState().loadLanguage();
     };
     loadSettings();
-  }, []);
+  },[]);
 
   useEffect(() => {
     if (language) {
@@ -116,6 +133,65 @@ export default function AppContainer() {
       I18nManager.forceRTL(language === 'ar');
     }
   }, [language]);
+
+  // ✅ طلب صلاحية الإشعارات عند بدء التطبيق
+  useEffect(() => {
+    registerForPushNotificationsAsync().then(token => {
+      if (token) setExpoPushToken(token);
+    });
+
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log("🔔 إشعار جديد استلمناه:", notification);
+    });
+
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log("👉 المستخدم ضغط على الإشعار:", response);
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener.current);
+      Notifications.removeNotificationSubscription(responseListener.current);
+    };
+  },[]);
+
+  // دالة طلب الصلاحية وجلب الـ Token
+  async function registerForPushNotificationsAsync() {
+    let token;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: primaryColor || '#6C63FF',
+      });
+    }
+
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.log('❌ المستخدم رفض صلاحية الإشعارات!');
+        return;
+      }
+      try {
+        const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+        // إذا لم يكن هناك Project ID، سيعمل بدون مشاكل في التطوير المحلي
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        console.log('✅ Push Token الخاص بهذا الجهاز:', token);
+      } catch (e) {
+        console.log('⚠️ خطأ في جلب توكن الإشعارات:', e);
+      }
+    } else {
+      console.log('⚠️ المحاكي لا يدعم الإشعارات، يجب استخدام هاتف حقيقي.');
+    }
+
+    return token;
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -150,7 +226,7 @@ export default function AppContainer() {
       }
     };
     init();
-  }, []);
+  },[]);
 
   if (!initialRoute) {
     return (
