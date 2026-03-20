@@ -14,13 +14,14 @@ import { useAppStore } from './store';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
-// ✅ استدعاءات الإشعارات
+// استدعاءات الإشعارات
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
-// ✅ استيراد خدمة WalletConnect
 import { initWalletConnect } from './services/walletConnectService';
+// ✅ استدعاء دالة الحفظ في فايربيس
+import { saveUserPushToken } from './services/firebaseConfig';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -39,7 +40,6 @@ import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
 
-// ✅ إعداد الإشعارات لتظهر حتى والتطبيق مفتوح أمام المستخدم
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -115,8 +115,9 @@ export default function AppContainer() {
   const [initialRoute, setInitialRoute] = useState(null);
   const { t } = useTranslation();
 
-  // ✅ متغيرات الإشعارات
   const [expoPushToken, setExpoPushToken] = useState('');
+  const [walletAddress, setWalletAddress] = useState(null); // ✅ حفظ عنوان المحفظة
+
   const notificationListener = useRef();
   const responseListener = useRef();
 
@@ -134,7 +135,6 @@ export default function AppContainer() {
     }
   }, [language]);
 
-  // ✅ طلب صلاحية الإشعارات عند بدء التطبيق
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => {
       if (token) setExpoPushToken(token);
@@ -154,15 +154,13 @@ export default function AppContainer() {
     };
   },[]);
 
-  // دالة طلب الصلاحية وجلب الـ Token
   async function registerForPushNotificationsAsync() {
     let token;
-
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'default',
         importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
+        vibrationPattern:[0, 250, 250, 250],
         lightColor: primaryColor || '#6C63FF',
       });
     }
@@ -180,22 +178,20 @@ export default function AppContainer() {
       }
       try {
         const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-        // إذا لم يكن هناك Project ID، سيعمل بدون مشاكل في التطوير المحلي
         token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-        console.log('✅ Push Token الخاص بهذا الجهاز:', token);
       } catch (e) {
         console.log('⚠️ خطأ في جلب توكن الإشعارات:', e);
       }
-    } else {
-      console.log('⚠️ المحاكي لا يدعم الإشعارات، يجب استخدام هاتف حقيقي.');
     }
-
     return token;
   }
 
   useEffect(() => {
     const init = async () => {
       try {
+        const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+        if (pubKeyStr) setWalletAddress(pubKeyStr); // ✅ تخزين العنوان
+
         const initialized = await SecureStore.getItemAsync('wallet_initialized');
         if (initialized === 'true') {
           const loadWallet = useAppStore.getState().loadWallet;
@@ -228,6 +224,13 @@ export default function AppContainer() {
     init();
   },[]);
 
+  // ✅ السحر هنا: إذا وجدنا التوكن وعنوان المحفظة معاً، نرفعهما فوراً لـ Firebase!
+  useEffect(() => {
+    if (expoPushToken && walletAddress) {
+      saveUserPushToken(walletAddress, expoPushToken);
+    }
+  }, [expoPushToken, walletAddress]);
+
   if (!initialRoute) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme === 'dark' ? '#000' : '#fff' }}>
@@ -244,12 +247,10 @@ export default function AppContainer() {
         <Stack.Screen name="ImportWallet" component={ImportWalletScreen} options={{ title: t('import_wallet') }} />
         <Stack.Screen name="BottomTabs" component={BottomTabs} options={{ headerShown: false }} />
 
-        {/* ✅ عناوين مترجمة */}
         <Stack.Screen name="Send" component={SendScreen} options={{ title: t('send') }} />
         <Stack.Screen name="Receive" component={ReceiveScreen} options={{ title: t('receive') }} />
         <Stack.Screen name="Backup" component={BackupScreen} options={{ title: t('backup_wallet') }} />
 
-        {/* ✅ شاشة التبادل الجديدة */}
         <Stack.Screen
           name="Swap"
           component={SwapScreen}

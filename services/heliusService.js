@@ -1,4 +1,3 @@
-// services/heliusService.js
 import * as SecureStore from 'expo-secure-store';
 import * as web3 from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
@@ -6,11 +5,15 @@ import * as splToken from '@solana/spl-token';
 // ✅ عنوان عقد عملة MECO
 const MECO_MINT_ADDRESS = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 
-// ✅ قائمة RPCs مع أولويات
-const RPC_ENDPOINTS =[
-  { url: 'https://api.mainnet-beta.solana.com', priority: 1 },
-  { url: 'https://solana-api.projectserum.com', priority: 2 },
-  { url: 'https://rpc.ankr.com/solana', priority: 3 }
+// 🛡️ جلب رابط Helius السري والآمن من المتغيرات البيئية (بدون فضحه في الكود)
+const HELIUS_URL = process.env.EXPO_PUBLIC_HELIUS_RPC;
+
+// ✅ قائمة RPCs (نجعل Helius هو الزعيم رقم 1 القوي، ونبقي المجانية كاحتياطي)
+const RPC_ENDPOINTS = [
+  ...(HELIUS_URL ? [{ url: HELIUS_URL, priority: 1 }] :[]),
+  { url: 'https://api.mainnet-beta.solana.com', priority: 2 },
+  { url: 'https://solana-api.projectserum.com', priority: 3 },
+  { url: 'https://rpc.ankr.com/solana', priority: 4 }
 ];
 
 // ✅ إعدادات الكاش المحسنة
@@ -19,7 +22,6 @@ const BLOCKHASH_DURATION = 20000;
 const PRICE_CACHE_DURATION = 60000; 
 const MAX_TOKEN_CACHE_SIZE = 100; 
 
-// ✅ نظام Caching محسن باستخدام LRU بسيط
 class LRUCache {
   constructor(maxSize = 100, maxAge = CACHE_DURATION) {
     this.maxSize = maxSize;
@@ -54,7 +56,6 @@ class LRUCache {
   }
 }
 
-// ✅ الكاش الأساسي
 const CACHE = {
   sol: { balance: 0, timestamp: 0 },
   tokens: new LRUCache(MAX_TOKEN_CACHE_SIZE, CACHE_DURATION),
@@ -63,7 +64,6 @@ const CACHE = {
   prices: new LRUCache(20, PRICE_CACHE_DURATION)
 };
 
-// ✅ مدير اتصالات RPC مع round-robin ومراقبة الأداء
 class RPCManager {
   constructor(endpoints) {
     this.endpoints = endpoints.sort((a, b) => a.priority - b.priority);
@@ -203,7 +203,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
 
     console.log(`🔄 Fetching price for ${tokenSymbol}...`);
 
-    // تحديث نقاط Jupiter للنسخة v6 المستقرة
     const endpoints =[
       {
         url: `https://api.jup.ag/price/v2?ids=${mintAddress}`,
@@ -220,7 +219,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); 
 
-        // ✅ تم إزالة 'User-Agent'
         const response = await fetch(url, {
           headers: { 'Accept': 'application/json' },
           signal: controller.signal,
@@ -251,7 +249,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      // ✅ تم إزالة 'User-Agent'
       const response = await fetch(coingeckoUrl, {
         headers: { 'Accept': 'application/json' },
         signal: controller.signal,
@@ -531,6 +528,7 @@ export function clearBalanceCache(mintAddress) {
   CACHE.blockhashTime = 0;
 }
 
+// ✅ المحلل الذكي القديم (الذي يصطاد المستلمات بدقة ويصنف التوكنات)
 export async function getTransactionHistory(limit = 20) {
   try {
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
@@ -579,6 +577,7 @@ export async function getTransactionHistory(limit = 20) {
               transactions.push({
                 signature: sig.signature,
                 blockTime: sig.blockTime,
+                timestamp: sig.blockTime ? sig.blockTime * 1000 : Date.now(),
                 slot: sig.slot,
                 from,
                 to,
@@ -637,6 +636,7 @@ export async function getTransactionHistory(limit = 20) {
               transactions.push({
                 signature: sig.signature,
                 blockTime: sig.blockTime,
+                timestamp: sig.blockTime ? sig.blockTime * 1000 : Date.now(),
                 slot: sig.slot,
                 from,
                 to: toOwner,
@@ -727,6 +727,7 @@ export async function getTransactionHistory(limit = 20) {
             transactions.push({
               signature: sig.signature,
               blockTime: sig.blockTime,
+              timestamp: sig.blockTime ? sig.blockTime * 1000 : Date.now(),
               slot: sig.slot,
               confirmationStatus: sig.confirmationStatus,
               from: type === 'send' ? pubKeyStr : (otherParty || 'Smart Contract'),
@@ -734,20 +735,21 @@ export async function getTransactionHistory(limit = 20) {
               amount: amount,
               token: tokenSymbol,
               mint: mint,
+              type: type, 
               err: tx.meta?.err || null,
               fee: fee,
               status: tx.meta?.err ? 'failed' : 'success'
             });
           }
         }
-      } catch (error) {
-        console.warn(`⚠️ Error processing tx ${sig.signature}:`, error.message);
+      } catch (e) {
+        console.warn('Error parsing transaction', e);
       }
     }
     
     return transactions;
   } catch (error) {
-    console.error('❌ Error in getTransactionHistory:', error.message);
-    return [];  // <-- التعديل هنا: إرجاع مصفوفة فارغة مع فاصلة منقوطة
+    console.error('getTransactionHistory error:', error);
+    return[ ];
+    }
   }
-}
