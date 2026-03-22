@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "763203847014",
+    "project_id": "meco-wallet-f48e5",
+    "storage_bucket": "meco-wallet-f48e5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:763203847014:android:a5f21a16bf27c9fe5abea7",
+        "android_client_info": {
+          "package_name": "com.meco.wallet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "763203847014-l564drea956mgq7k7qat55p0asmef596.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYbIQuWVWedB8i2vTfkH59KKFFTTpPmpM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "763203847014-l564drea956mgq7k7qat55p0asmef596.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
