@@ -2,7 +2,7 @@
   "expo": {
     "name": "meco wallet",
     "slug": "meco_wallet",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "scheme": "meco-wallet",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -37,7 +37,15 @@
       "expo-web-browser",
       "expo-secure-store",
       "expo-local-authentication",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "googleServicesFile": "./google-services.json",
+          }
+        }
+      ]
     ],
     "owner": "monycoin",
     "extra": {
