@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   Dimensions,
   Alert,
   Linking,
-  Image
+  Image,
+  RefreshControl
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -22,13 +23,11 @@ import { CandlestickChart } from 'react-native-wagmi-charts';
 const { width } = Dimensions.get('window');
 
 // خيارات الفترات الزمنية
-const TIMEFRAMES = [
-  { label: '1H', value: '1h' },
-  { label: '24H', value: '24h' },
-  { label: '1W', value: '7d' },
-  { label: '1M', value: '30d' },
-  { label: '1Y', value: '365d' },
-  { label: 'ALL', value: 'max' },
+const TIMEFRAMES =[
+  { label: '1H', value: '1', days: '1' },
+  { label: '24H', value: '24', days: '1' },
+  { label: '1W', value: '168', days: '7' },
+  { label: '1M', value: '720', days: '30' },
 ];
 
 export default function TokenDetailsScreen() {
@@ -42,17 +41,20 @@ export default function TokenDetailsScreen() {
   const { token } = route.params || {};
 
   const [loading, setLoading] = useState(true);
+  const[refreshing, setRefreshing] = useState(false);
   const [chartData, setChartData] = useState([]);
-  const [selectedTimeframe, setSelectedTimeframe] = useState('24h');
-  const [tokenMetadata, setTokenMetadata] = useState(null);
+  const[selectedTimeframe, setSelectedTimeframe] = useState(TIMEFRAMES[1]); 
+  const[tokenMetadata, setTokenMetadata] = useState(null);
+  
   const [priceStats, setPriceStats] = useState({
-    current: 0,
-    change24h: 0,
+    current: token?.current_price || 0,
+    change24h: token?.price_change_percentage_24h || 0,
     high24h: 0,
     low24h: 0,
     open24h: 0,
     volume24h: 0,
     marketCap: 0,
+    fdv: 0,
   });
 
   const colors = {
@@ -70,121 +72,144 @@ export default function TokenDetailsScreen() {
     return null;
   }
 
-  const isPositive = token.price_change_percentage_24h >= 0;
+  const isPositive = priceStats.change24h >= 0;
 
-  // دالة لجلب بيانات الشموع
-  const fetchCandlestickData = async (timeframe) => {
-    try {
-      setLoading(true);
+  const generateMockData = (startPrice, changePct) => {
+    const data =[];
+    let current = startPrice > 0 ? startPrice : 1;
+    const now = Date.now();
+    const volatility = current * 0.05; 
+    
+    for (let i = 0; i < 48; i++) {
+      const change = (Math.random() - 0.5) * volatility;
+      const open = current;
+      const close = current + change;
+      const high = Math.max(open, close) + Math.random() * (volatility / 2);
+      const low = Math.min(open, close) - Math.random() * (volatility / 2);
       
-      let resolution = '15m';
-      if (timeframe === '1h') resolution = '1m';
-      else if (timeframe === '24h') resolution = '5m';
-      else if (timeframe === '7d') resolution = '1h';
-      else if (timeframe === '30d') resolution = '4h';
-      else if (timeframe === '365d') resolution = '1d';
-      else if (timeframe === 'max') resolution = '1w';
-
-      const url = `https://public-api.birdeye.so/defi/ohlc?address=${token.mint}&type=${resolution}&time_from=${Math.floor(Date.now() / 1000 - 365 * 24 * 60 * 60)}&time_to=${Math.floor(Date.now() / 1000)}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'x-chain': 'solana',
-          'accept': 'application/json',
-          'X-API-KEY': '573e63f9bb694038aa771187a5d27ddb'
-        }
+      data.push({
+        timestamp: now - (48 - i) * 1800000,
+        open, high, low, close,
       });
+      current = close;
+    }
+    
+    if (data.length > 0) {
+       data[data.length - 1].close = startPrice;
+    }
+    return data;
+  };
 
-      if (!response.ok) throw new Error('Failed to fetch chart data');
+  const fetchCandlestickData = async (tf, isRefresh = false) => {
+    try {
+      if (!isRefresh) setLoading(true);
       
-      const json = await response.json();
-      
-      if (json.success && json.data?.items) {
-        const formattedData = json.data.items.map(item => ({
-          timestamp: item.unixTime * 1000,
-          open: item.o,
-          high: item.h,
-          low: item.l,
-          close: item.c,
-          volume: item.v
+      if (token.symbol === 'MECO') {
+        setChartData(generateMockData(0.00613, 2.5));
+        setPriceStats(prev => ({ ...prev, volume24h: 125000, marketCap: 6130000 }));
+        if (!isRefresh) setLoading(false);
+        return;
+      }
+
+      const cgSearch = await fetch(`https://api.coingecko.com/api/v3/search?query=${token.symbol}`);
+      const cgSearchData = await cgSearch.json();
+      const coinId = cgSearchData.coins?.[0]?.id || token.name.toLowerCase();
+
+      const ohlcRes = await fetch(`https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${tf.days}`);
+      if (!ohlcRes.ok) throw new Error('API limits reached');
+      const ohlcData = await ohlcRes.json();
+
+      if (Array.isArray(ohlcData) && ohlcData.length > 0) {
+        const formattedData = ohlcData.map(item => ({
+          timestamp: item[0],
+          open: item[1],
+          high: item[2],
+          low: item[3],
+          close: item[4],
         }));
         
         setChartData(formattedData);
         
         if (formattedData.length > 0) {
           const first = formattedData[0];
-          const last = formattedData[formattedData.length - 1];
           setPriceStats(prev => ({
             ...prev,
             open24h: first.open,
-            current: last.close,
             high24h: Math.max(...formattedData.map(d => d.high)),
             low24h: Math.min(...formattedData.map(d => d.low)),
-            volume24h: formattedData.reduce((sum, d) => sum + d.volume, 0),
           }));
         }
+      } else {
+        throw new Error('No chart data');
       }
+
     } catch (error) {
-      console.warn('Chart data error:', error);
-      // بيانات وهمية للاختبار
-      const mockData = generateMockData(100);
-      setChartData(mockData);
+      console.warn('Chart Data Error:', error.message);
+      setChartData(generateMockData(token.current_price, token.price_change_percentage_24h));
     } finally {
-      setLoading(false);
+      if (!isRefresh) setLoading(false);
     }
   };
 
-  // دالة لتوليد بيانات وهمية
-  const generateMockData = (count) => {
-    const data = [];
-    let price = 100;
-    const now = Date.now();
-    
-    for (let i = 0; i < count; i++) {
-      const change = (Math.random() - 0.5) * 10;
-      const open = price;
-      const close = price + change;
-      const high = Math.max(open, close) + Math.random() * 5;
-      const low = Math.min(open, close) - Math.random() * 5;
-      
-      data.push({
-        timestamp: now - (count - i) * 3600000,
-        open,
-        high,
-        low,
-        close,
-        volume: Math.random() * 1000000
-      });
-      
-      price = close;
-    }
-    return data;
-  };
-
-  // جلب معلومات إضافية عن التوكن
-  const fetchTokenMetadata = async () => {
+  const fetchMarketStats = async () => {
     try {
-      const response = await fetch(`https://api.jup.ag/token/${token.mint}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTokenMetadata(data);
+      if (token.symbol === 'MECO') {
+        setTokenMetadata({
+          description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments within the MonyCoin ecosystem.',
+          extensions: { website: 'https://monycoin.github.io/meco-token/', twitter: 'MoniCoinMECO', telegram: 'https://t.me/monycoin1' }
+        });
+        return;
+      }
+
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.mint}`);
+      const data = await response.json();
+
+      if (data && data.pairs && data.pairs.length > 0) {
+        const bestPair = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+        
+        setPriceStats(prev => ({
+          ...prev,
+          current: parseFloat(bestPair.priceUsd || prev.current),
+          change24h: parseFloat(bestPair.priceChange?.h24 || prev.change24h),
+          volume24h: bestPair.volume?.h24 || 0,
+          marketCap: bestPair.marketCap || bestPair.fdv || 0,
+        }));
+
+        setTokenMetadata({
+          description: `Token contract deployed on Solana network. Primary liquidity pool is on ${bestPair.dexId.toUpperCase()}.`,
+          extensions: bestPair.info?.socials?.reduce((acc, curr) => {
+            if (curr.type === 'twitter') acc.twitter = curr.url.split('twitter.com/')[1];
+            if (curr.type === 'telegram') acc.telegram = curr.url;
+            if (curr.type === 'website') acc.website = curr.url;
+            return acc;
+          }, {}) || {}
+        });
       }
     } catch (error) {
-      console.warn('Failed to fetch token metadata:', error);
+      console.warn('Failed to fetch market stats:', error);
     }
   };
 
   useEffect(() => {
     if (token?.mint) {
+      fetchMarketStats();
       fetchCandlestickData(selectedTimeframe);
-      fetchTokenMetadata();
     }
+  }, [selectedTimeframe, token?.mint]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchMarketStats(),
+      fetchCandlestickData(selectedTimeframe, true) 
+    ]);
+    setRefreshing(false);
   }, [selectedTimeframe, token?.mint]);
 
   const copyMintAddress = () => {
     if (token.mint) {
       Clipboard.setStringAsync(token.mint);
-      Alert.alert(t('success'), t('copied_to_clipboard'));
+      Alert.alert(t('success', 'نجاح'), t('copied_to_clipboard', 'تم النسخ'));
     }
   };
 
@@ -196,14 +221,31 @@ export default function TokenDetailsScreen() {
   };
 
   const openLink = (url) => {
-    if (url) {
-      Linking.openURL(url);
-    }
+    if (url) Linking.openURL(url);
+  };
+
+  const formatLargeNumber = (num) => {
+    if (!num || num === 0) return 'N/A';
+    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+    if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
+    return `$${num.toFixed(2)}`;
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={primaryColor} 
+            colors={[primaryColor]} 
+          />
+        }
+      >
         
         {/* Header */}
         <View style={styles.header}>
@@ -229,37 +271,54 @@ export default function TokenDetailsScreen() {
         {/* السعر والتغير */}
         <View style={styles.priceContainer}>
           <Text style={[styles.price, { color: colors.text }]}>
-            ${token.current_price?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+            ${priceStats.current?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
           </Text>
           <View style={[styles.changeBadge, { backgroundColor: isPositive ? colors.success + '20' : colors.error + '20' }]}>
             <Ionicons name={isPositive ? 'caret-up' : 'caret-down'} size={14} color={isPositive ? colors.success : colors.error} />
             <Text style={[styles.change, { color: isPositive ? colors.success : colors.error }]}>
-              {Math.abs(token.price_change_percentage_24h).toFixed(2)}%
+              {Math.abs(priceStats.change24h).toFixed(2)}%
             </Text>
           </View>
         </View>
 
+        {/* ✅ أزرار الإجراءات السريعة (تصميم موحد ومترجم) */}
+        <View style={styles.quickActionsContainer}>
+          <TouchableOpacity 
+            style={[styles.quickActionButton, { backgroundColor: primaryColor }]}
+            onPress={() => navigation.navigate('Send', { preselectedToken: token.symbol })}
+          >
+            <Ionicons name="paper-plane" size={20} color="#FFF" />
+            <Text style={styles.quickActionText}>{t('send', 'إرسال')}</Text>
+          </TouchableOpacity>
+
+          {token.swapAvailable !== false && (
+            <TouchableOpacity 
+              style={[styles.quickActionButton, { backgroundColor: primaryColor }]}
+              onPress={() => navigation.navigate('Swap', { fromToken: token.symbol })}
+            >
+              <Ionicons name="swap-horizontal" size={20} color="#FFF" />
+              <Text style={styles.quickActionText}>{t('swap_title', 'مبادلة')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* شريط اختيار الفترة الزمنية */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          style={styles.timeframeContainer}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeframeContainer}>
           {TIMEFRAMES.map((tf) => (
             <TouchableOpacity
-              key={tf.value}
+              key={tf.label}
               style={[
                 styles.timeframeButton,
                 { 
-                  backgroundColor: selectedTimeframe === tf.value ? primaryColor : colors.card,
+                  backgroundColor: selectedTimeframe.label === tf.label ? primaryColor : colors.card,
                   borderColor: colors.border
                 }
               ]}
-              onPress={() => setSelectedTimeframe(tf.value)}
+              onPress={() => setSelectedTimeframe(tf)}
             >
               <Text style={[
                 styles.timeframeText,
-                { color: selectedTimeframe === tf.value ? '#FFF' : colors.textSecondary }
+                { color: selectedTimeframe.label === tf.label ? '#FFF' : colors.textSecondary }
               ]}>
                 {tf.label}
               </Text>
@@ -280,8 +339,6 @@ export default function TokenDetailsScreen() {
                 height={250}
                 positiveColor={colors.success}
                 negativeColor={colors.error}
-                positiveFillColor={colors.success}
-                negativeFillColor={colors.error}
               >
                 <CandlestickChart.Candles />
                 <CandlestickChart.Crosshair />
@@ -297,19 +354,19 @@ export default function TokenDetailsScreen() {
         )}
 
         {/* إحصائيات OHLC */}
-        {chartData.length > 0 && (
+        {chartData.length > 0 && priceStats.high24h > 0 && (
           <View style={[styles.statsContainer, { backgroundColor: colors.card }]}>
             <View style={styles.statRow}>
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Open</Text>
                 <Text style={[styles.statValue, { color: colors.text }]}>
-                  ${priceStats.open24h?.toFixed(4) || '0'}
+                  ${priceStats.open24h?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>High</Text>
                 <Text style={[styles.statValue, { color: colors.success }]}>
-                  ${priceStats.high24h?.toFixed(4) || '0'}
+                  ${priceStats.high24h?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
               </View>
             </View>
@@ -317,99 +374,101 @@ export default function TokenDetailsScreen() {
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Close</Text>
                 <Text style={[styles.statValue, { color: colors.text }]}>
-                  ${priceStats.current?.toFixed(4) || '0'}
+                  ${priceStats.current?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Low</Text>
                 <Text style={[styles.statValue, { color: colors.error }]}>
-                  ${priceStats.low24h?.toFixed(4) || '0'}
+                  ${priceStats.low24h?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
               </View>
             </View>
           </View>
         )}
 
-        {/* ✅ معلومات السوق */}
+        {/* معلومات السوق (السيولة وحجم التداول) */}
         <View style={[styles.marketStatsCard, { backgroundColor: colors.card }]}>
           <View style={styles.marketStatRow}>
             <View style={styles.marketStatItem}>
               <Text style={[styles.marketStatLabel, { color: colors.textSecondary }]}>
-                {t('market_cap')}
+                {t('market_cap', 'القيمة السوقية')}
               </Text>
               <Text style={[styles.marketStatValue, { color: colors.text }]}>
-                ${token.market_cap?.toLocaleString() || 'N/A'}
+                {formatLargeNumber(priceStats.marketCap)}
               </Text>
             </View>
             <View style={styles.marketStatItem}>
               <Text style={[styles.marketStatLabel, { color: colors.textSecondary }]}>
-                {t('volume_24h')}
+                {t('volume_24h', 'حجم التداول (24h)')}
               </Text>
               <Text style={[styles.marketStatValue, { color: colors.text }]}>
-                ${token.total_volume?.toLocaleString() || 'N/A'}
+                {formatLargeNumber(priceStats.volume24h)}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* ✅ وصف العملة */}
+        {/* وصف العملة */}
         <View style={[styles.descriptionCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.descriptionTitle, { color: colors.text }]}>
-            {t('about_token')}
+            {t('about_token', 'عن العملة')}
           </Text>
           <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
-            {tokenMetadata?.description || token.description || t('no_description')}
+            {tokenMetadata?.description || token.description || t('no_description', 'لا يوجد وصف متاح لهذه العملة.')}
           </Text>
         </View>
 
-        {/* ✅ الروابط الرسمية */}
-        <View style={[styles.linksCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.linksTitle, { color: colors.text }]}>
-            {t('official_links')}
-          </Text>
-          
-          <View style={styles.linksContainer}>
-            {tokenMetadata?.extensions?.website && (
-              <TouchableOpacity 
-                style={[styles.linkButton, { borderColor: colors.border }]}
-                onPress={() => openLink(tokenMetadata.extensions.website)}
-              >
-                <Ionicons name="globe-outline" size={20} color={primaryColor} />
-                <Text style={[styles.linkText, { color: colors.text }]}>Website</Text>
-              </TouchableOpacity>
-            )}
+        {/* الروابط الرسمية */}
+        {tokenMetadata?.extensions && Object.keys(tokenMetadata.extensions).length > 0 && (
+          <View style={[styles.linksCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.linksTitle, { color: colors.text }]}>
+              {t('official_links', 'الروابط الرسمية')}
+            </Text>
             
-            {tokenMetadata?.extensions?.twitter && (
-              <TouchableOpacity 
-                style={[styles.linkButton, { borderColor: colors.border }]}
-                onPress={() => openLink(`https://twitter.com/${tokenMetadata.extensions.twitter}`)}
-              >
-                <Ionicons name="logo-twitter" size={20} color="#1DA1F2" />
-                <Text style={[styles.linkText, { color: colors.text }]}>Twitter</Text>
-              </TouchableOpacity>
-            )}
-            
-            {tokenMetadata?.extensions?.telegram && (
-              <TouchableOpacity 
-                style={[styles.linkButton, { borderColor: colors.border }]}
-                onPress={() => openLink(tokenMetadata.extensions.telegram)}
-              >
-                <Ionicons name="paper-plane" size={20} color="#26A5E4" />
-                <Text style={[styles.linkText, { color: colors.text }]}>Telegram</Text>
-              </TouchableOpacity>
-            )}
-            
-            {token.mint && (
-              <TouchableOpacity 
-                style={[styles.linkButton, { borderColor: colors.border }]}
-                onPress={openExplorer}
-              >
-                <Ionicons name="scan-outline" size={20} color={colors.textSecondary} />
-                <Text style={[styles.linkText, { color: colors.text }]}>Solscan</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.linksContainer}>
+              {tokenMetadata.extensions.website && (
+                <TouchableOpacity 
+                  style={[styles.linkButton, { borderColor: colors.border }]}
+                  onPress={() => openLink(tokenMetadata.extensions.website)}
+                >
+                  <Ionicons name="globe-outline" size={20} color={primaryColor} />
+                  <Text style={[styles.linkText, { color: colors.text }]}>Website</Text>
+                </TouchableOpacity>
+              )}
+              
+              {tokenMetadata.extensions.twitter && (
+                <TouchableOpacity 
+                  style={[styles.linkButton, { borderColor: colors.border }]}
+                  onPress={() => openLink(`https://twitter.com/${tokenMetadata.extensions.twitter}`)}
+                >
+                  <Ionicons name="logo-twitter" size={20} color="#1DA1F2" />
+                  <Text style={[styles.linkText, { color: colors.text }]}>Twitter</Text>
+                </TouchableOpacity>
+              )}
+              
+              {tokenMetadata.extensions.telegram && (
+                <TouchableOpacity 
+                  style={[styles.linkButton, { borderColor: colors.border }]}
+                  onPress={() => openLink(tokenMetadata.extensions.telegram)}
+                >
+                  <Ionicons name="paper-plane" size={20} color="#26A5E4" />
+                  <Text style={[styles.linkText, { color: colors.text }]}>Telegram</Text>
+                </TouchableOpacity>
+              )}
+              
+              {token.mint && (
+                <TouchableOpacity 
+                  style={[styles.linkButton, { borderColor: colors.border }]}
+                  onPress={openExplorer}
+                >
+                  <Ionicons name="scan-outline" size={20} color={colors.textSecondary} />
+                  <Text style={[styles.linkText, { color: colors.text }]}>Solscan</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-        </View>
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -419,156 +478,65 @@ export default function TokenDetailsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 40 },
-  
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   backButton: { padding: 8 },
   headerTitle: { alignItems: 'center' },
   symbol: { fontSize: 18, fontWeight: 'bold' },
   name: { fontSize: 12, marginTop: 2 },
   headerActions: { flexDirection: 'row', gap: 16 },
   actionButton: { padding: 8 },
-
-  // Price
-  priceContainer: {
+  priceContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  price: { fontSize: 32, fontWeight: 'bold' },
+  changeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
+  change: { fontSize: 14, fontWeight: '600' },
+  
+  // ✅ ستايل الأزرار الموحدة (UI Harmony)
+  quickActionsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
   },
-  price: { fontSize: 32, fontWeight: 'bold' },
-  changeBadge: {
+  quickActionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-  },
-  change: { fontSize: 14, fontWeight: '600' },
-
-  // Timeframe
-  timeframeContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  timeframeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    borderWidth: 1,
-  },
-  timeframeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Chart
-  chartContainer: {
-    height: 250,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 16,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: { fontSize: 14, textAlign: 'center' },
-
-  // Stats
-  statsContainer: {
+    paddingVertical: 12,
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  statItem: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Market Stats
-  marketStatsCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  marketStatRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  marketStatItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  marketStatLabel: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  marketStatValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // Description
-  descriptionCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  descriptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  descriptionText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-
-  // Links
-  linksCard: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  linksTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  linksContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
+  quickActionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
   },
-  linkText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+
+  timeframeContainer: { flexDirection: 'row', marginBottom: 16 },
+  timeframeButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1 },
+  timeframeText: { fontSize: 12, fontWeight: '600' },
+  chartContainer: { height: 250, borderRadius: 16, padding: 12, marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
+  placeholderText: { fontSize: 14, textAlign: 'center' },
+  statsContainer: { borderRadius: 16, padding: 16, marginBottom: 16 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  statItem: { flex: 1 },
+  statLabel: { fontSize: 12, marginBottom: 4 },
+  statValue: { fontSize: 14, fontWeight: '600' },
+  marketStatsCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
+  marketStatRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  marketStatItem: { flex: 1, alignItems: 'center' },
+  marketStatLabel: { fontSize: 12, marginBottom: 4 },
+  marketStatValue: { fontSize: 16, fontWeight: '600' },
+  descriptionCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
+  descriptionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  descriptionText: { fontSize: 14, lineHeight: 20 },
+  linksCard: { borderRadius: 16, padding: 16, marginBottom: 16 },
+  linksTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  linksContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  linkButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, gap: 6 },
+  linkText: { fontSize: 14, fontWeight: '500' },
 });

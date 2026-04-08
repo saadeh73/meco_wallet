@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, Modal, FlatList,
+  StyleSheet, Alert, Modal, FlatList, Image,
   Dimensions, Animated, ScrollView,
   KeyboardAvoidingView, Platform, ActivityIndicator
 } from 'react-native';
@@ -24,50 +24,11 @@ import bs58 from 'bs58';
 import * as splToken from '@solana/spl-token';
 import * as Clipboard from 'expo-clipboard';
 
-// =============================================
-// ⚙️ إعدادات الرسوم
-// =============================================
+// ✅ 1. استدعاء القاموس المركزي للعملات لتوحيد التطبيق
+import { CORE_TOKENS } from '../services/jupiterMarketService';
+
 const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
 const SERVICE_FEE_SOL = 0.0005; 
-
-const MIN_SOL_AMOUNT = 0.000001;
-const MIN_TOKEN_AMOUNT = 0.000001;
-
-// التوكنات الأساسية
-const BASE_TOKENS = [
-  {
-    symbol: 'SOL',
-    name: 'Solana',
-    mint: null,
-    icon: 'diamond-outline',
-    decimals: 9, 
-    priority: 1
-  },
-  {
-    symbol: 'MECO',
-    name: 'MonyCoin',
-    mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
-    icon: 'rocket-outline',
-    decimals: 9,
-    priority: 2
-  },
-  {
-    symbol: 'USDT',
-    name: 'Tether USD',
-    mint: 'Es9vMFrzaCERc8Foa8XfRduKiSfrhEL5c7qr2WXXBWY5',
-    icon: 'cash-outline',
-    decimals: 6,
-    priority: 3
-  },
-  {
-    symbol: 'USDC',
-    name: 'USD Coin',
-    mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-    icon: 'wallet-outline',
-    decimals: 6,
-    priority: 4
-  },
-];
 
 async function getKeypair(t) {
   try {
@@ -119,24 +80,30 @@ export default function SendScreen() {
     networkFee: 0.000005,
     recipientExists: null,
     recipientHasTokenAccount: true,
-    lastBalanceUpdate: Date.now(),
-    transactionInProgress: false
   });
 
   const [balances, setBalances] = useState({ sol: 0, tokens: {}, lastUpdated: 0 });
   const [fadeAnim] = useState(new Animated.Value(0));
   const validationTimeoutRef = useRef(null);
 
-  // ✅ استقبال العنوان الممسوح ضوئياً من QRScanner
   useEffect(() => {
     if (route.params?.scannedAddress) {
       setState(prev => ({ ...prev, recipient: route.params.scannedAddress }));
-      // مسح الباراميتر بعد الاستخدام
       navigation.setParams({ scannedAddress: undefined });
     }
   }, [route.params?.scannedAddress, navigation]);
 
-  const currentToken = useMemo(() => BASE_TOKENS.find(t => t.symbol === state.currency) || BASE_TOKENS[0], [state.currency]);
+  // ✅ 2. استخدام القاموس المركزي لتحديد العملة الحالية
+  const currentToken = useMemo(() => CORE_TOKENS.find(t => t.symbol === state.currency) || CORE_TOKENS[0], [state.currency]);
+
+  // ✅ 3. فلترة ذكية: إظهار العملات التي يملكها المستخدم فقط في شاشة الإرسال (إضافة للأساسيات)
+  const availableTokensToSend = useMemo(() => {
+    return CORE_TOKENS.filter(token => {
+      if (token.symbol === 'SOL' || token.symbol === 'MECO') return true; 
+      const bal = balances.tokens[token.symbol] || 0;
+      return bal > 0; 
+    });
+  }, [balances]);
 
   const totalFees = useMemo(() => state.networkFee + SERVICE_FEE_SOL, [state.networkFee]);
 
@@ -160,7 +127,9 @@ export default function SendScreen() {
       setState(prev => ({ ...prev, loadingTokens: true }));
       
       const solBalance = await getSolBalance(forceRefresh);
-      const tokenPromises = BASE_TOKENS.filter(t => t.mint).map(async (token) => {
+      
+      // ✅ جلب أرصدة الـ 16 عملة باستخدام القاموس الموحد
+      const tokenPromises = CORE_TOKENS.filter(t => t.mint).map(async (token) => {
           const balance = await getTokenBalance(token.mint, forceRefresh);
           return { symbol: token.symbol, balance };
       });
@@ -220,7 +189,7 @@ export default function SendScreen() {
       return Alert.alert(t('sendScreen.alerts.error'), `${t('sendScreen.alerts.insufficientSolForFees')}\nReq: ${requiredSol.toFixed(5)} SOL`);
     }
 
-    setState(prev => ({ ...prev, loading: true, transactionInProgress: true }));
+    setState(prev => ({ ...prev, loading: true }));
     
     try {
       await executeTransaction(amountNum, recipient, currentToken);
@@ -228,7 +197,7 @@ export default function SendScreen() {
       console.error('Send Error:', error);
       Alert.alert(t('sendScreen.alerts.error'), error.message || 'Transaction failed');
     } finally {
-      if (isMounted.current) setState(prev => ({ ...prev, loading: false, transactionInProgress: false }));
+      if (isMounted.current) setState(prev => ({ ...prev, loading: false }));
     }
   }, [state, currentBalance, balances.sol, totalFees, currentToken, t]);
 
@@ -272,8 +241,6 @@ export default function SendScreen() {
         const mintInfo = await splToken.getMint(connection, mint);
         const realDecimals = mintInfo.decimals;
         
-        console.log(`Token: ${token.symbol}, Config Decimals: ${token.decimals}, REAL On-Chain Decimals: ${realDecimals}`);
-
         const amountBigInt = BigInt(Math.round(amount * Math.pow(10, realDecimals)));
 
         const fromATA = await splToken.getAssociatedTokenAddress(mint, fromPubkey);
@@ -282,7 +249,6 @@ export default function SendScreen() {
         const toAccountInfo = await connection.getAccountInfo(toATA);
         
         if (!toAccountInfo) {
-          console.log("Creating ATA for recipient...");
           transaction.add(
             splToken.createAssociatedTokenAccountInstruction(
               fromPubkey,
@@ -377,6 +343,7 @@ export default function SendScreen() {
     }
   }, [state.recipient, currentToken.mint]);
 
+  // ✅ 4. عرض الأيقونات الحقيقية في القائمة المنسدلة
   const renderTokenItem = useCallback(({ item }) => {
     const isSelected = state.currency === item.symbol;
     const balance = item.symbol === 'SOL' ? balances.sol : balances.tokens[item.symbol] || 0;
@@ -386,9 +353,7 @@ export default function SendScreen() {
         onPress={() => setState(prev => ({ ...prev, currency: item.symbol, modalVisible: false, amount: '' }))}
       >
         <View style={styles.tokenItemContent}>
-          <View style={[styles.tokenIcon, { backgroundColor: primaryColor + '20' }]}>
-            <Ionicons name={item.icon} size={24} color={primaryColor} />
-          </View>
+          <Image source={{ uri: item.image }} style={styles.tokenIcon} />
           <View style={styles.tokenDetails}>
             <Text style={[styles.tokenItemName, { color: colors.text }]}>{item.symbol}</Text>
             <Text style={[styles.tokenBalance, { color: colors.textSecondary }]}>{balance.toFixed(4)}</Text>
@@ -417,12 +382,11 @@ export default function SendScreen() {
             <Text style={[styles.balanceAmount, { color: colors.text }]}>{currentBalance.toFixed(6)} {state.currency}</Text>
           </View>
 
+          {/* ✅ 5. عرض اللوجو للعملة المحددة */}
           <TouchableOpacity style={[styles.tokenSelector, { backgroundColor: colors.card }]} onPress={() => setState(prev => ({ ...prev, modalVisible: true }))}>
             <View style={styles.tokenSelectorContent}>
               <View style={styles.tokenInfo}>
-                <View style={[styles.tokenIcon, { backgroundColor: primaryColor + '20' }]}>
-                  <Ionicons name={currentToken.icon} size={24} color={primaryColor} />
-                </View>
+                <Image source={{ uri: currentToken.image }} style={styles.selectedTokenIcon} />
                 <Text style={[styles.tokenName, { color: colors.text }]}>{currentToken.symbol}</Text>
               </View>
               <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
@@ -495,7 +459,13 @@ export default function SendScreen() {
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendScreen.modals.chooseCurrency')}</Text>
               <TouchableOpacity onPress={() => setState(prev => ({ ...prev, modalVisible: false }))}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
             </View>
-            <FlatList data={BASE_TOKENS} keyExtractor={(item) => item.symbol} renderItem={renderTokenItem} contentContainerStyle={styles.tokenList} />
+            {/* ✅ 6. عرض القائمة المفلترة (فقط العملات التي يملكها المستخدم) */}
+            <FlatList 
+              data={availableTokensToSend} 
+              keyExtractor={(item) => item.symbol} 
+              renderItem={renderTokenItem} 
+              contentContainerStyle={styles.tokenList} 
+            />
           </View>
         </View>
       </Modal>
@@ -514,7 +484,8 @@ const styles = StyleSheet.create({
   tokenSelector: { borderRadius: 16, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tokenSelectorContent: { flexDirection: 'row', justifyContent: 'space-between', flex: 1, alignItems: 'center' },
   tokenInfo: { flexDirection: 'row', alignItems: 'center' },
-  tokenIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  selectedTokenIcon: { width: 32, height: 32, borderRadius: 16, marginRight: 12 },
+  tokenIcon: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
   tokenName: { fontSize: 16, fontWeight: '600' },
   inputSection: { marginBottom: 16 },
   inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },

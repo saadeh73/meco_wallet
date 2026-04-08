@@ -14,17 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { getSolBalance, getTokenAccounts, getTokenMarketPrice } from '../services/heliusService';
 
-// ✅ استيراد المتغير فقط لقراءة الجلسات (بدون إرهاق التطبيق بالتهيئة)
+// ✅ 1. استيراد قائمة العملات المركزية
+import { CORE_TOKENS } from '../services/jupiterMarketService';
 import { web3wallet } from '../services/walletConnectService';
 
 const { width } = Dimensions.get('window');
-
-const SUPPORTED_ASSETS =[
-  { symbol: 'SOL', name: 'Solana', mint: null, icon: 'https://assets.coingecko.com/coins/images/4128/large/solana.png' },
-  { symbol: 'MECO', name: 'MonyCoin', mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', icon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png' },
-  { symbol: 'USDT', name: 'Tether', mint: 'Es9vMFrzaCERc8Foa8XfRduKiSfrhEL5c7qr2WXXBWY5', icon: 'https://assets.coingecko.com/coins/images/325/large/Tether.png' },
-  { symbol: 'USDC', name: 'USD Coin', mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', icon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png' },
-];
 
 export default function WalletScreen() {
   const navigation = useNavigation();
@@ -42,7 +36,7 @@ export default function WalletScreen() {
   };
 
   const[walletName, setWalletName] = useState(t('my_wallet') || 'My Wallet');
-  const[walletAddress, setWalletAddress] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
   const[totalBalanceUSD, setTotalBalanceUSD] = useState(0);
   const [assets, setAssets] = useState([]); 
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +44,6 @@ export default function WalletScreen() {
   const [tempWalletName, setTempWalletName] = useState('');
   const [loadingInitial, setLoadingInitial] = useState(true);
 
-  // States لـ WalletConnect
   const[activeSessions, setActiveSessions] = useState([]);
   const [wcModalVisible, setWcModalVisible] = useState(false);
 
@@ -66,7 +59,6 @@ export default function WalletScreen() {
     ]).start();
   },[]);
 
-  // ✅ جلب البيانات والجلسات بهدوء عند فتح الشاشة
   useFocusEffect(
     useCallback(() => {
       loadWalletData();
@@ -123,7 +115,8 @@ export default function WalletScreen() {
 
       let calculatedTotalUSD = 0;
       
-      const updatedAssets = await Promise.all(SUPPORTED_ASSETS.map(async (asset) => {
+      // ✅ 2. استخدام CORE_TOKENS، وحساب الأرصدة، ثم الفلترة الذكية
+      const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
         let amount = 0;
         
         if (asset.symbol === 'SOL') {
@@ -146,9 +139,16 @@ export default function WalletScreen() {
         return { ...asset, amount, price, valueUSD };
       }));
 
-      updatedAssets.sort((a, b) => b.valueUSD - a.valueUSD);
+      // 💡 الفلترة: نعرض SOL و MECO دائماً، وباقي العملات فقط إذا كان رصيدها > 0
+      const filteredAssets = allAssetsPromise.filter(asset => {
+        if (asset.symbol === 'SOL' || asset.symbol === 'MECO') return true;
+        return asset.amount > 0;
+      });
 
-      setAssets(updatedAssets);
+      // ترتيب العملات: التي بها رصيد تظهر أولاً
+      filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
+
+      setAssets(filteredAssets);
       setTotalBalanceUSD(calculatedTotalUSD);
       setLoadingInitial(false);
 
@@ -238,7 +238,7 @@ export default function WalletScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.assetLeft}>
-          <Image source={{ uri: item.icon }} style={styles.assetIcon} defaultSource={null} />
+          <Image source={{ uri: item.image }} style={styles.assetIcon} defaultSource={null} />
           <View>
             <Text style={[styles.assetSymbol, { color: colors.text }]}>{item.symbol}</Text>
             <Text style={[styles.assetName, { color: colors.textSecondary }]}>{item.name}</Text>
@@ -269,7 +269,7 @@ export default function WalletScreen() {
             </TouchableOpacity>
             
             <View style={styles.headerIcons}>
-              {/* ✅ الزر الذكي الوحيد (الكوكب): يفتح الماسح إذا لم يكن هناك اتصال، أو الجلسات إذا كان متصلاً */}
+              {/* أيقونة Web3 للاتصالات النشطة */}
               <TouchableOpacity 
                 onPress={() => activeSessions.length > 0 ? setWcModalVisible(true) : navigation.navigate('QRScanner')} 
                 style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7', position: 'relative' }]}
@@ -309,7 +309,7 @@ export default function WalletScreen() {
         </Animated.View>
 
         <View style={styles.listContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins')}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins', 'الأصول')}</Text>
           <FlatList
             data={assets}
             renderItem={renderAssetItem}
@@ -350,13 +350,13 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* ✅ Modal إدارة الجلسات (التطبيقات المتصلة) */}
+        {/* Modal إدارة الجلسات (التطبيقات المتصلة) */}
         <Modal visible={wcModalVisible} transparent animationType="slide" onRequestClose={() => setWcModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
               <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16}}>
                 <Ionicons name="planet" size={24} color="#4CAF50" style={{marginRight: 8}} />
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('web3.connected_apps')}</Text>
+                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('web3.connected_apps', 'التطبيقات المتصلة')}</Text>
               </View>
               
               {activeSessions.length > 0 ? (
@@ -373,7 +373,7 @@ export default function WalletScreen() {
                       style={[styles.disconnectBtn, { backgroundColor: '#FF3B3015' }]} 
                       onPress={() => disconnectSession(session.topic)}
                     >
-                      <Text style={{ color: '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>{t('web3.disconnect')}</Text>
+                      <Text style={{ color: '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>{t('web3.disconnect', 'قطع الاتصال')}</Text>
                     </TouchableOpacity>
                   </View>
                 ))
@@ -381,7 +381,7 @@ export default function WalletScreen() {
                 <View style={{alignItems: 'center', paddingVertical: 10}}>
                   <Ionicons name="link-outline" size={40} color={colors.textSecondary} style={{marginBottom: 10}} />
                   <Text style={{color: colors.textSecondary, textAlign: 'center', marginBottom: 20}}>
-                    {t('web3.no_active_sessions')}
+                    {t('web3.no_active_sessions', 'لا توجد اتصالات نشطة')}
                   </Text>
                   <TouchableOpacity 
                     style={[styles.modalBtn, { backgroundColor: primaryColor, width: '100%', borderColor: primaryColor }]}
@@ -391,14 +391,14 @@ export default function WalletScreen() {
                     }}
                   >
                     <Text style={{ color: '#FFF', fontWeight: 'bold', textAlign: 'center' }}>
-                      {t('web3.connect_new_dapp')}
+                      {t('web3.connect_new_dapp', 'ربط تطبيق جديد')}
                     </Text>
                   </TouchableOpacity>
                 </View>
               )}
 
               <TouchableOpacity style={[styles.closeModalBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]} onPress={() => setWcModalVisible(false)}>
-                <Text style={{ color: colors.text, fontWeight: 'bold' }}>{t('close')}</Text>
+                <Text style={{ color: colors.text, fontWeight: 'bold' }}>{t('close', 'إغلاق')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -420,19 +420,7 @@ const ActionButton = ({ icon, label, onPress, colors, primary }) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerSection: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
-    zIndex: 10,
-  },
+  headerSection: { borderBottomLeftRadius: 24, borderBottomRightRadius: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 5, zIndex: 10 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   walletInfo: { flexDirection: 'row', alignItems: 'center' },
   walletName: { fontSize: 18, fontWeight: '700' },
@@ -442,26 +430,13 @@ const styles = StyleSheet.create({
   balanceContainer: { alignItems: 'center', marginBottom: 24 },
   balanceLabel: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   balanceAmount: { fontSize: 36, fontWeight: '800' },
-  actionsRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-around', 
-    width: '100%',
-    flexWrap: 'wrap',
-    gap: 8
-  },
+  actionsRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', flexWrap: 'wrap', gap: 8 },
   actionBtnContainer: { alignItems: 'center', gap: 8, width: 70 },
   actionBtnCircle: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
   actionBtnLabel: { fontSize: 12, fontWeight: '600' },
   listContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  assetItem: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    padding: 16, 
-    borderRadius: 16, 
-    marginBottom: 12,
-  },
+  assetItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 12 },
   assetLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   assetIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F0F0F0' },
   assetSymbol: { fontSize: 16, fontWeight: '700' },
@@ -478,30 +453,9 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20 },
   modalButtons: { flexDirection: 'row', gap: 12 },
   modalBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
-  leftAction: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    paddingLeft: 20,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-    marginBottom: 12,
-  },
-  rightAction: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 20,
-    borderTopRightRadius: 16,
-    borderBottomRightRadius: 16,
-    marginBottom: 12,
-  },
-  actionText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
+  leftAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 20, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, marginBottom: 12 },
+  rightAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, borderTopRightRadius: 16, borderBottomRightRadius: 16, marginBottom: 12 },
+  actionText: { color: '#FFF', fontSize: 12, fontWeight: '600', marginTop: 4 },
   sessionCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderWidth: 1, borderRadius: 16, marginBottom: 16 },
   sessionInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
   sessionIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF' },
