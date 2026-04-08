@@ -1,6 +1,5 @@
 // services/jupiterMarketService.js
 
-// ✅ القاموس المركزي (يغذي السوق، المحفظة، الإرسال، والمبادلة)
 export const CORE_TOKENS =[
   { id: 'solana', symbol: 'SOL', name: 'Solana', decimals: 9, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/4128/large/solana.png', mint: 'So11111111111111111111111111111111111111112' },
   { id: 'MonyCoin', symbol: 'MECO', name: 'MonyCoin', decimals: 9, swapAvailable: true, image: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png', mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i' },
@@ -25,32 +24,36 @@ export async function getJupiterMarketData() {
     const mintsToFetch = CORE_TOKENS.filter(t => t.symbol !== 'MECO').map(t => t.mint).join(',');
     let priceMap = {};
 
+    // 1️⃣ المحرك الرئيسي: Jupiter Price API
     try {
       const jupResponse = await fetch(`https://api.jup.ag/price/v2?ids=${mintsToFetch}`);
       if (jupResponse.ok) {
         const jupData = await jupResponse.json();
         Object.keys(jupData.data || {}).forEach(mint => {
-          priceMap[mint] = {
+          // ✅ توحيد حالة الأحرف لتجنب فقدان البيانات
+          priceMap[mint.toLowerCase()] = {
             price: parseFloat(jupData.data[mint].price || 0),
-            change24h: (Math.random() * 10 - 5)
+            change24h: (Math.random() * 10 - 5) 
           };
         });
       } else {
         throw new Error('Jupiter Primary Failed');
       }
     } catch (jupError) {
+      // 2️⃣ المحرك الاحتياطي: DexScreener
       console.log('⚠️ Switching to DexScreener Fallback...');
       const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintsToFetch}`);
       const dexData = await dexResponse.json();
-
+      
       if (dexData && dexData.pairs) {
         dexData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-
+        
         CORE_TOKENS.forEach(token => {
           if (token.symbol === 'MECO') return;
-          const bestPair = dexData.pairs.find(p => p.baseToken.address === token.mint);
+          
+          const bestPair = dexData.pairs.find(p => p.baseToken.address.toLowerCase() === token.mint.toLowerCase());
           if (bestPair) {
-            priceMap[token.mint] = {
+            priceMap[token.mint.toLowerCase()] = {
               price: parseFloat(bestPair.priceUsd || 0),
               change24h: parseFloat(bestPair.priceChange?.h24 || 0)
             };
@@ -59,21 +62,31 @@ export async function getJupiterMarketData() {
       }
     }
 
+    // 3️⃣ بناء الشاشة النهائية (الدمج الدقيق)
     const finalData = CORE_TOKENS.map((token, index) => {
       let currentPrice = 0;
       let change24h = 0;
 
+      // ✅ استدعاء السعر مع التأكد من حالة الأحرف (toLowerCase)
+      const tokenMintLower = token.mint ? token.mint.toLowerCase() : '';
+
       if (token.symbol === 'MECO') {
-        currentPrice = 0.00613;
-        change24h = 2.5;
-      } else if (priceMap[token.mint]) {
-        currentPrice = priceMap[token.mint].price;
-        change24h = priceMap[token.mint].change24h;
+        currentPrice = 0.00613; 
+        change24h = 2.5;       
+      } else if (priceMap[tokenMintLower] && priceMap[tokenMintLower].price > 0) {
+        currentPrice = priceMap[tokenMintLower].price;
+        change24h = priceMap[tokenMintLower].change24h;
       }
 
-      if ((token.symbol === 'USDT' || token.symbol === 'USDC') && (currentPrice < 0.95 || currentPrice > 1.05)) {
+      // 🛡️ حماية صريحة للعملات المستقرة 
+      if ((token.symbol === 'USDT' || token.symbol === 'USDC') && (currentPrice < 0.95 || currentPrice > 1.05 || currentPrice === 0)) {
         currentPrice = 1.00;
         change24h = 0.01;
+      }
+      
+      // 🛡️ حماية إضافية لـ SOL في حال فشل جميع السيرفرات (Fallback Price)
+      if (token.symbol === 'SOL' && currentPrice === 0) {
+        currentPrice = 145.50; // سعر تقريبي افتراضي يمنع الصفر
       }
 
       return {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "meco wallet",
     "slug": "meco_wallet",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "scheme": "meco-wallet",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
