@@ -4,7 +4,9 @@ import * as SecureStore from 'expo-secure-store';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 
-// ✅ عناوين العملات
+// ✅ استدعاء خدمة الأسعار القوية التي نجحت معنا لتجنب حظر Jupiter
+import { getJupiterMarketData } from './jupiterMarketService';
+
 export const TOKEN_MINTS = {
   SOL: 'So11111111111111111111111111111111111111112',
   MECO: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
@@ -43,7 +45,6 @@ async function getKeypair() {
   return web3.Keypair.fromSecretKey(secretKey);
 }
 
-// 🚀 سيرفر Helius القوي لضمان تنفيذ المبادلة
 async function getConnection() {
   const HELIUS_URL = process.env.EXPO_PUBLIC_HELIUS_RPC;
   if (HELIUS_URL) {
@@ -52,6 +53,42 @@ async function getConnection() {
   return new web3.Connection('https://rpc.ankr.com/solana', 'confirmed');
 }
 
+// ✅ الحل الجذري للتسعير: حساب السعر داخلياً بناءً على بيانات السوق القوية بدلاً من Jupiter Quote API المزعج
+export async function getSwapRate(inputSymbol, outputSymbol, amount) {
+  try {
+    // جلب الأسعار الحقيقية من خدمتنا المستقرة
+    const marketData = await getJupiterMarketData();
+    
+    const inputTokenData = marketData.find(t => t.symbol === inputSymbol);
+    const outputTokenData = marketData.find(t => t.symbol === outputSymbol);
+
+    if (!inputTokenData || !outputTokenData) {
+      throw new Error('بيانات التسعير غير متوفرة لهذه العملة حالياً');
+    }
+
+    const inputPriceUsd = inputTokenData.current_price;
+    const outputPriceUsd = outputTokenData.current_price;
+
+    if (inputPriceUsd === 0 || outputPriceUsd === 0) {
+      throw new Error('عذراً، لا يوجد سيولة لتسعير هذه العملة');
+    }
+
+    // حساب كمية الإخراج بناءً على القيمة الدولارية
+    const totalUsdValue = amount * inputPriceUsd;
+    // نخصم 1% كتقدير لرسوم الانزلاق السعري (Slippage) لتكون النتيجة واقعية
+    const outputAmountAfterSlippage = (totalUsdValue / outputPriceUsd) * 0.99; 
+
+    return {
+      rate: outputPriceUsd / inputPriceUsd,
+      outputAmount: outputAmountAfterSlippage,
+      priceImpact: 1.0, // تقدير ثابت
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+// 🚀 جلب المعاملة المباشرة فقط عند التأكيد (لتخفيف الضغط)
 export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 50) {
   try {
     const url = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`;
@@ -68,59 +105,54 @@ export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 
   }
 }
 
-// 🛠️ الإصلاح الجذري: بناء المعاملة الحديثة (Versioned)
+export async function buildSwapTransaction(quote, userPublicKey) {
+  try {
+    const response = await fetch(JUPITER_SWAP_API, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({
+        quoteResponse: quote,
+        userPublicKey: userPublicKey.toString(),
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: "auto" 
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`فشل بناء المعاملة في Jupiter`);
+    }
+    
+    const data = await response.json();
+    if (!data.swapTransaction) throw new Error('استجاب Jupiter ببيانات غير صالحة');
+    return data;
+  } catch (error) {
+    throw error;
+  }
+}
+
 export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 50) {
   try {
-    console.log(`🔄 بدء المبادلة: ${amount} ${inputSymbol} -> ${outputSymbol}`);
-    
     const keypair = await getKeypair();
     const connection = await getConnection();
 
     const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
     const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
 
-    // 1. جلب التسعيرة
     const quote = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit, slippageBps);
+    const swapData = await buildSwapTransaction(quote, keypair.publicKey);
 
-    // 2. بناء المعاملة مع رسوم أولوية لضمان عدم إسقاطها
-    console.log("⚙️ بناء المعاملة في Jupiter...");
-    const swapReq = await fetch(JUPITER_SWAP_API, {
-      method: 'POST',
-      headers: HEADERS,
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey: keypair.publicKey.toString(),
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: "auto" // 🚀 مهم جداً لسولانا حالياً
-      })
-    });
-
-    if (!swapReq.ok) {
-      const err = await swapReq.text();
-      throw new Error(`فشل بناء المعاملة: ${err.slice(0, 30)}`);
-    }
-
-    const { swapTransaction } = await swapReq.json();
-    if (!swapTransaction) throw new Error('بيانات المبادلة فارغة من السيرفر');
-
-    // 3. التوقيع الحديث (Versioned Transaction)
-    console.log("✍️ توقيع المعاملة...");
-    const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+    const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
     const transaction = web3.VersionedTransaction.deserialize(swapTransactionBuf);
     transaction.sign([keypair]);
 
-    // 4. الإرسال القوي وتجاوز الفشل الوهمي
-    console.log("🚀 إرسال المعاملة للبلوكتشين...");
     const latestBlockhash = await connection.getLatestBlockhash('confirmed');
     
     const signature = await connection.sendRawTransaction(transaction.serialize(), {
-      skipPreflight: true, // 🚀 تجاوز الفحص المسبق الذي يسبب خطأ الشبكة الوهمي
+      skipPreflight: true, 
       maxRetries: 3
     });
 
-    console.log(`⏳ انتظار التأكيد: ${signature}`);
-    
     const confirmation = await connection.confirmTransaction({
       signature,
       blockhash: latestBlockhash.blockhash,
@@ -134,7 +166,6 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
     const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
     const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
 
-    console.log("✅ المبادلة تمت بنجاح!");
     return {
       success: true,
       signature,
@@ -146,24 +177,7 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
     };
 
   } catch (error) {
-    console.error("❌ Execute Swap Error:", error);
     return { success: false, error: error.message }; 
-  }
-}
-
-export async function getSwapRate(inputSymbol, outputSymbol, amount) {
-  try {
-    const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
-    const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
-    const quote = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit);
-    const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
-    return {
-      rate: (parseInt(quote.outAmount) / Math.pow(10, outputDecimals)) / amount,
-      outputAmount: parseInt(quote.outAmount) / Math.pow(10, outputDecimals),
-      priceImpact: parseFloat(quote.priceImpactPct) || 0,
-    };
-  } catch (error) {
-    throw error;
   }
 }
 

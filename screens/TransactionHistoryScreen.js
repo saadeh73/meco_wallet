@@ -52,8 +52,7 @@ export default function TransactionHistoryScreen() {
     loadTransactions();
   },[]);
 
-  // ✅ تعديل المهلة (Timeout) هنا أساسي جداً لنجاح الوضع الإنتاجي
-  const withTimeout = (promise, ms = 30000) => {
+  const withTimeout = (promise, ms = 10000) => {
     return Promise.race([
       promise,
       new Promise((_, reject) =>
@@ -75,11 +74,10 @@ export default function TransactionHistoryScreen() {
 
       let onChain =[];
       try {
-        // ✅ رفع المهلة إلى 30 ثانية لتناسب سيرفرك المتسلسل في الإنتاج
-        const chainData = await withTimeout(getTransactionHistory(20), 30000);
+        const chainData = await withTimeout(getTransactionHistory(20), 10000);
         if (chainData && chainData.length > 0) {
           onChain = chainData.map(tx => ({
-            type: tx.type || 'onchain', // ✅ الحل القاطع لمنع طمس نوع المعاملة
+            type: 'onchain',
             signature: tx.signature,
             blockTime: tx.blockTime,
             slot: tx.slot,
@@ -135,6 +133,7 @@ export default function TransactionHistoryScreen() {
         else if (currency === 'usdc') target = newStats.usdc;
         else target = newStats.other;
 
+        // ✅ تم تحديث شرط حساب الإحصائيات ليتعرف على success كمعاملة ناجحة
         const isSuccess = !tx.err && (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success' || tx.status === undefined);
         if (isSuccess) {
           if (tx.type === 'send') {
@@ -251,12 +250,17 @@ export default function TransactionHistoryScreen() {
     }
   }, [t]);
 
-  // ✅ الحل القاطع لمشكلة "قيد الانتظار": التعرف على كلمة 'success'
+  // ✅ الحل القاطع لمشكلة "قيد الانتظار": التعرف على كلمة 'success' لتلوين المعاملة بالأخضر
   const getStatusInfo = useCallback((tx) => {
+    // 1. إذا كان هناك خطأ
     if (tx.err) return { color: colors.error, label: t('failed'), bg: colors.error + '20' };
-    if (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success') {
+    
+    // 2. إذا كانت المعاملة ناجحة (بأي صيغة يرسلها السيرفر)
+    if (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success' || !tx.signature) {
       return { color: colors.success, label: t('confirmed'), bg: colors.success + '20' };
     }
+    
+    // 3. حالة الانتظار الحقيقية (نادرة جداً)
     return { color: colors.warning, label: t('pending'), bg: colors.warning + '20' };
   }, [colors, t]);
 
@@ -364,7 +368,9 @@ export default function TransactionHistoryScreen() {
     const txType = getTransactionType(item);
     const dateText = formatDate(item.timestamp, item.blockTime);
     const statusInfo = getStatusInfo(item);
-    const isPending = !item.signature && !item.transactionSignature;
+    
+    // إخفاء مؤشر الانتظار إذا كانت المعاملة مؤكدة
+    const isPending = statusInfo.label === t('pending');
 
     return (
       <TouchableOpacity
@@ -382,7 +388,7 @@ export default function TransactionHistoryScreen() {
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
               {txType.label}
             </Text>
-            {item.amount && (
+            {item.amount !== undefined && (
               <Text style={[styles.amount, { color: txType.color }]}>
                 {txType.sign} {formatAmount(item.amount, item.currency)}
               </Text>
