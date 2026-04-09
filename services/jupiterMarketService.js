@@ -30,7 +30,6 @@ export async function getJupiterMarketData() {
       if (jupResponse.ok) {
         const jupData = await jupResponse.json();
         Object.keys(jupData.data || {}).forEach(mint => {
-          // ✅ توحيد حالة الأحرف لتجنب فقدان البيانات
           priceMap[mint.toLowerCase()] = {
             price: parseFloat(jupData.data[mint].price || 0),
             change24h: (Math.random() * 10 - 5) 
@@ -62,17 +61,38 @@ export async function getJupiterMarketData() {
       }
     }
 
-    // 3️⃣ بناء الشاشة النهائية (الدمج الدقيق)
+    // ✅ جلب سعر MECO بشكل منفصل قبل map
+    let mecoPrice = 0.00613; // السعر الاحتياطي
+    let mecoChange = 2.5;
+    
+    try {
+      const mecoMint = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
+      const dexResponse = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mecoMint}`);
+      const dexData = await dexResponse.json();
+      
+      if (dexData.pairs && dexData.pairs.length > 0) {
+        dexData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+        const bestPair = dexData.pairs[0];
+        mecoPrice = parseFloat(bestPair.priceUsd || 0);
+        mecoChange = parseFloat(bestPair.priceChange?.h24 || 0);
+        console.log(`✅ MECO Live Price: $${mecoPrice} (DexScreener)`);
+      } else {
+        console.log('⚠️ MECO using fallback price (no liquidity yet)');
+      }
+    } catch (dexError) {
+      console.log('⚠️ MECO using fallback price (API error)');
+    }
+
+    // 3️⃣ بناء الشاشة النهائية (الدمج الدقيق) بدون await داخلها
     const finalData = CORE_TOKENS.map((token, index) => {
       let currentPrice = 0;
       let change24h = 0;
 
-      // ✅ استدعاء السعر مع التأكد من حالة الأحرف (toLowerCase)
       const tokenMintLower = token.mint ? token.mint.toLowerCase() : '';
 
       if (token.symbol === 'MECO') {
-        currentPrice = 0.00613; 
-        change24h = 2.5;       
+        currentPrice = mecoPrice;
+        change24h = mecoChange;
       } else if (priceMap[tokenMintLower] && priceMap[tokenMintLower].price > 0) {
         currentPrice = priceMap[tokenMintLower].price;
         change24h = priceMap[tokenMintLower].change24h;
@@ -84,9 +104,9 @@ export async function getJupiterMarketData() {
         change24h = 0.01;
       }
       
-      // 🛡️ حماية إضافية لـ SOL في حال فشل جميع السيرفرات (Fallback Price)
+      // 🛡️ حماية إضافية لـ SOL في حال فشل جميع السيرفرات
       if (token.symbol === 'SOL' && currentPrice === 0) {
-        currentPrice = 145.50; // سعر تقريبي افتراضي يمنع الصفر
+        currentPrice = 145.50;
       }
 
       return {

@@ -36,7 +36,32 @@ export const TOKEN_DECIMALS = {
 const JUPITER_QUOTE_API = 'https://quote-api.jup.ag/v6/quote';
 const JUPITER_SWAP_API = 'https://quote-api.jup.ag/v6/swap';
 
-const HEADERS = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+// ✅ إضافة User-Agent لتجنب حظر الطلبات من بعض مزودي الشبكة
+const HEADERS = { 
+  'Accept': 'application/json', 
+  'Content-Type': 'application/json',
+  'User-Agent': 'MecoWallet/1.4.0'
+};
+
+// دالة مساعدة لعمل fetch مع timeout
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('انتهت مهلة الاتصال بالخادم، حاول مرة أخرى');
+    }
+    throw error;
+  }
+};
 
 async function getKeypair() {
   const secretKeyStr = await SecureStore.getItemAsync('wallet_private_key');
@@ -92,22 +117,35 @@ export async function getSwapRate(inputSymbol, outputSymbol, amount) {
 export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 50) {
   try {
     const url = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`;
-    const response = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
     
-    if (!response.ok) throw new Error(`تعذر إيجاد مسار سيولة (Code: ${response.status})`);
+    // ✅ استخدام fetchWithTimeout مع رؤوس محسنة
+    const response = await fetchWithTimeout(url, { 
+      method: 'GET', 
+      headers: HEADERS 
+    }, 12000);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Jupiter quote error:', response.status, errorText);
+      throw new Error(`تعذر إيجاد مسار سيولة (${response.status})`);
+    }
     
     const quote = await response.json();
-    if (!quote || !quote.routePlan) throw new Error('لا يوجد سيولة كافية لهذا التبادل حالياً');
+    if (!quote || !quote.routePlan) {
+      throw new Error('لا يوجد سيولة كافية لهذا التبادل حالياً');
+    }
     return quote;
   } catch (error) {
-    if (error.message.includes('Network request failed')) throw new Error('تأكد من اتصالك بالإنترنت');
+    if (error.message.includes('Network request failed') || error.message.includes('AbortError')) {
+      throw new Error('تعذر الاتصال بخادم Jupiter، تحقق من اتصالك بالإنترنت');
+    }
     throw error;
   }
 }
 
 export async function buildSwapTransaction(quote, userPublicKey) {
   try {
-    const response = await fetch(JUPITER_SWAP_API, {
+    const response = await fetchWithTimeout(JUPITER_SWAP_API, {
       method: 'POST',
       headers: HEADERS,
       body: JSON.stringify({
@@ -117,16 +155,21 @@ export async function buildSwapTransaction(quote, userPublicKey) {
         dynamicComputeUnitLimit: true,
         prioritizationFeeLamports: "auto" 
       })
-    });
+    }, 15000);
 
     if (!response.ok) {
-      throw new Error(`فشل بناء المعاملة في Jupiter`);
+      const errorText = await response.text();
+      console.error('Jupiter swap error:', response.status, errorText);
+      throw new Error(`فشل بناء المعاملة في Jupiter (${response.status})`);
     }
     
     const data = await response.json();
     if (!data.swapTransaction) throw new Error('استجاب Jupiter ببيانات غير صالحة');
     return data;
   } catch (error) {
+    if (error.message.includes('Network request failed') || error.message.includes('AbortError')) {
+      throw new Error('تعذر الاتصال بخادم Jupiter لبناء المعاملة');
+    }
     throw error;
   }
 }

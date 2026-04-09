@@ -52,7 +52,7 @@ export default function TransactionHistoryScreen() {
     loadTransactions();
   },[]);
 
-  const withTimeout = (promise, ms = 10000) => {
+  const withTimeout = (promise, ms = 30000) => {
     return Promise.race([
       promise,
       new Promise((_, reject) =>
@@ -74,10 +74,10 @@ export default function TransactionHistoryScreen() {
 
       let onChain =[];
       try {
-        const chainData = await withTimeout(getTransactionHistory(20), 10000);
+        const chainData = await withTimeout(getTransactionHistory(20), 30000);
         if (chainData && chainData.length > 0) {
           onChain = chainData.map(tx => ({
-            type: 'onchain',
+            type: tx.type || 'onchain',
             signature: tx.signature,
             blockTime: tx.blockTime,
             slot: tx.slot,
@@ -133,7 +133,6 @@ export default function TransactionHistoryScreen() {
         else if (currency === 'usdc') target = newStats.usdc;
         else target = newStats.other;
 
-        // ✅ تم تحديث شرط حساب الإحصائيات ليتعرف على success كمعاملة ناجحة
         const isSuccess = !tx.err && (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success' || tx.status === undefined);
         if (isSuccess) {
           if (tx.type === 'send') {
@@ -250,19 +249,23 @@ export default function TransactionHistoryScreen() {
     }
   }, [t]);
 
-  // ✅ الحل القاطع لمشكلة "قيد الانتظار": التعرف على كلمة 'success' لتلوين المعاملة بالأخضر
+  // ==================== التعديل الوحيد المطلوب ====================
   const getStatusInfo = useCallback((tx) => {
-    // 1. إذا كان هناك خطأ
-    if (tx.err) return { color: colors.error, label: t('failed'), bg: colors.error + '20' };
+    // 1. فشل صريح
+    if (tx.err) {
+      return { color: colors.error, label: t('failed'), bg: colors.error + '20' };
+    }
     
-    // 2. إذا كانت المعاملة ناجحة (بأي صيغة يرسلها السيرفر)
-    if (tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success' || !tx.signature) {
+    // 2. نجاح: وجود blockTime دليل قاطع على إدراج المعاملة في كتلة (نجاح مؤكد)
+    //    أو وجود حالة صريحة confirmed/finalized/success
+    if (tx.blockTime || tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success') {
       return { color: colors.success, label: t('confirmed'), bg: colors.success + '20' };
     }
     
-    // 3. حالة الانتظار الحقيقية (نادرة جداً)
+    // 3. الحالات المتبقية (معاملات محلية أو قيد الانتظار)
     return { color: colors.warning, label: t('pending'), bg: colors.warning + '20' };
   }, [colors, t]);
+  // ===============================================================
 
   const renderStats = () => {
     const statsToShow =[];
@@ -368,9 +371,7 @@ export default function TransactionHistoryScreen() {
     const txType = getTransactionType(item);
     const dateText = formatDate(item.timestamp, item.blockTime);
     const statusInfo = getStatusInfo(item);
-    
-    // إخفاء مؤشر الانتظار إذا كانت المعاملة مؤكدة
-    const isPending = statusInfo.label === t('pending');
+    const isPending = !item.signature && !item.transactionSignature;
 
     return (
       <TouchableOpacity
@@ -388,7 +389,7 @@ export default function TransactionHistoryScreen() {
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
               {txType.label}
             </Text>
-            {item.amount !== undefined && (
+            {item.amount && (
               <Text style={[styles.amount, { color: txType.color }]}>
                 {txType.sign} {formatAmount(item.amount, item.currency)}
               </Text>

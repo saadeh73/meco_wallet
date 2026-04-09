@@ -34,7 +34,24 @@ export const useAppStore = create((set, get) => ({
 
   // ✅ تم تغيير اللون الافتراضي من الأخضر (#00b97f) إلى الأزرق (#6C63FF)
   primaryColor: '#6C63FF',
-  setPrimaryColor: (color) => set({ primaryColor: color }),
+  
+  // ✅ دالة محسنة لحفظ اللون تلقائياً
+  setPrimaryColor: async (color) => {
+    await AsyncStorage.setItem('app_primary_color', color);
+    set({ primaryColor: color });
+  },
+  
+  // ✅ دالة جديدة لتحميل اللون المحفوظ عند بدء التطبيق
+  loadPrimaryColor: async () => {
+    try {
+      const savedColor = await AsyncStorage.getItem('app_primary_color');
+      if (savedColor) {
+        set({ primaryColor: savedColor });
+      }
+    } catch (error) {
+      console.warn('Failed to load primary color:', error.message);
+    }
+  },
 
   // ====== بيانات المحفظة ======
   walletPublicKey: null,

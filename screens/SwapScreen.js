@@ -10,6 +10,7 @@ import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as SwapAPI from '../services/swapService';
+import NetInfo from '@react-native-community/netinfo';
 
 // ✅ ربط الشاشة بالقاموس
 import { CORE_TOKENS } from '../services/jupiterMarketService';
@@ -27,17 +28,18 @@ export default function SwapScreen({ route }) {
 
   const [fromToken, setFromToken] = useState(initialFromToken); 
   const [toToken, setToToken] = useState(initialToToken); 
-  const[fromAmount, setFromAmount] = useState('');
+  const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
-  const[rate, setRate] = useState(null);
+  const [rate, setRate] = useState(null);
   const [priceImpact, setPriceImpact] = useState(0);
   
   const [loading, setLoading] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [balances, setBalances] = useState({});
-  const[fromModalVisible, setFromModalVisible] = useState(false);
+  const [fromModalVisible, setFromModalVisible] = useState(false);
   const [toModalVisible, setToModalVisible] = useState(false);
   const [error, setError] = useState('');
+  const [isOffline, setIsOffline] = useState(false);
 
   const colors = {
     background: isDark ? '#0A0A0F' : '#F8FAFD',
@@ -50,7 +52,15 @@ export default function SwapScreen({ route }) {
     warning: '#F59E0B',
   };
 
-  useEffect(() => { loadBalances(); },[]);
+  // ✅ فحص الاتصال بالإنترنت
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOffline(!state.isConnected);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => { loadBalances(); }, []);
 
   const loadBalances = async () => {
     try {
@@ -70,36 +80,53 @@ export default function SwapScreen({ route }) {
     }
   };
 
+  // ✅ دالة جلب السعر مع سياسة MECO: شراء مسموح، بيع ممنوع
+  const fetchSwapRate = async () => {
+    if (!fromAmount || parseFloat(fromAmount) <= 0) {
+      setToAmount('');
+      setRate(null);
+      return;
+    }
+
+    const netState = await NetInfo.fetch();
+    if (!netState.isConnected) {
+      setError(t('network_error', 'لا يوجد اتصال بالإنترنت'));
+      setToAmount('');
+      setRate(null);
+      return;
+    }
+
+    // ✅ سياسة MECO: السماح بالشراء فقط (toToken = MECO) ، منع البيع (fromToken = MECO)
+    if (fromToken.symbol === 'MECO') {
+      setError(t('meco_sell_disabled', 'عذراً، بيع MECO غير متاح حالياً. يمكنك شراؤها فقط.'));
+      setToAmount('');
+      setRate(null);
+      return;
+    }
+    // لا نمنع إذا كانت MECO هي العملة المستقبلة (toToken)
+    
+    setQuoteLoading(true);
+    setError('');
+    try {
+      const result = await SwapAPI.getSwapRate(fromToken.symbol, toToken.symbol, parseFloat(fromAmount));
+      setToAmount(result.outputAmount.toFixed(6));
+      setRate(result.rate);
+      setPriceImpact(result.priceImpact);
+    } catch (err) {
+      let errorMsg = err.message || t('swap_error');
+      if (errorMsg.includes('Network') || errorMsg.includes('Timeout')) {
+        errorMsg = t('network_error', 'تعذر الاتصال بالخادم، تأكد من الإنترنت');
+      }
+      setError(errorMsg);
+      setToAmount('');
+      setRate(null);
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchRate = async () => {
-      if (!fromAmount || parseFloat(fromAmount) <= 0) {
-        setToAmount('');
-        setRate(null);
-        return;
-      }
-      if (fromToken.symbol === 'MECO' || toToken.symbol === 'MECO') {
-        setError('عذراً، المبادلة لعملة MECO غير متاحة مؤقتاً لحين استكمال السيولة.');
-        setToAmount('');
-        setRate(null);
-        return;
-      }
-      
-      setQuoteLoading(true);
-      setError('');
-      try {
-        const result = await SwapAPI.getSwapRate(fromToken.symbol, toToken.symbol, parseFloat(fromAmount));
-        setToAmount(result.outputAmount.toFixed(6));
-        setRate(result.rate);
-        setPriceImpact(result.priceImpact);
-      } catch (err) {
-        setError(err.message || t('swap_error'));
-        setToAmount('');
-        setRate(null);
-      } finally {
-        setQuoteLoading(false);
-      }
-    };
-    const timer = setTimeout(fetchRate, 500);
+    const timer = setTimeout(fetchSwapRate, 500);
     return () => clearTimeout(timer);
   }, [fromAmount, fromToken, toToken, t]);
 
@@ -116,7 +143,8 @@ export default function SwapScreen({ route }) {
 
     Alert.alert(
       t('swap_confirm'),
-      `${t('swap_from')}: ${fromAmount} ${fromToken.symbol}\n${t('swap_to')}: ${toAmount} ${toToken.symbol}\n${t('swap_rate')}: 1 ${fromToken.symbol} = ${rate?.toFixed(6)} ${toToken.symbol}`,[
+      `${t('swap_from')}: ${fromAmount} ${fromToken.symbol}\n${t('swap_to')}: ${toAmount} ${toToken.symbol}\n${t('swap_rate')}: 1 ${fromToken.symbol} = ${rate?.toFixed(6)} ${toToken.symbol}`,
+      [
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('confirm', 'تأكيد'),
@@ -128,7 +156,8 @@ export default function SwapScreen({ route }) {
               if (result.success) {
                 Alert.alert(
                   t('swap_completed'),
-                  `${fromAmount} ${fromToken.symbol} → ${result.outputAmount.toFixed(6)} ${toToken.symbol}`,[
+                  `${fromAmount} ${fromToken.symbol} → ${result.outputAmount.toFixed(6)} ${toToken.symbol}`,
+                  [
                     { text: t('view_on_solscan'), onPress: () => Linking.openURL(result.explorerUrl) },
                     { text: t('ok'), onPress: () => { loadBalances(); setFromAmount(''); setToAmount(''); } }
                   ]
@@ -137,7 +166,7 @@ export default function SwapScreen({ route }) {
                 Alert.alert(t('error'), result.error);
               }
             } catch (err) {
-              setError(err.message);
+              Alert.alert(t('error'), err.message);
             } finally {
               setLoading(false);
             }
@@ -198,6 +227,22 @@ export default function SwapScreen({ route }) {
     </Modal>
   );
 
+  const renderError = () => {
+    if (!error) return null;
+    const isNetworkError = error.includes('الإنترنت') || error.includes('Network') || error.includes('Timeout');
+    return (
+      <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
+        <Ionicons name="warning" size={20} color={colors.error} />
+        <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+        {isNetworkError && (
+          <TouchableOpacity onPress={fetchSwapRate} style={styles.retryButton}>
+            <Ionicons name="refresh" size={18} color={colors.error} />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -207,6 +252,15 @@ export default function SwapScreen({ route }) {
 
         <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle', 'قم بتبديل عملاتك بأمان عبر Jupiter')}</Text>
+
+        {isOffline && (
+          <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
+            <Ionicons name="cloud-offline" size={16} color={colors.warning} />
+            <Text style={[styles.offlineText, { color: colors.warning }]}>
+              {t('offline_mode', 'أنت غير متصل بالإنترنت')}
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.cardHeader}>
@@ -303,27 +357,24 @@ export default function SwapScreen({ route }) {
           </View>
         )}
 
-        {error ? (
-          <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
-            <Ionicons name="warning" size={20} color={colors.error} />
-            <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
-          </View>
-        ) : null}
+        {renderError()}
 
         <TouchableOpacity
           style={[
             styles.swapExecuteButton,
-            { backgroundColor: primaryColor, opacity: (loading || quoteLoading || !fromAmount) ? 0.6 : 1 }
+            { backgroundColor: primaryColor, opacity: (loading || quoteLoading || !fromAmount || isOffline) ? 0.6 : 1 }
           ]}
           onPress={handleSwap}
-          disabled={loading || quoteLoading || !fromAmount}
+          disabled={loading || quoteLoading || !fromAmount || isOffline}
         >
           {loading ? (
             <ActivityIndicator color="#FFF" />
           ) : (
             <>
               <Ionicons name="swap-horizontal" size={20} color="#FFF" />
-              <Text style={styles.swapExecuteButtonText}>{t('swap_confirm')}</Text>
+              <Text style={styles.swapExecuteButtonText}>
+                {isOffline ? t('offline_mode', 'غير متصل') : t('swap_confirm')}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -362,6 +413,9 @@ const styles = StyleSheet.create({
   rateValue: { fontSize: 14, fontWeight: '500' },
   errorCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginVertical: 10, gap: 8 },
   errorText: { flex: 1, fontSize: 14 },
+  retryButton: { padding: 4 },
+  offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 15, gap: 8 },
+  offlineText: { fontSize: 14, fontWeight: '500' },
   swapExecuteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 16, marginTop: 15, marginBottom: 10, gap: 8 },
   swapExecuteButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
