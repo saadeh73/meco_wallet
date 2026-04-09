@@ -121,9 +121,11 @@ export default function AppContainer() {
   const notificationListener = useRef();
   const responseListener = useRef();
 
+  // ✅ التعديل هنا: تحميل اللغة واللون الأساسي
   useEffect(() => {
     const loadSettings = async () => {
       await useAppStore.getState().loadLanguage();
+      await useAppStore.getState().loadPrimaryColor(); // ✅ تمت الإضافة لتحميل اللون المحفوظ
     };
     loadSettings();
   },[]);
