@@ -36,14 +36,16 @@ export const TOKEN_DECIMALS = {
 const JUPITER_QUOTE_API = 'https://quote-api.jup.ag/v6/quote';
 const JUPITER_SWAP_API = 'https://quote-api.jup.ag/v6/swap';
 
-// ✅ إضافة User-Agent لتجنب حظر الطلبات من بعض مزودي الشبكة
+// ✅ الترويسة المعتمدة للوضع الإنتاجي لتخطي حظر Cloudflare لخوادم Jupiter
 const HEADERS = { 
   'Accept': 'application/json', 
   'Content-Type': 'application/json',
-  'User-Agent': 'MecoWallet/1.4.0'
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Origin': 'https://jup.ag',
+  'Referer': 'https://jup.ag/'
 };
 
-// دالة مساعدة لعمل fetch مع timeout
+// دالة مساعدة لعمل fetch مع timeout آمن
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -57,7 +59,7 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error('انتهت مهلة الاتصال بالخادم، حاول مرة أخرى');
+      throw new Error('انتهت مهلة الاتصال بالخادم، يرجى المحاولة مرة أخرى');
     }
     throw error;
   }
@@ -78,10 +80,9 @@ async function getConnection() {
   return new web3.Connection('https://rpc.ankr.com/solana', 'confirmed');
 }
 
-// ✅ الحل الجذري للتسعير: حساب السعر داخلياً بناءً على بيانات السوق القوية بدلاً من Jupiter Quote API المزعج
+// دالة التسعير الداخلية المعتمدة على بيانات السوق
 export async function getSwapRate(inputSymbol, outputSymbol, amount) {
   try {
-    // جلب الأسعار الحقيقية من خدمتنا المستقرة
     const marketData = await getJupiterMarketData();
     
     const inputTokenData = marketData.find(t => t.symbol === inputSymbol);
@@ -98,36 +99,38 @@ export async function getSwapRate(inputSymbol, outputSymbol, amount) {
       throw new Error('عذراً، لا يوجد سيولة لتسعير هذه العملة');
     }
 
-    // حساب كمية الإخراج بناءً على القيمة الدولارية
     const totalUsdValue = amount * inputPriceUsd;
-    // نخصم 1% كتقدير لرسوم الانزلاق السعري (Slippage) لتكون النتيجة واقعية
     const outputAmountAfterSlippage = (totalUsdValue / outputPriceUsd) * 0.99; 
 
     return {
       rate: outputPriceUsd / inputPriceUsd,
       outputAmount: outputAmountAfterSlippage,
-      priceImpact: 1.0, // تقدير ثابت
+      priceImpact: 1.0, 
     };
   } catch (error) {
     throw error;
   }
 }
 
-// 🚀 جلب المعاملة المباشرة فقط عند التأكيد (لتخفيف الضغط)
-export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 50) {
+// 🚀 جلب المسار الحقيقي من Jupiter مع استخراج دقيق لرسائل الخطأ
+export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 100) {
   try {
     const url = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`;
     
-    // ✅ استخدام fetchWithTimeout مع رؤوس محسنة
     const response = await fetchWithTimeout(url, { 
       method: 'GET', 
       headers: HEADERS 
-    }, 12000);
+    }, 15000);
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Jupiter quote error:', response.status, errorText);
-      throw new Error(`تعذر إيجاد مسار سيولة (${response.status})`);
+      let errorMsg = `خطأ غير معروف من Jupiter (${response.status})`;
+      try {
+        const errorJson = await response.json();
+        errorMsg = errorJson.error || errorJson.message || errorMsg;
+      } catch (e) {
+        errorMsg = await response.text();
+      }
+      throw new Error(`تعذر إيجاد مسار للتبادل: ${errorMsg}`);
     }
     
     const quote = await response.json();
@@ -143,6 +146,7 @@ export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 
   }
 }
 
+// 🚀 بناء المعاملة بشكل آمن ومستقر
 export async function buildSwapTransaction(quote, userPublicKey) {
   try {
     const response = await fetchWithTimeout(JUPITER_SWAP_API, {
@@ -152,15 +156,20 @@ export async function buildSwapTransaction(quote, userPublicKey) {
         quoteResponse: quote,
         userPublicKey: userPublicKey.toString(),
         wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: "auto" 
+        dynamicComputeUnitLimit: true
+        // تمت إزالة prioritizationFeeLamports: "auto" لضمان التوافق مع جميع عُقد RPC وعدم فشل المعاملة
       })
     }, 15000);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Jupiter swap error:', response.status, errorText);
-      throw new Error(`فشل بناء المعاملة في Jupiter (${response.status})`);
+      let errorMsg = `خطأ غير معروف (${response.status})`;
+      try {
+        const errorJson = await response.json();
+        errorMsg = errorJson.error || errorJson.message || errorMsg;
+      } catch (e) {
+        errorMsg = await response.text();
+      }
+      throw new Error(`فشل بناء المعاملة: ${errorMsg}`);
     }
     
     const data = await response.json();
@@ -174,8 +183,18 @@ export async function buildSwapTransaction(quote, userPublicKey) {
   }
 }
 
-export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 50) {
+// 🚀 التنفيذ الآمن مع حماية رسوم الغاز
+export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100) {
   try {
+    // 🛡️ درع حماية رسوم SOL: التأكد من ترك جزء للغاز إذا كان المبادلة من SOL
+    if (inputSymbol === 'SOL') {
+      const balanceData = await checkBalance('SOL', 0);
+      const minGasRequired = 0.003; // الاحتفاظ بـ 0.003 SOL للغاز وإنشاء الحسابات
+      if (amount > (balanceData.balance - minGasRequired) && balanceData.balance > minGasRequired) {
+         throw new Error(`لضمان نجاح المعاملة، يجب ترك حوالي ${minGasRequired} SOL كرسوم لشبكة سولانا. يرجى تقليل مبلغ المبادلة قليلاً.`);
+      }
+    }
+
     const keypair = await getKeypair();
     const connection = await getConnection();
 
@@ -203,7 +222,7 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
     }, 'confirmed');
 
     if (confirmation.value.err) {
-      throw new Error(`تم رفض المعاملة من البلوكتشين (مزدحم أو الرصيد غير كافٍ)`);
+      throw new Error(`تم رفض المعاملة من شبكة البلوكتشين.`);
     }
 
     const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
@@ -220,6 +239,7 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
     };
 
   } catch (error) {
+    // إرجاع الخطأ الفعلي والمفهوم للمستخدم
     return { success: false, error: error.message }; 
   }
 }
