@@ -2,7 +2,7 @@ import { Core } from '@walletconnect/core';
 import { Web3Wallet } from '@walletconnect/web3wallet';
 import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
-import i18n from '../i18n'; // استيراد i18n للترجمة
+import i18n from '../i18n';
 
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
 
@@ -25,7 +25,7 @@ export async function initWalletConnect() {
       url: 'https://monycoin.github.io/meco-token/',
       icons: ['https://raw.githubusercontent.com/MonyCoin/meco_wallet/refs/heads/main/assets/logo.png'],
       redirect: {
-        native: 'meco://',
+        native: 'meco-wallet://', // ✅ تم التصحيح ليطابق scheme الفعلي
       },
     };
 
@@ -50,8 +50,8 @@ function setupEventListeners() {
     const { name, url } = proposal.params.proposer.metadata;
 
     Alert.alert(
-      i18n.t('walletConnect.connection_request'), // عنوان الطلب
-      i18n.t('walletConnect.connection_request_message', { name, url }), // نص الطلب مع المتغيرات
+      i18n.t('walletConnect.connection_request'),
+      i18n.t('walletConnect.connection_request_message', { name, url }),
       [
         {
           text: i18n.t('walletConnect.reject'),
@@ -81,7 +81,7 @@ export async function approveSession(proposalId) {
 
     const namespace = {
       methods: ['solana_signTransaction', 'solana_signMessage'],
-      chains: ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'], // Solana Mainnet
+      chains: ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'],
       events: [],
       accounts: [`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${pubKey}`],
     };

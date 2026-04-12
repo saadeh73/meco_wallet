@@ -1,27 +1,22 @@
 import { LogBox } from 'react-native';
 LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { ActivityIndicator, View, I18nManager, Platform } from 'react-native';
+import { ActivityIndicator, View, I18nManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppStore } from './store';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
-// استدعاءات الإشعارات
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
-import Constants from 'expo-constants';
-
-import { initWalletConnect } from './services/walletConnectService';
-// ✅ استدعاء دالة الحفظ في فايربيس
-import { saveUserPushToken } from './services/firebaseConfig';
+// Deep Linking و WalletConnect
+import * as Linking from 'expo-linking';
+import { initWalletConnect, pairWalletConnect } from './services/walletConnectService';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
@@ -40,14 +35,6 @@ import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -61,44 +48,44 @@ function BottomTabs() {
   return (
     <Tab.Navigator
       initialRouteName="Wallet"
-      screenOptions={({ route }) => {
-        return {
-          headerShown: false,
-          tabBarActiveTintColor: primaryColor,
-          tabBarInactiveTintColor: 'gray',
-          tabBarIcon: ({ color, size, focused }) => {
-            let iconName;
-            if (route.name === 'Wallet') {
-              iconName = focused ? 'wallet' : 'wallet-outline';
-            } else if (route.name === 'Market') {
-              iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-            } else if (route.name === 'MecoWorld') {
-              iconName = focused ? 'globe' : 'globe-outline';
-            } else if (route.name === 'Settings') {
-              iconName = focused ? 'settings' : 'settings-outline';
-            }
-            return <Ionicons name={iconName} size={size} color={color} />;
-          },
-          tabBarStyle: {
-            backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
-            borderTopWidth: 0,
-            elevation: 10,
-            shadowColor: '#000',
-            shadowOpacity: 0.1,
-            shadowRadius: 10,
-            height: 60 + (insets.bottom > 0 ? insets.bottom : 10),
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
-            paddingTop: 10,
-            position: 'absolute',
-            bottom: 0, left: 0, right: 0,
-          },
-          tabBarLabelStyle: {
-            fontSize: 12,
-            marginBottom: insets.bottom > 0 ? 0 : 5,
-            fontWeight: '600',
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: primaryColor,
+        tabBarInactiveTintColor: 'gray',
+        tabBarIcon: ({ color, size, focused }) => {
+          let iconName;
+          if (route.name === 'Wallet') {
+            iconName = focused ? 'wallet' : 'wallet-outline';
+          } else if (route.name === 'Market') {
+            iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+          } else if (route.name === 'MecoWorld') {
+            iconName = focused ? 'globe' : 'globe-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
           }
-        };
-      }}
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarStyle: {
+          backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+          borderTopWidth: 0,
+          elevation: 10,
+          shadowColor: '#000',
+          shadowOpacity: 0.1,
+          shadowRadius: 10,
+          height: 60 + (insets.bottom > 0 ? insets.bottom : 10),
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+          paddingTop: 10,
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginBottom: insets.bottom > 0 ? 0 : 5,
+          fontWeight: '600',
+        },
+      })}
     >
       <Tab.Screen name="Wallet" component={WalletScreen} options={{ tabBarLabel: t('wallet') }} />
       <Tab.Screen name="Market" component={MarketScreen} options={{ tabBarLabel: t('market') }} />
@@ -115,21 +102,16 @@ export default function AppContainer() {
   const [initialRoute, setInitialRoute] = useState(null);
   const { t } = useTranslation();
 
-  const [expoPushToken, setExpoPushToken] = useState('');
-  const [walletAddress, setWalletAddress] = useState(null); // ✅ حفظ عنوان المحفظة
-
-  const notificationListener = useRef();
-  const responseListener = useRef();
-
-  // ✅ التعديل هنا: تحميل اللغة واللون الأساسي
+  // تحميل اللغة واللون الأساسي
   useEffect(() => {
     const loadSettings = async () => {
       await useAppStore.getState().loadLanguage();
-      await useAppStore.getState().loadPrimaryColor(); // ✅ تمت الإضافة لتحميل اللون المحفوظ
+      await useAppStore.getState().loadPrimaryColor();
     };
     loadSettings();
-  },[]);
+  }, []);
 
+  // تطبيق اللغة واتجاه RTL
   useEffect(() => {
     if (language) {
       i18n.changeLanguage(language);
@@ -137,63 +119,45 @@ export default function AppContainer() {
     }
   }, [language]);
 
+  // تهيئة WalletConnect
   useEffect(() => {
-    registerForPushNotificationsAsync().then(token => {
-      if (token) setExpoPushToken(token);
-    });
+    initWalletConnect().catch(console.warn);
+  }, []);
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log("🔔 إشعار جديد استلمناه:", notification);
-    });
+  // معالجة الروابط العميقة (WalletConnect)
+  const handleDeepLink = async (url) => {
+    if (!url) return;
+    console.log('🔗 Deep link received:', url);
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log("👉 المستخدم ضغط على الإشعار:", response);
-    });
-
-    return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current);
-      Notifications.removeNotificationSubscription(responseListener.current);
-    };
-  },[]);
-
-  async function registerForPushNotificationsAsync() {
-    let token;
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern:[0, 250, 250, 250],
-        lightColor: primaryColor || '#6C63FF',
-      });
-    }
-
-    if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') {
-        console.log('❌ المستخدم رفض صلاحية الإشعارات!');
-        return;
-      }
-      try {
-        const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
-        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      } catch (e) {
-        console.log('⚠️ خطأ في جلب توكن الإشعارات:', e);
+    if (url.startsWith('meco-wallet://wc')) {
+      const uri = url.replace('meco-wallet://wc?uri=', '');
+      if (uri) {
+        try {
+          await pairWalletConnect(decodeURIComponent(uri));
+        } catch (error) {
+          console.error('❌ فشل الربط عبر الرابط العميق:', error);
+        }
       }
     }
-    return token;
-  }
+  };
 
+  // التقاط الرابط الأولي والمستمع
+  useEffect(() => {
+    Linking.getInitialURL().then(url => {
+      if (url) handleDeepLink(url);
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  // التحقق من وجود محفظة وتهيئة الدخول
   useEffect(() => {
     const init = async () => {
       try {
-        const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-        if (pubKeyStr) setWalletAddress(pubKeyStr); // ✅ تخزين العنوان
-
         const initialized = await SecureStore.getItemAsync('wallet_initialized');
         if (initialized === 'true') {
           const loadWallet = useAppStore.getState().loadWallet;
@@ -212,7 +176,6 @@ export default function AppContainer() {
                 return;
               }
             }
-            initWalletConnect();
             setInitialRoute('BottomTabs');
             return;
           }
@@ -224,14 +187,7 @@ export default function AppContainer() {
       }
     };
     init();
-  },[]);
-
-  // ✅ السحر هنا: إذا وجدنا التوكن وعنوان المحفظة معاً، نرفعهما فوراً لـ Firebase!
-  useEffect(() => {
-    if (expoPushToken && walletAddress) {
-      saveUserPushToken(walletAddress, expoPushToken);
-    }
-  }, [expoPushToken, walletAddress]);
+  }, []);
 
   if (!initialRoute) {
     return (
@@ -258,7 +214,7 @@ export default function AppContainer() {
           component={SwapScreen}
           options={{
             title: t('swap_title') || 'تبادل',
-            headerBackTitle: t('back') || 'رجوع'
+            headerBackTitle: t('back') || 'رجوع',
           }}
         />
 
