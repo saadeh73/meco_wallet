@@ -4,6 +4,12 @@
     "slug": "meco_wallet",
     "version": "1.11.0",
     "scheme": "meco-wallet",
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/eb1f71ac-516e-4edd-b2a2-2914dad79f93"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -42,7 +48,7 @@
         "expo-build-properties",
         {
           "android": {
-            "googleServicesFile": "./google-services.json",
+            "googleServicesFile": "./google-services.json"
           }
         }
       ]

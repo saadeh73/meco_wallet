@@ -43,7 +43,7 @@ const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
 const JUPITER_LITE_SWAP_API = 'https://lite-api.jup.ag/swap/v1/swap';
 
 // ✅ مفتاح API الخاص بك
-const JUPITER_API_KEY = process.env.EXPO_PUBLIC_JUPITER_API_KEY;
+const JUPITER_API_KEY = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
 
 // ✅ الترويسات مع إضافة المفتاح
 const BROWSER_HEADERS = {

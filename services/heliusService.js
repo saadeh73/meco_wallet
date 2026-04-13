@@ -6,7 +6,7 @@ import * as splToken from '@solana/spl-token';
 const MECO_MINT_ADDRESS = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 
 // 🛡️ جلب رابط Helius السري والآمن من المتغيرات البيئية (بدون فضحه في الكود)
-const HELIUS_URL = process.env.EXPO_PUBLIC_HELIUS_RPC;
+const HELIUS_URL = 'https://mainnet.helius-rpc.com/?api-key=fb28d3cf-7dd1-4667-9167-7941c3aceb66';
 
 // ✅ قائمة RPCs (نجعل Helius هو الزعيم رقم 1 القوي، ونبقي المجانية كاحتياطي)
 const RPC_ENDPOINTS = [
