@@ -35,16 +35,16 @@ export default function WalletScreen() {
     border: isDark ? '#2A2A3E' : '#E5E5EA',
   };
 
-  const[walletName, setWalletName] = useState(t('my_wallet') || 'My Wallet');
+  const [walletName, setWalletName] = useState(t('my_wallet') || 'My Wallet');
   const [walletAddress, setWalletAddress] = useState('');
-  const[totalBalanceUSD, setTotalBalanceUSD] = useState(0);
-  const [assets, setAssets] = useState([]); 
+  const [totalBalanceUSD, setTotalBalanceUSD] = useState(0);
+  const [assets, setAssets] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [tempWalletName, setTempWalletName] = useState('');
   const [loadingInitial, setLoadingInitial] = useState(true);
 
-  const[activeSessions, setActiveSessions] = useState([]);
+  const [activeSessions, setActiveSessions] = useState([]);
   const [wcModalVisible, setWcModalVisible] = useState(false);
 
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -57,7 +57,7 @@ export default function WalletScreen() {
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, friction: 6, useNativeDriver: true }),
     ]).start();
-  },[]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -69,7 +69,7 @@ export default function WalletScreen() {
       } catch (error) {
         console.log("Error reading sessions:", error);
       }
-    },[])
+    }, [])
   );
 
   const disconnectSession = async (topic) => {
@@ -97,7 +97,7 @@ export default function WalletScreen() {
     try {
       const addr = await SecureStore.getItemAsync('wallet_public_key');
       const name = await AsyncStorage.getItem('wallet_name');
-      
+
       if (name) setWalletName(name);
       if (addr) setWalletAddress(addr);
 
@@ -107,18 +107,18 @@ export default function WalletScreen() {
       }
 
       const solBal = await getSolBalance(true);
-      
-      let tokenAccounts =[];
+
+      let tokenAccounts = [];
       try {
         if (getTokenAccounts) tokenAccounts = await getTokenAccounts();
       } catch (e) { console.warn('Token fetch error', e); }
 
       let calculatedTotalUSD = 0;
-      
+
       // ✅ 2. استخدام CORE_TOKENS، وحساب الأرصدة، ثم الفلترة الذكية
       const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
         let amount = 0;
-        
+
         if (asset.symbol === 'SOL') {
           amount = solBal;
         } else {
@@ -165,7 +165,7 @@ export default function WalletScreen() {
       if (web3wallet) {
         setActiveSessions(Object.values(web3wallet.getActiveSessions()));
       }
-    } catch (e) {}
+    } catch (e) { }
     setRefreshing(false);
   };
 
@@ -232,7 +232,7 @@ export default function WalletScreen() {
       renderRightActions={() => renderRightActions(item)}
       onSwipeableWillOpen={() => closeOtherSwipeables(item.symbol)}
     >
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.assetItem, { backgroundColor: colors.card }]}
         onPress={() => { if (item.mint) Clipboard.setStringAsync(item.mint); }}
         activeOpacity={0.7}
@@ -259,25 +259,25 @@ export default function WalletScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Animated.View 
+        <Animated.View
           style={[styles.headerSection, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
         >
           <View style={styles.topBar}>
             <TouchableOpacity style={styles.walletInfo} onPress={() => { setTempWalletName(walletName); setModalVisible(true); }}>
               <Text style={[styles.walletName, { color: colors.text }]}>{walletName}</Text>
-              <Ionicons name="pencil" size={14} color={colors.textSecondary} style={{marginLeft: 6}} />
+              <Ionicons name="pencil" size={14} color={colors.textSecondary} style={{ marginLeft: 6 }} />
             </TouchableOpacity>
-            
+
             <View style={styles.headerIcons}>
               {/* أيقونة Web3 للاتصالات النشطة */}
-              <TouchableOpacity 
-                onPress={() => activeSessions.length > 0 ? setWcModalVisible(true) : navigation.navigate('QRScanner')} 
+              <TouchableOpacity
+                onPress={() => activeSessions.length > 0 ? setWcModalVisible(true) : navigation.navigate('QRScanner')}
                 style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7', position: 'relative' }]}
               >
-                <Ionicons 
-                  name={activeSessions.length > 0 ? "planet" : "planet-outline"} 
-                  size={22} 
-                  color={activeSessions.length > 0 ? '#4CAF50' : primaryColor} 
+                <Ionicons
+                  name={activeSessions.length > 0 ? "planet" : "planet-outline"}
+                  size={22}
+                  color={activeSessions.length > 0 ? '#4CAF50' : primaryColor}
                 />
                 {activeSessions.length > 0 && <View style={[styles.activeBadge, { borderColor: colors.card }]} />}
               </TouchableOpacity>
@@ -292,7 +292,7 @@ export default function WalletScreen() {
           <View style={styles.balanceContainer}>
             <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('total_balance')}</Text>
             {loadingInitial ? (
-              <ActivityIndicator color={primaryColor} style={{marginTop: 10}} />
+              <ActivityIndicator color={primaryColor} style={{ marginTop: 10 }} />
             ) : (
               <Text style={[styles.balanceAmount, { color: colors.text }]}>
                 ${totalBalanceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -300,11 +300,12 @@ export default function WalletScreen() {
             )}
           </View>
 
+          {/* ✅ تم تعديل هذا الجزء: إزالة زر Presale */}
           <View style={styles.actionsRow}>
             <ActionButton icon="arrow-up" label={t('send')} onPress={() => navigation.navigate('Send')} colors={colors} primary={primaryColor} />
             <ActionButton icon="arrow-down" label={t('receive')} onPress={() => navigation.navigate('Receive')} colors={colors} primary={primaryColor} />
             <ActionButton icon="swap-horizontal" label={t('swap_title')} onPress={() => navigation.navigate('Swap')} colors={colors} primary={primaryColor} />
-            <ActionButton icon="rocket" label={t('presale')} onPress={() => navigation.navigate('Presale')} colors={colors} primary={primaryColor} />
+            {/* ❌ تمت إزالة زر Presale */}
           </View>
         </Animated.View>
 
@@ -354,11 +355,11 @@ export default function WalletScreen() {
         <Modal visible={wcModalVisible} transparent animationType="slide" onRequestClose={() => setWcModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-              <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16}}>
-                <Ionicons name="planet" size={24} color="#4CAF50" style={{marginRight: 8}} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="planet" size={24} color="#4CAF50" style={{ marginRight: 8 }} />
                 <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('web3.connected_apps', 'التطبيقات المتصلة')}</Text>
               </View>
-              
+
               {activeSessions.length > 0 ? (
                 activeSessions.map((session, index) => (
                   <View key={index} style={[styles.sessionCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
@@ -369,8 +370,8 @@ export default function WalletScreen() {
                         <Text style={[styles.sessionUrl, { color: colors.textSecondary }]}>{session.peer.metadata.url}</Text>
                       </View>
                     </View>
-                    <TouchableOpacity 
-                      style={[styles.disconnectBtn, { backgroundColor: '#FF3B3015' }]} 
+                    <TouchableOpacity
+                      style={[styles.disconnectBtn, { backgroundColor: '#FF3B3015' }]}
                       onPress={() => disconnectSession(session.topic)}
                     >
                       <Text style={{ color: '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>{t('web3.disconnect', 'قطع الاتصال')}</Text>
@@ -378,12 +379,12 @@ export default function WalletScreen() {
                   </View>
                 ))
               ) : (
-                <View style={{alignItems: 'center', paddingVertical: 10}}>
-                  <Ionicons name="link-outline" size={40} color={colors.textSecondary} style={{marginBottom: 10}} />
-                  <Text style={{color: colors.textSecondary, textAlign: 'center', marginBottom: 20}}>
+                <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                  <Ionicons name="link-outline" size={40} color={colors.textSecondary} style={{ marginBottom: 10 }} />
+                  <Text style={{ color: colors.textSecondary, textAlign: 'center', marginBottom: 20 }}>
                     {t('web3.no_active_sessions', 'لا توجد اتصالات نشطة')}
                   </Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.modalBtn, { backgroundColor: primaryColor, width: '100%', borderColor: primaryColor }]}
                     onPress={() => {
                       setWcModalVisible(false);

@@ -29,7 +29,7 @@ import SendScreen from './screens/SendScreen';
 import BackupScreen from './screens/BackupScreen';
 import TransactionHistoryScreen from './screens/TransactionHistoryScreen';
 import MarketScreen from './screens/MarketScreen';
-import PresaleScreen from './screens/PresaleScreen';
+// ❌ تمت إزالة استيراد PresaleScreen
 import MecoWorldScreen from './screens/MecoWorldScreen';
 import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
@@ -220,7 +220,7 @@ export default function AppContainer() {
 
         <Stack.Screen name="TokenDetails" component={TokenDetailsScreen} options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: t('qr_scanner.title'), headerBackTitle: t('back'), headerShown: false }} />
-        <Stack.Screen name="Presale" component={PresaleScreen} options={{ title: t('presale') + ' 🚀' }} />
+        {/* ❌ تمت إزالة شاشة Presale */}
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
         <Stack.Screen name="MecoWorld" component={MecoWorldScreen} options={{ title: t('meco_world') || 'Meco World' }} />
       </Stack.Navigator>
