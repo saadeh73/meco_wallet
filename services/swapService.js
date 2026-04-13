@@ -5,6 +5,10 @@ import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import { getJupiterMarketData } from './jupiterMarketService';
 
+// ✅ استيراد دوال heliusService الموثوقة
+import { getSolBalance, getTokenBalance } from './heliusService';
+import { default as heliusService } from './heliusService';
+
 // ✅ جميع العملات الـ 16
 export const TOKEN_MINTS = {
   SOL: 'So11111111111111111111111111111111111111112',
@@ -36,23 +40,23 @@ export const TOKEN_DECIMALS = {
 const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
 const SERVICE_FEE_SOL = 0.0005;
 
-// ✅ العودة إلى نقاط نهاية v6 الموثوقة
+// ✅ نقاط نهاية Jupiter
 const JUPITER_QUOTE_API = 'https://quote-api.jup.ag/v6/quote';
 const JUPITER_SWAP_API = 'https://quote-api.jup.ag/v6/swap';
 const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
 const JUPITER_LITE_SWAP_API = 'https://lite-api.jup.ag/swap/v1/swap';
 
-// ✅ مفتاح API الخاص بك
+// ✅ مفتاح Jupiter API مباشرة
 const JUPITER_API_KEY = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
 
-// ✅ الترويسات مع إضافة المفتاح
+// ✅ الترويسات
 const BROWSER_HEADERS = {
   'Accept': 'application/json',
   'Content-Type': 'application/json',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   'Origin': 'https://jup.ag',
   'Referer': 'https://jup.ag/',
-  'x-api-key': JUPITER_API_KEY, // ✅ المفتاح هنا
+  'x-api-key': JUPITER_API_KEY,
 };
 
 // --- دوال مساعدة ---
@@ -78,12 +82,14 @@ async function getKeypair() {
   return web3.Keypair.fromSecretKey(secretKey);
 }
 
+// ✅ دالة اتصال تستخدم heliusService الموثوق (لا تعتمد على متغيرات البيئة)
 async function getConnection() {
-  const HELIUS_URL = process.env.EXPO_PUBLIC_HELIUS_RPC;
-  if (HELIUS_URL) {
-    return new web3.Connection(HELIUS_URL, 'confirmed');
+  try {
+    return await heliusService.getConnection();
+  } catch (error) {
+    console.warn('⚠️ [Swap] فشل heliusService، استخدام الاحتياطي العام:', error.message);
+    return new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
   }
-  return new web3.Connection('https://rpc.ankr.com/solana', 'confirmed');
 }
 
 // --- جلب عرض السعر (Quote) ---
@@ -157,7 +163,7 @@ export async function buildSwapTransaction(quote, userPublicKey) {
   throw new Error(`فشل بناء المعاملة: ${lastError?.message || 'جميع المحاولات باءت بالفشل'}`);
 }
 
-// --- تنفيذ التبادل (مع جميع التحسينات السابقة) ---
+// --- تنفيذ التبادل ---
 export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100, maxRetries = 3) {
   console.log(`🚀 [Swap] بدء التبادل: ${amount} ${inputSymbol} -> ${outputSymbol}`);
   
@@ -287,25 +293,28 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
   return { success: false, error: 'فشلت جميع محاولات التبادل' };
 }
 
-// --- دوال الرصيد والسعر (بدون تغيير) ---
+// ✅ دالة checkBalance معدلة لاستخدام heliusService الموثوق
 export async function checkBalance(tokenSymbol, amount) {
   try {
-    const keypair = await getKeypair();
-    const connection = await getConnection();
+    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+    if (!pubKeyStr) {
+      return { hasBalance: false, balance: 0, required: amount };
+    }
+    
     let balance = 0;
     if (tokenSymbol === 'SOL') {
-      balance = await connection.getBalance(keypair.publicKey) / web3.LAMPORTS_PER_SOL;
+      balance = await getSolBalance(true);
     } else {
-      const mint = new web3.PublicKey(TOKEN_MINTS[tokenSymbol]);
-      const ata = await splToken.getAssociatedTokenAddress(mint, keypair.publicKey);
-      const accountInfo = await connection.getAccountInfo(ata);
-      if (accountInfo) {
-        const tokenAccount = splToken.AccountLayout.decode(accountInfo.data);
-        balance = Number(tokenAccount.amount) / Math.pow(10, TOKEN_DECIMALS[tokenSymbol] || 9);
+      const mint = TOKEN_MINTS[tokenSymbol];
+      if (!mint) {
+        return { hasBalance: false, balance: 0, required: amount };
       }
+      balance = await getTokenBalance(mint, true);
     }
+    
     return { hasBalance: balance >= amount, balance, required: amount };
   } catch (error) {
+    console.error('❌ [checkBalance] خطأ:', error.message);
     return { hasBalance: false, balance: 0, required: amount };
   }
 }
