@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
-  Modal, FlatList, Image
+  Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 import NetInfo from '@react-native-community/netinfo';
 import {
   getPoolInfo,
@@ -16,7 +15,6 @@ import {
   depositLiquidity,
   withdrawLiquidity
 } from '../services/stakingService';
-import { CORE_TOKENS } from '../services/jupiterMarketService';
 import * as SwapAPI from '../services/swapService';
 
 export default function StakingScreen() {
@@ -37,12 +35,11 @@ export default function StakingScreen() {
     warning: '#F59E0B',
   };
 
-  // الحالات
   const [poolInfo, setPoolInfo] = useState(null);
   const [lpBalance, setLpBalance] = useState(0);
   const [mecoBalance, setMecoBalance] = useState(0);
   const [usdtBalance, setUsdtBalance] = useState(0);
-  const [activeTab, setActiveTab] = useState('stake'); // 'stake' أو 'unstake'
+  const [activeTab, setActiveTab] = useState('stake');
   const [mecoAmount, setMecoAmount] = useState('');
   const [usdtAmount, setUsdtAmount] = useState('');
   const [lpAmount, setLpAmount] = useState('');
@@ -52,7 +49,6 @@ export default function StakingScreen() {
   const [isOffline, setIsOffline] = useState(false);
   const [estimatedReceive, setEstimatedReceive] = useState({ meco: 0, usdt: 0 });
 
-  // فحص الاتصال بالإنترنت
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsOffline(!state.isConnected);
@@ -60,7 +56,6 @@ export default function StakingScreen() {
     return () => unsubscribe();
   }, []);
 
-  // تحميل البيانات
   useEffect(() => {
     loadData();
   }, []);
@@ -105,7 +100,6 @@ export default function StakingScreen() {
     }
   };
 
-  // تحديث التقدير عند تغيير LP في تبويب السحب
   useEffect(() => {
     if (activeTab === 'unstake' && poolInfo && lpBalance > 0) {
       const lpValue = parseFloat(lpAmount) || 0;
@@ -238,7 +232,6 @@ export default function StakingScreen() {
           </View>
         )}
 
-        {/* بطاقة معلومات المجمع */}
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.poolHeader}>
             <Image source={{ uri: 'https://raydium.io/icons/raydium.svg' }} style={styles.poolIcon} />
@@ -260,7 +253,6 @@ export default function StakingScreen() {
           </View>
         </View>
 
-        {/* تبويبات */}
         <View style={[styles.tabContainer, { backgroundColor: colors.card }]}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'stake' && { borderBottomColor: primaryColor, borderBottomWidth: 2 }]}
@@ -276,7 +268,6 @@ export default function StakingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* محتوى التبويبات */}
         {activeTab === 'stake' ? (
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.inputGroup}>

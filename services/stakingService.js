@@ -2,19 +2,21 @@ import * as web3 from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
 import * as SecureStore from 'expo-secure-store';
 import bs58 from 'bs58';
-import { getSolBalance, getTokenBalance } from './heliusService';
+import { getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
 
-// ==================== الثوابت ====================
+// ==================== الثوابت (عناوين صحيحة من المعاملة) ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
 const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
 const POOL_STATE = '5C3brMitqhxJL1bANW57dyRbcTQnKnduxDEAUfepYxzrB';
 const CPMM_PROGRAM_ID = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C';
 
+// ✅ عناوين Vault الصحيحة
 const MECO_VAULT = new web3.PublicKey('6Bqk1A2zJjigJ4ShTJoZUDdyKBu1yJdfKVQEr8GCGmAm');
 const USDT_VAULT = new web3.PublicKey('AXQiWBVfkzHsJ1bauiv7Ucni7UqGYcRRJU7ugQPKa4dX');
 
+// رسوم الخدمة
 const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
 const SERVICE_FEE_SOL = 0.0005;
 
@@ -34,7 +36,7 @@ async function getConnection() {
   }
 }
 
-// ==================== جلب معلومات المجمع (مع سجلات تفصيلية) ====================
+// ==================== جلب معلومات المجمع ====================
 export async function getPoolInfo() {
   console.log('🔍 [Staking] بدء جلب معلومات المجمع...');
   try {
@@ -66,7 +68,6 @@ export async function getPoolInfo() {
     return result;
   } catch (error) {
     console.error('❌ [Staking] فشل في getPoolInfo:', error);
-    // ✅ بدلاً من رمي الخطأ، نعيد بيانات افتراضية لتجنب ظهور الرسالة الحمراء
     return {
       apy: 0,
       mecoReserve: 0,
@@ -102,21 +103,25 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     const keypair = await getKeypair();
     const connection = await getConnection();
     const userPubkey = keypair.publicKey;
-    
+    console.log(`🔑 [Staking] المستخدم: ${userPubkey.toString()}`);
+
     const mecoMint = new web3.PublicKey(MECO_MINT);
     const usdtMint = new web3.PublicKey(USDT_MINT);
     const lpMint = new web3.PublicKey(LP_MINT);
     const poolState = new web3.PublicKey(POOL_STATE);
     const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
-    
+
     const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
     const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
     const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
-    
+    console.log(`📝 [Staking] userLpAta: ${userLpAta.toString()}`);
+
     const transaction = new web3.Transaction();
-    
+
+    // ✅ التحقق من وجود حساب LP ATA وإنشاؤه إذا لزم الأمر
     const lpAtaInfo = await connection.getAccountInfo(userLpAta);
     if (!lpAtaInfo) {
+      console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
       transaction.add(
         splToken.createAssociatedTokenAccountInstruction(
           userPubkey,
@@ -125,8 +130,11 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
           lpMint
         )
       );
+    } else {
+      console.log(`✅ [Staking] حساب LP ATA موجود مسبقًا`);
     }
-    
+
+    // ✅ بناء تعليمة الإيداع
     const depositIx = new web3.TransactionInstruction({
       programId: cpmmProgram,
       keys: [
@@ -146,9 +154,10 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
         ...new Uint8Array(new BigUint64Array([BigInt(Math.floor(usdtAmount * 1e6))]).buffer),
       ]),
     });
-    
+
     transaction.add(depositIx);
-    
+
+    // إضافة رسم الخدمة
     const feeLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
     transaction.add(
       web3.SystemProgram.transfer({
@@ -157,18 +166,18 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
         lamports: feeLamports,
       })
     );
-    
+
     const latestBlockhash = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = userPubkey;
-    
+
     const signature = await web3.sendAndConfirmTransaction(
       connection,
       transaction,
       [keypair],
       { commitment: 'confirmed' }
     );
-    
+
     console.log(`🎉 [Staking] إيداع ناجح: ${signature}`);
     return {
       success: true,
