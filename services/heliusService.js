@@ -195,7 +195,7 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
     let mintAddress = null;
     if (tokenSymbol === 'SOL') mintAddress = 'So11111111111111111111111111111111111111112';
     else if (tokenSymbol === 'MECO') mintAddress = MECO_MINT_ADDRESS;
-    else if (tokenSymbol === 'USDT') mintAddress = 'Es9vMFrzaCERc8Foa8XfRduKiSfrhEL5c7qr2WXXBWY5';
+    else if (tokenSymbol === 'USDT') mintAddress = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
     else if (tokenSymbol === 'USDC') mintAddress = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
     if (!mintAddress) return 0;
