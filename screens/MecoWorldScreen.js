@@ -17,7 +17,7 @@ const LINKS = {
   website: 'https://monycoin1.blogspot.com/',
   // ✅ رابط Jupiter المباشر لعملة MECO
   jupiterMeco: 'https://jup.ag/tokens/7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
-  presaleScan: 'https://solscan.io/account/E9repjjKBq3RVLw1qckrG15gKth63fe98AHCSgXZzKvY'
+  // ❌ تم حذف presaleScan لأنه لم يعد مستخدمًا
 };
 
 export default function MecoWorldScreen() {
@@ -116,26 +116,7 @@ export default function MecoWorldScreen() {
         />
       </View>
 
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('mecoWorld.transparency')}</Text>
-
-      {/* 3. الشفافية (Solscan) */}
-      <TouchableOpacity 
-        style={[styles.transparencyCard, { backgroundColor: colors.card, borderColor: primaryColor }]}
-        onPress={() => openLink(LINKS.presaleScan)}
-      >
-        <View style={styles.transparencyHeader}>
-          <Ionicons name="scan-circle-outline" size={32} color={primaryColor} />
-          <View style={{marginLeft: 12, flex: 1}}>
-            <Text style={[styles.transparencyTitle, { color: colors.text }]}>{t('mecoWorld.solscan_title')}</Text>
-            <Text style={[styles.transparencyDesc, { color: colors.textSecondary }]}>
-              {t('mecoWorld.solscan_desc')}
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.linkBadge, { backgroundColor: primaryColor + '15' }]}>
-          <Text style={[styles.linkText, { color: primaryColor }]}>View on Solscan ↗</Text>
-        </View>
-      </TouchableOpacity>
+      {/* ❌ تمت إزالة قسم الشفافية (Solscan) بالكامل */}
 
       <View style={{ height: 100 }} /> 
     </ScrollView>
@@ -195,7 +176,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
   cardDesc: { fontSize: 12 },
 
-  // Transparency
+  // Transparency (تم حذف الأنماط الخاصة بها لأنها لم تعد مستخدمة، لكن يمكن الإبقاء عليها إن أردت - لا تؤثر)
   transparencyCard: {
     padding: 20,
     borderRadius: 20,
