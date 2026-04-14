@@ -29,11 +29,12 @@ import SendScreen from './screens/SendScreen';
 import BackupScreen from './screens/BackupScreen';
 import TransactionHistoryScreen from './screens/TransactionHistoryScreen';
 import MarketScreen from './screens/MarketScreen';
-// ❌ تمت إزالة استيراد PresaleScreen
 import MecoWorldScreen from './screens/MecoWorldScreen';
 import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
+// ✅ إضافة استيراد StakingScreen
+import StakingScreen from './screens/StakingScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -218,9 +219,18 @@ export default function AppContainer() {
           }}
         />
 
+        {/* ✅ إضافة شاشة Staking */}
+        <Stack.Screen
+          name="Staking"
+          component={StakingScreen}
+          options={{
+            title: t('staking.title') || 'تخزين السيولة',
+            headerBackTitle: t('back') || 'رجوع',
+          }}
+        />
+
         <Stack.Screen name="TokenDetails" component={TokenDetailsScreen} options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: t('qr_scanner.title'), headerBackTitle: t('back'), headerShown: false }} />
-        {/* ❌ تمت إزالة شاشة Presale */}
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
         <Stack.Screen name="MecoWorld" component={MecoWorldScreen} options={{ title: t('meco_world') || 'Meco World' }} />
       </Stack.Navigator>

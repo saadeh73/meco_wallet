@@ -300,12 +300,12 @@ export default function WalletScreen() {
             )}
           </View>
 
-          {/* ✅ تم تعديل هذا الجزء: إزالة زر Presale */}
+          {/* ✅ تم تعديل هذا الجزء: إزالة زر Presale وإضافة Staking */}
           <View style={styles.actionsRow}>
             <ActionButton icon="arrow-up" label={t('send')} onPress={() => navigation.navigate('Send')} colors={colors} primary={primaryColor} />
             <ActionButton icon="arrow-down" label={t('receive')} onPress={() => navigation.navigate('Receive')} colors={colors} primary={primaryColor} />
             <ActionButton icon="swap-horizontal" label={t('swap_title')} onPress={() => navigation.navigate('Swap')} colors={colors} primary={primaryColor} />
-            {/* ❌ تمت إزالة زر Presale */}
+            <ActionButton icon="leaf" label={t('staking.stake_tab')} onPress={() => navigation.navigate('Staking')} colors={colors} primary={primaryColor} />
           </View>
         </Animated.View>
 

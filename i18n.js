@@ -5,6 +5,27 @@ import * as SecureStore from 'expo-secure-store';
 const resources = {
   ar: {
     translation: {
+      // ========== Staking Keys (جديد) ==========
+      staking: {
+        title: 'تخزين السيولة',
+        subtitle: 'أودع MECO و USDT لكسب عوائد من رسوم التبادل',
+        stake_tab: 'إيداع',
+        unstake_tab: 'سحب',
+        stake: 'إيداع',
+        unstake: 'سحب',
+        load_error: 'تعذر تحميل بيانات المجمع',
+        enter_valid_amounts: 'أدخل كميات صحيحة',
+        insufficient_balance: 'رصيد غير كافٍ',
+        insufficient_lp: 'رصيد LP غير كافٍ',
+        enter_valid_lp_amount: 'أدخل كمية LP صحيحة',
+        confirm_stake: 'تأكيد الإيداع',
+        confirm_unstake: 'تأكيد السحب',
+        unstake_confirmation: 'سيتم سحب {{amount}} LP Token',
+        stake_success: 'تم الإيداع بنجاح',
+        unstake_success: 'تم السحب بنجاح',
+        you_will_receive: 'ستستلم تقريباً',
+      },
+
       // ========== مفاتيح الشاشات الأساسية ==========
       welcome: 'مرحبًا بك في محفظة MECO',
       create_wallet: 'إنشاء محفظة',
@@ -133,7 +154,6 @@ const resources = {
       get_help_or_report_issues: 'احصل على مساعدة أو أبلغ عن مشاكل',
       about_app: 'عن التطبيق',
       version_and_information: 'الإصدار والمعلومات',
-      // ✅ مفاتيح التحديثات (جديدة)
       check_for_updates: 'التحقق من وجود تحديثات',
       check_for_updates_desc: 'التأكد من استخدامك لأحدث إصدار',
       update_available: 'تحديث جديد متوفر! 🚀',
@@ -158,7 +178,7 @@ const resources = {
       close: 'إغلاق',
       secure_crypto_wallet_description: 'محفظة تشفير آمنة مصممة للعملات الرقمية مع دعم متعدد اللغات وميزات أمان متقدمة.',
 
-      // ✅ مفاتيح قسم Safety
+      // ========== Safety Keys ==========
       safety: 'الأمان',
       show_recovery_phrase: 'عرض عبارة الاسترداد',
       view_your_secret_phrase: 'اعرض عبارتك السرية للنسخ أو الحفظ',
@@ -167,7 +187,6 @@ const resources = {
       warning_phrase: '⚠️ لا تشارك هذه العبارة مع أي شخص. يمكن لأي شخص يملكها الوصول إلى أموالك.',
       copy: 'نسخ',
 
-      // مفاتيح إضافية قديمة
       change_language: "تغيير اللغة",
       toggle_theme: "تبديل النمط",
       biometric: "المصادقة الحيوية",
@@ -248,68 +267,13 @@ const resources = {
       security_tips: "نصائح أمنية",
       tip1: "شارك هذا العنوان فقط مع أشخاص تثق بهم",
       tip2: "يمكن استلام أي عملة على شبكة سولانا",
-      tip3: "تأكد من صحة العنوان قبل الإرسال",
+      tip3: "تأكيد من صحة العنوان قبل الإرسال",
       transaction_time_note: "المعاملات تستغرق عادةً بضع ثوانٍ على شبكة سولانا",
       copy_failed: "فشل نسخ العنوان",
       wallet_address: "عنوان المحفظة",
       share_message_with_address: "عنوان محفظتي على سولانا: {{address}}\n\nيمكنك إرسال أي عملة رقمية إليها.",
 
-      // ========== PresaleScreen.js ==========
-      presale_title: "MECO Presale 🚀",
-      presale_exclusive_offer: "عرض البيع المسبق الحصري",
-      presale_rate: "1 SOL = 125,000 MECO",
-      buy_meco: "شراء MECO",
-      buy_meco_now: "اشترِ MECO الآن",
-      minimum_amount: "الحد الأدنى",
-      maximum_amount: "الحد الأقصى",
-      enter_sol_amount: "أدخل كمية SOL",
-      you_send: "ترسل",
-      you_receive: "تستلم",
-      transaction_fee: "رسوم المعاملة",
-      view_on_solscan: "عرض على سولسكان",
-      confirm_purchase: "تأكيد الشراء",
-      official_meco_token: "رمز MECO الرسمي",
-      verified_on_solana: "تم التحقق منه على شبكة سولانا",
-
-      presaleScreen: {
-        header_title: "البيع المسبق MECO 🚀",
-        offer_title: "عرض حصري للبيع المسبق",
-        rate_label: "1 SOL = 125,000 MECO",
-        min_badge: "الحد الأدنى: {{amount}} SOL",
-        max_badge: "الحد الأقصى: {{amount}} SOL",
-        label_you_pay: "المبلغ الذي تدفعه",
-        label_you_receive: "المبلغ الذي تستلمه",
-        your_balance: "رصيدك: {{amount}} SOL",
-        fee_label: "رسوم المعاملة",
-        note_footer: "* سيتم إرسال عملات MECO إلى محفظتك مباشرة بعد الشراء",
-        buy_btn: "شراء الآن 🔥",
-        alerts: {
-          title_warning: "تنبيه",
-          balance_low_limit: "رصيدك منخفض جداً. يجب أن يكون لديك SOL كافي للرسوم",
-          title_error: "خطأ",
-          invalid_amount: "الرجاء إدخال مبلغ صحيح",
-          min_error: "الحد الأدنى للشراء هو {{amount}} SOL",
-          max_error: "الحد الأقصى للشراء هو {{amount}} SOL",
-          title_insufficient: "رصيد غير كافٍ",
-          insufficient_msg: "تحتاج {{required}} SOL، رصيدك الحالي: {{balance}} SOL",
-          config_error: "خطأ في إعدادات المطور: لم يتم تعيين محفظة البيع المسبق",
-          private_key_error: "لم يتم العثور على المفتاح الخاص",
-          title_failed: "فشلت العملية",
-          generic_error: "حدث خطأ غير متوقع أثناء المعاملة"
-        },
-        modal: {
-          title_success: "🎉 تم الشراء بنجاح!",
-          instruction_title: "معلومات مهمة:",
-          instruction_1: "سيتم توزيع عملات MECO بعد انتهاء فترة البيع المسبق",
-          instruction_2: "يرجى الحفاظ على رسالة التحقق من المعاملة",
-          verify_note: "يمكنك التحقق من المعاملة على Solscan باستخدام توقيع المعاملة",
-          warning_1: "⚠️ لا يمكن استرداد SOL بعد الشراء",
-          warning_2: "⚠️ المعاملات على شبكة Solana غير قابلة للاسترداد",
-          team_signature: "فريق MECO",
-          contact_dev: "اتصل بالمطور على تلغرام",
-          close: "إغلاق"
-        }
-      },
+      
 
       // ========== SwapScreen.js ==========
       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
@@ -328,16 +292,13 @@ const resources = {
       select_token: 'اختر العملة',
       view_on_solscan: 'عرض على Solscan',
 
-      // ========== TransactionHistoryScreen.js (محدث) ==========
-      // الإضافات الجديدة
+      // ========== TransactionHistoryScreen.js ==========
       all: 'الكل',
       fee: 'الرسوم',
       fees: 'الرسوم',
       count: 'العدد',
       other_tokens: 'عملات أخرى',
       transaction: 'معاملة',
-      
-      // المفاتيح الأساسية لسجل المعاملات
       transaction_history: 'سجل المعاملات',
       transaction_history_title: 'سجل المعاملات',
       transaction_analytics: 'تحليلات المعاملات',
@@ -354,7 +315,6 @@ const resources = {
       to: 'إلى',
       time: 'الوقت',
       status: 'الحالة',
-      view_on_solscan: 'عرض على Solscan',
       signature_copied: 'تم نسخ التوقيع',
       address_copied: 'تم نسخ العنوان',
       sent: 'مرسل',
@@ -427,7 +387,7 @@ const resources = {
         rescan: 'مسح مرة أخرى',
       },
 
-      // ========== Meco World ========== 🌍
+      // ========== Meco World ==========
       meco_world: 'عالم ميكو',
       mecoWorld: {
         tab_title: "عالم ميكو",
@@ -447,6 +407,27 @@ const resources = {
   },
   en: {
     translation: {
+      // ========== Staking Keys (New) ==========
+      staking: {
+        title: 'Stake Liquidity',
+        subtitle: 'Deposit MECO and USDT to earn fees from trades',
+        stake_tab: 'Stake',
+        unstake_tab: 'Unstake',
+        stake: 'Stake',
+        unstake: 'Unstake',
+        load_error: 'Failed to load pool data',
+        enter_valid_amounts: 'Enter valid amounts',
+        insufficient_balance: 'Insufficient balance',
+        insufficient_lp: 'Insufficient LP balance',
+        enter_valid_lp_amount: 'Enter valid LP amount',
+        confirm_stake: 'Confirm Stake',
+        confirm_unstake: 'Confirm Unstake',
+        unstake_confirmation: 'You will withdraw {{amount}} LP Token',
+        stake_success: 'Stake successful',
+        unstake_success: 'Unstake successful',
+        you_will_receive: 'You will receive approximately',
+      },
+
       // ========== Basic Screen Keys ==========
       welcome: 'Welcome to MECO Wallet',
       create_wallet: 'Create Wallet',
@@ -575,7 +556,6 @@ const resources = {
       get_help_or_report_issues: 'Get help or report issues',
       about_app: 'About App',
       version_and_information: 'Version and information',
-      // ✅ New keys for updates
       check_for_updates: 'Check for updates',
       check_for_updates_desc: 'Ensure you are using the latest version',
       update_available: 'New update available! 🚀',
@@ -600,7 +580,7 @@ const resources = {
       close: 'Close',
       secure_crypto_wallet_description: 'Secure crypto wallet designed for digital currencies with multi-language support and advanced security features.',
 
-      // ✅ New Safety section keys
+      // ========== Safety Keys ==========
       safety: 'Safety',
       show_recovery_phrase: 'Show Recovery Phrase',
       view_your_secret_phrase: 'View your secret phrase to copy or save',
@@ -608,6 +588,12 @@ const resources = {
       phrase_copied: 'Recovery phrase copied',
       warning_phrase: '⚠️ Do not share this phrase with anyone. Anyone with it can access your funds.',
       copy: 'Copy',
+
+      change_language: "Change Language",
+      toggle_theme: "Toggle Theme",
+      biometric: "Biometric",
+      language: "Language",
+      logout: "Logout",
 
       // ========== SendScreen.js ==========
       sendScreen: {
@@ -689,62 +675,7 @@ const resources = {
       wallet_address: "Wallet Address",
       share_message_with_address: "My Solana wallet address: {{address}}\n\nYou can send any cryptocurrency to it.",
 
-      // ========== PresaleScreen.js ==========
-      presale_title: "MECO Presale 🚀",
-      presale_exclusive_offer: "Exclusive Presale Offer",
-      presale_rate: "1 SOL = 125,000 MECO",
-      buy_meco: "Buy MECO",
-      buy_meco_now: "Buy MECO Now",
-      minimum_amount: "Minimum amount",
-      maximum_amount: "Maximum amount",
-      enter_sol_amount: "Enter SOL Amount",
-      you_send: "You Send",
-      you_receive: "You Receive",
-      transaction_fee: "Transaction Fee",
-      view_on_solscan: "View on Solscan",
-      confirm_purchase: "Confirm Purchase",
-      official_meco_token: "Official MECO Token",
-      verified_on_solana: "Verified on Solana network",
-
-      presaleScreen: {
-        header_title: "MECO Presale 🚀",
-        offer_title: "Exclusive Presale Offer",
-        rate_label: "1 SOL = 125,000 MECO",
-        min_badge: "Min: {{amount}} SOL",
-        max_badge: "Max: {{amount}} SOL",
-        label_you_pay: "You Pay",
-        label_you_receive: "You Receive",
-        your_balance: "Your Balance: {{amount}} SOL",
-        fee_label: "Transaction Fee",
-        note_footer: "* MECO tokens will be sent to your wallet directly after purchase",
-        buy_btn: "Buy Now 🔥",
-        alerts: {
-          title_warning: "Warning",
-          balance_low_limit: "Your balance is too low. You must have enough SOL for fees",
-          title_error: "Error",
-          invalid_amount: "Please enter a valid amount",
-          min_error: "Minimum purchase is {{amount}} SOL",
-          max_error: "Maximum purchase is {{amount}} SOL",
-          title_insufficient: "Insufficient Balance",
-          insufficient_msg: "You need {{required}} SOL, your current balance: {{balance}} SOL",
-          config_error: "Developer config error: Presale wallet not set",
-          private_key_error: "Private key not found",
-          title_failed: "Transaction Failed",
-          generic_error: "An unexpected error occurred during the transaction"
-        },
-        modal: {
-          title_success: "🎉 Purchase Successful!",
-          instruction_title: "Important Information:",
-          instruction_1: "MECO tokens will be distributed after the presale period ends",
-          instruction_2: "Please keep your transaction verification message",
-          verify_note: "You can verify the transaction on Solscan using the transaction signature",
-          warning_1: "⚠️ SOL cannot be refunded after purchase",
-          warning_2: "⚠️ Transactions on Solana network are irreversible",
-          team_signature: "MECO Team",
-          contact_dev: "Contact Developer on Telegram",
-          close: "Close"
-        }
-      },
+      
 
       // ========== SwapScreen.js ==========
       swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
@@ -763,16 +694,13 @@ const resources = {
       select_token: 'Select Token',
       view_on_solscan: 'View on Solscan',
 
-      // ========== TransactionHistoryScreen.js (Updated) ==========
-      // New additions
+      // ========== TransactionHistoryScreen.js ==========
       all: 'All',
       fee: 'Fee',
       fees: 'Fees',
       count: 'Count',
       other_tokens: 'Other Tokens',
       transaction: 'Transaction',
-      
-      // Core transaction history keys
       transaction_history: 'Transaction History',
       transaction_history_title: 'Transaction History',
       transaction_analytics: 'Transaction Analytics',
@@ -789,7 +717,6 @@ const resources = {
       to: 'To',
       time: 'Time',
       status: 'Status',
-      view_on_solscan: 'View on Solscan',
       signature_copied: 'Signature copied',
       address_copied: 'Address copied',
       sent: 'Sent',
@@ -862,7 +789,7 @@ const resources = {
         rescan: 'Scan again',
       },
 
-      // ========== Meco World ========== 🌍
+      // ========== Meco World ==========
       meco_world: 'Meco World',
       mecoWorld: {
         tab_title: "Meco World",
@@ -882,7 +809,6 @@ const resources = {
   }
 };
 
-// دالة بسيطة للتهيئة
 const initI18n = () => {
   return i18n
     .use(initReactI18next)
