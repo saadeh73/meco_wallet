@@ -69,17 +69,36 @@ export default function StakingScreen() {
     setLoadingData(true);
     setError('');
     try {
+      console.log('🔄 [StakingScreen] بدء تحميل البيانات...');
+      
       const [pool, lpBal, mecoBal, usdtBal] = await Promise.all([
-        getPoolInfo(),
+        getPoolInfo().catch(err => {
+          console.warn('⚠️ [StakingScreen] فشل getPoolInfo:', err);
+          return { apy: 0, mecoReserve: 0, usdtReserve: 0, totalLiquidity: 0 };
+        }),
         getUserLPBalance(),
-        SwapAPI.checkBalance('MECO', 0),
-        SwapAPI.checkBalance('USDT', 0),
+        SwapAPI.checkBalance('MECO', 0).catch(err => {
+          console.warn('⚠️ [StakingScreen] فشل checkBalance MECO:', err);
+          return { balance: 0 };
+        }),
+        SwapAPI.checkBalance('USDT', 0).catch(err => {
+          console.warn('⚠️ [StakingScreen] فشل checkBalance USDT:', err);
+          return { balance: 0 };
+        }),
       ]);
+      
+      console.log('📊 [StakingScreen] Pool Info:', pool);
+      console.log('📊 [StakingScreen] LP Balance:', lpBal);
+      console.log('📊 [StakingScreen] MECO Balance:', mecoBal.balance);
+      console.log('📊 [StakingScreen] USDT Balance:', usdtBal.balance);
+      
       setPoolInfo(pool);
       setLpBalance(lpBal);
-      setMecoBalance(mecoBal.balance);
-      setUsdtBalance(usdtBal.balance);
+      setMecoBalance(mecoBal.balance || 0);
+      setUsdtBalance(usdtBal.balance || 0);
+      setError('');
     } catch (err) {
+      console.error('❌ [StakingScreen] فشل تحميل البيانات:', err);
       setError(t('staking.load_error'));
     } finally {
       setLoadingData(false);

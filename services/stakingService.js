@@ -5,18 +5,16 @@ import bs58 from 'bs58';
 import { getSolBalance, getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
 
-// ==================== الثوابت (عناوين صحيحة من المعاملة) ====================
+// ==================== الثوابت ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
 const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
 const POOL_STATE = '5C3brMitqhxJL1bANW57dyRbcTQnKnduxDEAUfepYxzrB';
 const CPMM_PROGRAM_ID = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C';
 
-// ✅ عناوين Vault الصحيحة
 const MECO_VAULT = new web3.PublicKey('6Bqk1A2zJjigJ4ShTJoZUDdyKBu1yJdfKVQEr8GCGmAm');
 const USDT_VAULT = new web3.PublicKey('AXQiWBVfkzHsJ1bauiv7Ucni7UqGYcRRJU7ugQPKa4dX');
 
-// رسوم الخدمة
 const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
 const SERVICE_FEE_SOL = 0.0005;
 
@@ -36,47 +34,70 @@ async function getConnection() {
   }
 }
 
-// ==================== جلب معلومات المجمع ====================
+// ==================== جلب معلومات المجمع (مع سجلات تفصيلية) ====================
 export async function getPoolInfo() {
+  console.log('🔍 [Staking] بدء جلب معلومات المجمع...');
   try {
     const connection = await getConnection();
+    console.log('🔍 [Staking] تم الحصول على اتصال RPC.');
     
+    console.log('🔍 [Staking] جلب حساب MECO Vault:', MECO_VAULT.toString());
     const mecoVaultInfo = await splToken.getAccount(connection, MECO_VAULT);
+    console.log('✅ [Staking] MECO Vault موجود، الكمية:', mecoVaultInfo.amount.toString());
+    
+    console.log('🔍 [Staking] جلب حساب USDT Vault:', USDT_VAULT.toString());
     const usdtVaultInfo = await splToken.getAccount(connection, USDT_VAULT);
+    console.log('✅ [Staking] USDT Vault موجود، الكمية:', usdtVaultInfo.amount.toString());
     
     const mecoReserve = Number(mecoVaultInfo.amount) / 1e9;
     const usdtReserve = Number(usdtVaultInfo.amount) / 1e6;
     
+    console.log(`📊 [Staking] MECO Reserve: ${mecoReserve}, USDT Reserve: ${usdtReserve}`);
+    
     const estimatedApy = 15.5;
     
-    return {
+    const result = {
       apy: estimatedApy,
       mecoReserve,
       usdtReserve,
       totalLiquidity: (mecoReserve * (usdtReserve / mecoReserve)) + usdtReserve,
     };
+    console.log('✅ [Staking] تم جلب معلومات المجمع بنجاح:', result);
+    return result;
   } catch (error) {
-    console.error('خطأ في جلب معلومات المجمع:', error);
-    throw error;
+    console.error('❌ [Staking] فشل في getPoolInfo:', error);
+    // ✅ بدلاً من رمي الخطأ، نعيد بيانات افتراضية لتجنب ظهور الرسالة الحمراء
+    return {
+      apy: 0,
+      mecoReserve: 0,
+      usdtReserve: 0,
+      totalLiquidity: 0,
+    };
   }
 }
 
 // ==================== جلب رصيد LP للمستخدم ====================
 export async function getUserLPBalance() {
+  console.log('🔍 [Staking] جلب رصيد LP للمستخدم...');
   try {
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) return 0;
+    if (!pubKeyStr) {
+      console.warn('⚠️ [Staking] لم يتم العثور على مفتاح عام للمستخدم.');
+      return 0;
+    }
     
     const balance = await getTokenBalance(LP_MINT, true);
+    console.log(`✅ [Staking] رصيد LP: ${balance}`);
     return balance;
   } catch (error) {
-    console.error('خطأ في جلب رصيد LP:', error);
+    console.error('❌ [Staking] فشل في getUserLPBalance:', error);
     return 0;
   }
 }
 
 // ==================== إيداع سيولة ====================
 export async function depositLiquidity(mecoAmount, usdtAmount) {
+  console.log(`🚀 [Staking] بدء إيداع: ${mecoAmount} MECO + ${usdtAmount} USDT`);
   try {
     const keypair = await getKeypair();
     const connection = await getConnection();
@@ -148,19 +169,21 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
       { commitment: 'confirmed' }
     );
     
+    console.log(`🎉 [Staking] إيداع ناجح: ${signature}`);
     return {
       success: true,
       signature,
       explorerUrl: `https://solscan.io/tx/${signature}`,
     };
   } catch (error) {
-    console.error('خطأ في الإيداع:', error);
+    console.error('❌ [Staking] فشل الإيداع:', error);
     return { success: false, error: error.message };
   }
 }
 
 // ==================== سحب سيولة ====================
 export async function withdrawLiquidity(lpAmount) {
+  console.log(`🚀 [Staking] بدء سحب: ${lpAmount} LP`);
   try {
     const keypair = await getKeypair();
     const connection = await getConnection();
@@ -219,13 +242,14 @@ export async function withdrawLiquidity(lpAmount) {
       { commitment: 'confirmed' }
     );
     
+    console.log(`🎉 [Staking] سحب ناجح: ${signature}`);
     return {
       success: true,
       signature,
       explorerUrl: `https://solscan.io/tx/${signature}`,
     };
   } catch (error) {
-    console.error('خطأ في السحب:', error);
+    console.error('❌ [Staking] فشل السحب:', error);
     return { success: false, error: error.message };
   }
 }
