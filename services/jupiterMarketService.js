@@ -3,7 +3,7 @@
 export const CORE_TOKENS =[
   { id: 'solana', symbol: 'SOL', name: 'Solana', decimals: 9, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/4128/large/solana.png', mint: 'So11111111111111111111111111111111111111112' },
   { id: 'MonyCoin', symbol: 'MECO', name: 'MonyCoin', decimals: 9, swapAvailable: true, image: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png', mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i' },
-  { id: 'tether', symbol: 'USDT', name: 'Tether', decimals: 6, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/325/large/Tether.png', mint: 'Es9vMFrzaCERc8Foa8XfRduKiSfrhEL5c7qr2WXXBWY5' },
+  { id: 'tether', symbol: 'USDT', name: 'Tether', decimals: 6, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/325/large/Tether.png', mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' },
   { id: 'usd-coin', symbol: 'USDC', name: 'USD Coin', decimals: 6, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png', mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' },
   { id: 'jupiter', symbol: 'JUP', name: 'Jupiter', decimals: 6, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/34188/large/jup.png', mint: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbJedZ89LxcQ' },
   { id: 'raydium', symbol: 'RAY', name: 'Raydium', decimals: 6, swapAvailable: true, image: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', mint: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R' },
