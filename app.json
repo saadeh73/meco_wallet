@@ -33,7 +33,14 @@
       "permissions": [
         "CAMERA",
         "INTERNET",
-        "USE_BIOMETRIC"
+        "USE_BIOMETRIC",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "CAMERA",
+        "INTERNET",
+        "USE_BIOMETRIC",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {
@@ -58,6 +65,9 @@
       "eas": {
         "projectId": "eb1f71ac-516e-4edd-b2a2-2914dad79f93"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
