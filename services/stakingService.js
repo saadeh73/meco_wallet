@@ -4,13 +4,13 @@ import * as SecureStore from 'expo-secure-store';
 import bs58 from 'bs58';
 import { getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
+import { Raydium } from '@raydium-io/raydium-sdk-v2';
 
-// ==================== الثوابت ====================
+// ==================== الثوابت (عناوين صحيحة من المعاملة) ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
 const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
-const POOL_STATE = '5C3brMitqhxJL1bANW57dyRbcTQnKnduxDEAUfepYxzrB';
-const CPMM_PROGRAM_ID = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C';
+const POOL_ID = '5C3brMitqhxJL1bANW57dyRbcTQnKnduxDEAUfepYxzrB'; // هذا هو poolId الصحيح
 
 // ✅ عناوين Vault الصحيحة
 const MECO_VAULT = new web3.PublicKey('6Bqk1A2zJjigJ4ShTJoZUDdyKBu1yJdfKVQEr8GCGmAm');
@@ -34,6 +34,17 @@ async function getConnection() {
   } catch (error) {
     return new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
   }
+}
+
+async function getRaydiumInstance() {
+  const connection = await getConnection();
+  const owner = (await getKeypair()).publicKey;
+  return Raydium.load({
+    connection,
+    owner,
+    cluster: 'mainnet',
+    disableLoadToken: false,
+  });
 }
 
 // ==================== جلب معلومات المجمع ====================
@@ -85,74 +96,29 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     const userPubkey = keypair.publicKey;
     console.log(`🔑 [Staking] المستخدم: ${userPubkey.toString()}`);
 
-    const mecoMint = new web3.PublicKey(MECO_MINT);
-    const usdtMint = new web3.PublicKey(USDT_MINT);
-    const lpMint = new web3.PublicKey(LP_MINT);
-    const poolState = new web3.PublicKey(POOL_STATE);
-    const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
+    // --- 1. تهيئة Raydium SDK ---
+    const raydium = await getRaydiumInstance();
 
-    const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
-    const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
-    const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
+    // --- 2. الحصول على معلومات المجمع ---
+    // نستخدم poolId الصحيح
+    const poolInfo = await raydium.cpmm.getPoolInfo({ poolId: POOL_ID });
+    if (!poolInfo) throw new Error('تعذر العثور على المجمع');
 
-    // --- 1. إنشاء حساب LP ATA إذا لزم الأمر (كمعاملة منفصلة للتأكد) ---
-    const lpAtaInfo = await connection.getAccountInfo(userLpAta);
-    if (!lpAtaInfo) {
-      console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
-      const createAtaTx = new web3.Transaction().add(
-        splToken.createAssociatedTokenAccountInstruction(
-          userPubkey,
-          userLpAta,
-          userPubkey,
-          lpMint
-        )
-      );
-      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-      createAtaTx.recentBlockhash = latestBlockhash.blockhash;
-      createAtaTx.feePayer = userPubkey;
-      const sig = await web3.sendAndConfirmTransaction(connection, createAtaTx, [keypair], { commitment: 'confirmed' });
-      console.log(`✅ [Staking] تم إنشاء LP ATA: ${sig}`);
-    }
+    // --- 3. حساب كميات الإيداع ---
+    // SDK سيتولى حساب الكميات المثلى تلقائياً
+    const mecoAmountIn = Math.floor(mecoAmount * 1e9);
+    const usdtAmountIn = Math.floor(usdtAmount * 1e6);
 
-    // --- 2. جلب معلومات المجمع وإجمالي عرض LP ---
-    const poolInfo = await getPoolInfo();
-    const lpMintInfo = await splToken.getMint(connection, lpMint);
-    const lpSupply = Number(lpMintInfo.supply) / 1e9; // LP decimals = 9
-    console.log(`📊 [Staking] LP Supply: ${lpSupply}`);
-
-    // --- 3. حساب كمية LP المتوقعة باستخدام الصيغة الصحيحة ---
-    const shareMeco = mecoAmount / poolInfo.mecoReserve;
-    const shareUsdt = usdtAmount / poolInfo.usdtReserve;
-    const share = Math.min(shareMeco, shareUsdt);
-    const estimatedLpAmount = Math.floor(share * lpSupply * 1e9);
-    console.log(`📊 [Staking] estimatedLpAmount: ${estimatedLpAmount}`);
-
-    // --- 4. بناء تعليمة الإيداع بالبيانات الصحيحة ---
-    const dataBuffer = Buffer.alloc(24);
-    dataBuffer.writeBigUInt64LE(BigInt(estimatedLpAmount), 0);
-    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(mecoAmount * 1e9)), 8);
-    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(usdtAmount * 1e6)), 16);
-    const depositData = Buffer.concat([Buffer.from([0x02]), dataBuffer]);
-
-    const depositIx = new web3.TransactionInstruction({
-      programId: cpmmProgram,
-      keys: [
-        { pubkey: userPubkey, isSigner: true, isWritable: false },
-        { pubkey: poolState, isSigner: false, isWritable: true },
-        { pubkey: userMecoAta, isSigner: false, isWritable: true },
-        { pubkey: userUsdtAta, isSigner: false, isWritable: true },
-        { pubkey: MECO_VAULT, isSigner: false, isWritable: true },
-        { pubkey: USDT_VAULT, isSigner: false, isWritable: true },
-        { pubkey: userLpAta, isSigner: false, isWritable: true },
-        { pubkey: lpMint, isSigner: false, isWritable: true },
-        { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      ],
-      data: depositData,
+    // --- 4. بناء معاملة الإيداع ---
+    const { transaction, signers } = await raydium.cpmm.addLiquidity({
+      poolInfo,
+      inputAmountA: new splToken.u64(mecoAmountIn),
+      inputAmountB: new splToken.u64(usdtAmountIn),
+      slippage: 0.01, // 1% انزلاق
+      txVersion: 'V0',
     });
 
-    const transaction = new web3.Transaction().add(depositIx);
-
-    // إضافة رسم الخدمة
+    // --- 5. إضافة رسم الخدمة ---
     const feeLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
     transaction.add(
       web3.SystemProgram.transfer({
@@ -162,16 +128,16 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
       })
     );
 
-    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-    transaction.recentBlockhash = latestBlockhash.blockhash;
-    transaction.feePayer = userPubkey;
+    // --- 6. توقيع وإرسال المعاملة ---
+    const allSigners = [...signers, keypair];
+    transaction.sign(...allSigners);
 
-    const signature = await web3.sendAndConfirmTransaction(
-      connection,
-      transaction,
-      [keypair],
-      { commitment: 'confirmed' }
-    );
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+
+    await connection.confirmTransaction(signature, 'confirmed');
 
     console.log(`🎉 [Staking] إيداع ناجح: ${signature}`);
     return {
@@ -193,39 +159,24 @@ export async function withdrawLiquidity(lpAmount) {
     const connection = await getConnection();
     const userPubkey = keypair.publicKey;
     
-    const mecoMint = new web3.PublicKey(MECO_MINT);
-    const usdtMint = new web3.PublicKey(USDT_MINT);
-    const lpMint = new web3.PublicKey(LP_MINT);
-    const poolState = new web3.PublicKey(POOL_STATE);
-    const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
+    const raydium = await getRaydiumInstance();
     
-    const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
-    const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
-    const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
+    // الحصول على معلومات المجمع
+    const poolInfo = await raydium.cpmm.getPoolInfo({ poolId: POOL_ID });
+    if (!poolInfo) throw new Error('تعذر العثور على المجمع');
     
-    const transaction = new web3.Transaction();
+    // حساب كمية LP
+    const lpAmountIn = Math.floor(lpAmount * 1e9);
     
-    const withdrawIx = new web3.TransactionInstruction({
-      programId: cpmmProgram,
-      keys: [
-        { pubkey: userPubkey, isSigner: true, isWritable: false },
-        { pubkey: poolState, isSigner: false, isWritable: true },
-        { pubkey: userLpAta, isSigner: false, isWritable: true },
-        { pubkey: MECO_VAULT, isSigner: false, isWritable: true },
-        { pubkey: USDT_VAULT, isSigner: false, isWritable: true },
-        { pubkey: userMecoAta, isSigner: false, isWritable: true },
-        { pubkey: userUsdtAta, isSigner: false, isWritable: true },
-        { pubkey: lpMint, isSigner: false, isWritable: true },
-        { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      ],
-      data: Buffer.from([
-        0x03,
-        ...new Uint8Array(new BigUint64Array([BigInt(Math.floor(lpAmount * 1e9))]).buffer),
-      ]),
+    // بناء معاملة السحب
+    const { transaction, signers } = await raydium.cpmm.removeLiquidity({
+      poolInfo,
+      lpAmount: new splToken.u64(lpAmountIn),
+      slippage: 0.01,
+      txVersion: 'V0',
     });
     
-    transaction.add(withdrawIx);
-    
+    // إضافة رسم الخدمة
     const feeLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
     transaction.add(
       web3.SystemProgram.transfer({
@@ -235,16 +186,15 @@ export async function withdrawLiquidity(lpAmount) {
       })
     );
     
-    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-    transaction.recentBlockhash = latestBlockhash.blockhash;
-    transaction.feePayer = userPubkey;
+    const allSigners = [...signers, keypair];
+    transaction.sign(...allSigners);
     
-    const signature = await web3.sendAndConfirmTransaction(
-      connection,
-      transaction,
-      [keypair],
-      { commitment: 'confirmed' }
-    );
+    const signature = await connection.sendRawTransaction(transaction.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+    
+    await connection.confirmTransaction(signature, 'confirmed');
     
     console.log(`🎉 [Staking] سحب ناجح: ${signature}`);
     return {
