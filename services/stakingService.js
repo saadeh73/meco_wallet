@@ -106,9 +106,10 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
     const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
 
-    // إنشاء حساب LP ATA إذا لزم الأمر
+    // --- 1. إنشاء حساب LP ATA إذا لزم الأمر ---
     const lpAtaInfo = await connection.getAccountInfo(userLpAta);
     if (!lpAtaInfo) {
+      console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
       const createAtaTx = new web3.Transaction().add(
         splToken.createAssociatedTokenAccountInstruction(userPubkey, userLpAta, userPubkey, lpMint)
       );
@@ -116,10 +117,22 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
       createAtaTx.recentBlockhash = blockhash.blockhash;
       createAtaTx.feePayer = userPubkey;
       await web3.sendAndConfirmTransaction(connection, createAtaTx, [keypair], { commitment: 'confirmed' });
+      console.log(`✅ [Staking] تم إنشاء LP ATA`);
     }
 
-    // بناء تعليمة الإيداع
-    const estimatedLpAmount = 1_000_000_000; // 1 LP
+    // --- 2. جلب معلومات المجمع لحساب كمية LP ديناميكيًا ---
+    const poolInfo = await getPoolInfo();
+    const lpMintInfo = await splToken.getMint(connection, lpMint);
+    const lpSupply = Number(lpMintInfo.supply) / 1e9; // LP decimals = 9
+
+    // حساب كمية LP المتوقعة بناءً على النسبة الأصغر
+    const shareMeco = mecoAmount / (poolInfo.mecoReserve || 1);
+    const shareUsdt = usdtAmount / (poolInfo.usdtReserve || 1);
+    const share = Math.min(shareMeco, shareUsdt);
+    const estimatedLpAmount = Math.floor(share * lpSupply * 1e9);
+    console.log(`📊 [Staking] estimatedLpAmount: ${estimatedLpAmount} (${estimatedLpAmount / 1e9} LP)`);
+
+    // --- 3. بناء تعليمة الإيداع ---
     const mecoRaw = Math.floor(mecoAmount * 1e9);
     const usdtRaw = Math.floor(usdtAmount * 1e6);
 
