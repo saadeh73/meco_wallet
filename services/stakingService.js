@@ -116,9 +116,8 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
     console.log(`📝 [Staking] userLpAta: ${userLpAta.toString()}`);
 
+    // --- 1. تجهيز المعاملة وإنشاء حساب LP ATA إذا لزم الأمر ---
     const transaction = new web3.Transaction();
-
-    // ✅ التحقق من وجود حساب LP ATA وإنشاؤه إذا لزم الأمر
     const lpAtaInfo = await connection.getAccountInfo(userLpAta);
     if (!lpAtaInfo) {
       console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
@@ -134,7 +133,33 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
       console.log(`✅ [Staking] حساب LP ATA موجود مسبقًا`);
     }
 
-    // ✅ بناء تعليمة الإيداع
+    // --- 2. الحصول على معلومات المجمع لحساب النسبة وكمية LP ---
+    const poolInfo = await getPoolInfo();
+    if (!poolInfo || poolInfo.mecoReserve === 0 || poolInfo.usdtReserve === 0) {
+      throw new Error('تعذر الحصول على احتياطيات المجمع');
+    }
+
+    // حساب كمية LP المُتوقعة بناءً على نسبة المساهمة (باستخدام القيمة الأصغر لضمان التوازن)
+    const mecoValue = mecoAmount;
+    const usdtValue = usdtAmount; 
+    // نستخدم القيمة الأصغر لتجنب اختلال النسبة
+    const share = Math.min(mecoValue / poolInfo.mecoReserve, usdtValue / poolInfo.usdtReserve);
+    // نفترض أن إجمالي عرض LP يساوي قيمة إجمالية تقديرية (يمكن تحسينها لاحقًا)
+    const totalSupply = poolInfo.mecoReserve + poolInfo.usdtReserve; 
+    const estimatedLpAmount = Math.floor(share * totalSupply * 1e9); // بالوحدات الصغرى (9 منازل)
+
+    console.log(`📊 [Staking] estimatedLpAmount (raw): ${estimatedLpAmount}`);
+
+    // --- 3. بناء تعليمة الإيداع بالبيانات الصحيحة ---
+    // الترتيب الصحيح للمعاملات: lp_token_amount, maximum_token_0_amount, maximum_token_1_amount
+    const dataBuffer = Buffer.alloc(24); // 3 * 8 bytes
+    dataBuffer.writeBigUInt64LE(BigInt(estimatedLpAmount), 0); // lp_token_amount
+    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(mecoAmount * 1e9)), 8); // maximum_token_0_amount (MECO)
+    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(usdtAmount * 1e6)), 16); // maximum_token_1_amount (USDT)
+
+    // discriminator الصحيح لتعليمة deposit هو 0x02
+    const depositData = Buffer.concat([Buffer.from([0x02]), dataBuffer]);
+
     const depositIx = new web3.TransactionInstruction({
       programId: cpmmProgram,
       keys: [
@@ -148,11 +173,7 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
         { pubkey: lpMint, isSigner: false, isWritable: true },
         { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       ],
-      data: Buffer.from([
-        0x02,
-        ...new Uint8Array(new BigUint64Array([BigInt(Math.floor(mecoAmount * 1e9))]).buffer),
-        ...new Uint8Array(new BigUint64Array([BigInt(Math.floor(usdtAmount * 1e6))]).buffer),
-      ]),
+      data: depositData,
     });
 
     transaction.add(depositIx);
