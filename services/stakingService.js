@@ -5,7 +5,7 @@ import bs58 from 'bs58';
 import { getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
 
-// ==================== الثوابت (عناوين صحيحة من المعاملة) ====================
+// ==================== الثوابت ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
 const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
@@ -41,20 +41,12 @@ export async function getPoolInfo() {
   console.log('🔍 [Staking] بدء جلب معلومات المجمع...');
   try {
     const connection = await getConnection();
-    console.log('🔍 [Staking] تم الحصول على اتصال RPC.');
     
-    console.log('🔍 [Staking] جلب حساب MECO Vault:', MECO_VAULT.toString());
     const mecoVaultInfo = await splToken.getAccount(connection, MECO_VAULT);
-    console.log('✅ [Staking] MECO Vault موجود، الكمية:', mecoVaultInfo.amount.toString());
-    
-    console.log('🔍 [Staking] جلب حساب USDT Vault:', USDT_VAULT.toString());
     const usdtVaultInfo = await splToken.getAccount(connection, USDT_VAULT);
-    console.log('✅ [Staking] USDT Vault موجود، الكمية:', usdtVaultInfo.amount.toString());
     
     const mecoReserve = Number(mecoVaultInfo.amount) / 1e9;
     const usdtReserve = Number(usdtVaultInfo.amount) / 1e6;
-    
-    console.log(`📊 [Staking] MECO Reserve: ${mecoReserve}, USDT Reserve: ${usdtReserve}`);
     
     const estimatedApy = 15.5;
     
@@ -64,32 +56,20 @@ export async function getPoolInfo() {
       usdtReserve,
       totalLiquidity: (mecoReserve * (usdtReserve / mecoReserve)) + usdtReserve,
     };
-    console.log('✅ [Staking] تم جلب معلومات المجمع بنجاح:', result);
+    console.log('✅ [Staking] معلومات المجمع:', result);
     return result;
   } catch (error) {
     console.error('❌ [Staking] فشل في getPoolInfo:', error);
-    return {
-      apy: 0,
-      mecoReserve: 0,
-      usdtReserve: 0,
-      totalLiquidity: 0,
-    };
+    return { apy: 0, mecoReserve: 0, usdtReserve: 0, totalLiquidity: 0 };
   }
 }
 
 // ==================== جلب رصيد LP للمستخدم ====================
 export async function getUserLPBalance() {
-  console.log('🔍 [Staking] جلب رصيد LP للمستخدم...');
   try {
     const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) {
-      console.warn('⚠️ [Staking] لم يتم العثور على مفتاح عام للمستخدم.');
-      return 0;
-    }
-    
-    const balance = await getTokenBalance(LP_MINT, true);
-    console.log(`✅ [Staking] رصيد LP: ${balance}`);
-    return balance;
+    if (!pubKeyStr) return 0;
+    return await getTokenBalance(LP_MINT, true);
   } catch (error) {
     console.error('❌ [Staking] فشل في getUserLPBalance:', error);
     return 0;
@@ -114,14 +94,12 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
     const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
     const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
-    console.log(`📝 [Staking] userLpAta: ${userLpAta.toString()}`);
 
-    // --- 1. تجهيز المعاملة وإنشاء حساب LP ATA إذا لزم الأمر ---
-    const transaction = new web3.Transaction();
+    // --- 1. إنشاء حساب LP ATA إذا لزم الأمر (كمعاملة منفصلة للتأكد) ---
     const lpAtaInfo = await connection.getAccountInfo(userLpAta);
     if (!lpAtaInfo) {
       console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
-      transaction.add(
+      const createAtaTx = new web3.Transaction().add(
         splToken.createAssociatedTokenAccountInstruction(
           userPubkey,
           userLpAta,
@@ -129,35 +107,31 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
           lpMint
         )
       );
-    } else {
-      console.log(`✅ [Staking] حساب LP ATA موجود مسبقًا`);
+      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+      createAtaTx.recentBlockhash = latestBlockhash.blockhash;
+      createAtaTx.feePayer = userPubkey;
+      const sig = await web3.sendAndConfirmTransaction(connection, createAtaTx, [keypair], { commitment: 'confirmed' });
+      console.log(`✅ [Staking] تم إنشاء LP ATA: ${sig}`);
     }
 
-    // --- 2. الحصول على معلومات المجمع لحساب النسبة وكمية LP ---
+    // --- 2. جلب معلومات المجمع وإجمالي عرض LP ---
     const poolInfo = await getPoolInfo();
-    if (!poolInfo || poolInfo.mecoReserve === 0 || poolInfo.usdtReserve === 0) {
-      throw new Error('تعذر الحصول على احتياطيات المجمع');
-    }
+    const lpMintInfo = await splToken.getMint(connection, lpMint);
+    const lpSupply = Number(lpMintInfo.supply) / 1e9; // LP decimals = 9
+    console.log(`📊 [Staking] LP Supply: ${lpSupply}`);
 
-    // حساب كمية LP المُتوقعة بناءً على نسبة المساهمة (باستخدام القيمة الأصغر لضمان التوازن)
-    const mecoValue = mecoAmount;
-    const usdtValue = usdtAmount; 
-    // نستخدم القيمة الأصغر لتجنب اختلال النسبة
-    const share = Math.min(mecoValue / poolInfo.mecoReserve, usdtValue / poolInfo.usdtReserve);
-    // نفترض أن إجمالي عرض LP يساوي قيمة إجمالية تقديرية (يمكن تحسينها لاحقًا)
-    const totalSupply = poolInfo.mecoReserve + poolInfo.usdtReserve; 
-    const estimatedLpAmount = Math.floor(share * totalSupply * 1e9); // بالوحدات الصغرى (9 منازل)
+    // --- 3. حساب كمية LP المتوقعة باستخدام الصيغة الصحيحة ---
+    const shareMeco = mecoAmount / poolInfo.mecoReserve;
+    const shareUsdt = usdtAmount / poolInfo.usdtReserve;
+    const share = Math.min(shareMeco, shareUsdt);
+    const estimatedLpAmount = Math.floor(share * lpSupply * 1e9);
+    console.log(`📊 [Staking] estimatedLpAmount: ${estimatedLpAmount}`);
 
-    console.log(`📊 [Staking] estimatedLpAmount (raw): ${estimatedLpAmount}`);
-
-    // --- 3. بناء تعليمة الإيداع بالبيانات الصحيحة ---
-    // الترتيب الصحيح للمعاملات: lp_token_amount, maximum_token_0_amount, maximum_token_1_amount
-    const dataBuffer = Buffer.alloc(24); // 3 * 8 bytes
-    dataBuffer.writeBigUInt64LE(BigInt(estimatedLpAmount), 0); // lp_token_amount
-    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(mecoAmount * 1e9)), 8); // maximum_token_0_amount (MECO)
-    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(usdtAmount * 1e6)), 16); // maximum_token_1_amount (USDT)
-
-    // discriminator الصحيح لتعليمة deposit هو 0x02
+    // --- 4. بناء تعليمة الإيداع بالبيانات الصحيحة ---
+    const dataBuffer = Buffer.alloc(24);
+    dataBuffer.writeBigUInt64LE(BigInt(estimatedLpAmount), 0);
+    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(mecoAmount * 1e9)), 8);
+    dataBuffer.writeBigUInt64LE(BigInt(Math.floor(usdtAmount * 1e6)), 16);
     const depositData = Buffer.concat([Buffer.from([0x02]), dataBuffer]);
 
     const depositIx = new web3.TransactionInstruction({
@@ -176,7 +150,7 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
       data: depositData,
     });
 
-    transaction.add(depositIx);
+    const transaction = new web3.Transaction().add(depositIx);
 
     // إضافة رسم الخدمة
     const feeLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
