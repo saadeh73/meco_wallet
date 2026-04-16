@@ -12,7 +12,6 @@ const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
 const POOL_STATE = '5C3brMitqhxJL1bANW57dyRbcTQnKnduxDEAUfepYxzrB';
 const CPMM_PROGRAM_ID = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C';
 
-// ⚠️ عناوين Vault - قم بتغييرها هنا فقط إذا لزم الأمر
 const MECO_VAULT_ADDRESS = '6Bqk1A2zJjigJ4ShTJoZUDdyKBu1yJdfKVQEr8GCGmAm';
 const USDT_VAULT_ADDRESS = 'AXQiWBVfkzHsJ1bauiv7Ucni7UqGYcRRJU7ugQPKa4dX';
 
@@ -38,7 +37,15 @@ async function getConnection() {
   }
 }
 
-// ==================== جلب معلومات المجمع (نسخة مرنة لا ترمي أخطاء) ====================
+// 🌟 [إصلاح جذري]: استخدام toBytes() بدلاً من toBuffer() المسببة للانهيار في الهواتف
+function getATAAddress(mint, owner) {
+  return web3.PublicKey.findProgramAddressSync(
+    [owner.toBytes(), splToken.TOKEN_PROGRAM_ID.toBytes(), mint.toBytes()],
+    splToken.ASSOCIATED_TOKEN_PROGRAM_ID
+  )[0];
+}
+
+// ==================== جلب معلومات المجمع ====================
 export async function getPoolInfo() {
   console.log('🔍 [Staking] بدء جلب معلومات المجمع...');
   const connection = await getConnection();
@@ -46,19 +53,18 @@ export async function getPoolInfo() {
   let mecoReserve = 0;
   let usdtReserve = 0;
   
-  // محاولة جلب MECO Vault
+  // 🌟 [إصلاح MECO Vault]: طلب الرصيد مباشرة من RPC لتجاوز فشل مكتبة splToken
   try {
-    const mecoVaultInfo = await splToken.getAccount(connection, MECO_VAULT);
-    mecoReserve = Number(mecoVaultInfo.amount) / 1e9;
+    const mecoBal = await connection.getTokenAccountBalance(MECO_VAULT);
+    mecoReserve = mecoBal.value.uiAmount || 0;
     console.log('✅ [Staking] MECO Vault:', mecoReserve);
   } catch (e) {
     console.warn('⚠️ [Staking] فشل جلب MECO Vault:', e.message);
   }
   
-  // محاولة جلب USDT Vault
   try {
-    const usdtVaultInfo = await splToken.getAccount(connection, USDT_VAULT);
-    usdtReserve = Number(usdtVaultInfo.amount) / 1e6;
+    const usdtBal = await connection.getTokenAccountBalance(USDT_VAULT);
+    usdtReserve = usdtBal.value.uiAmount || 0;
     console.log('✅ [Staking] USDT Vault:', usdtReserve);
   } catch (e) {
     console.warn('⚠️ [Staking] فشل جلب USDT Vault:', e.message);
@@ -89,7 +95,7 @@ export async function getUserLPBalance() {
 }
 
 // ==================== إيداع سيولة ====================
-export async function depositLiquidity(mecoAmount, usdtAmount) {
+export async function depositLiquidity(mecoAmount, usdtAmount, slippageBps = 100) {
   console.log(`🚀 [Staking] بدء إيداع: ${mecoAmount} MECO + ${usdtAmount} USDT`);
   try {
     const keypair = await getKeypair();
@@ -102,11 +108,11 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     const poolState = new web3.PublicKey(POOL_STATE);
     const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
 
-    const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
-    const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
-    const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
+    console.log('🔄 [Staking] جلب عناوين الحسابات (ATA)...');
+    const userMecoAta = getATAAddress(mecoMint, userPubkey);
+    const userUsdtAta = getATAAddress(usdtMint, userPubkey);
+    const userLpAta = getATAAddress(lpMint, userPubkey);
 
-    // --- 1. إنشاء حساب LP ATA إذا لزم الأمر ---
     const lpAtaInfo = await connection.getAccountInfo(userLpAta);
     if (!lpAtaInfo) {
       console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
@@ -120,27 +126,33 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
       console.log(`✅ [Staking] تم إنشاء LP ATA`);
     }
 
-    // --- 2. جلب معلومات المجمع لحساب كمية LP ديناميكيًا ---
     const poolInfo = await getPoolInfo();
     const lpMintInfo = await splToken.getMint(connection, lpMint);
-    const lpSupply = Number(lpMintInfo.supply) / 1e9; // LP decimals = 9
+    const lpSupply = Number(lpMintInfo.supply) / 1e9;
 
-    // حساب كمية LP المتوقعة بناءً على النسبة الأصغر
-    const shareMeco = mecoAmount / (poolInfo.mecoReserve || 1);
-    const shareUsdt = usdtAmount / (poolInfo.usdtReserve || 1);
+    const shareMeco = mecoAmount / (poolInfo.mecoReserve > 0 ? poolInfo.mecoReserve : 1);
+    const shareUsdt = usdtAmount / (poolInfo.usdtReserve > 0 ? poolInfo.usdtReserve : 1);
     const share = Math.min(shareMeco, shareUsdt);
-    const estimatedLpAmount = Math.floor(share * lpSupply * 1e9);
-    console.log(`📊 [Staking] estimatedLpAmount: ${estimatedLpAmount} (${estimatedLpAmount / 1e9} LP)`);
+    const estimatedLpAmount = Math.floor((isNaN(share) ? 0 : share) * lpSupply * 1e9);
+    console.log(`📊 [Staking] estimatedLpAmount: ${estimatedLpAmount}`);
 
-    // --- 3. بناء تعليمة الإيداع ---
     const mecoRaw = Math.floor(mecoAmount * 1e9);
     const usdtRaw = Math.floor(usdtAmount * 1e6);
 
-    const dataBuffer = Buffer.alloc(24);
-    dataBuffer.writeBigUInt64LE(BigInt(estimatedLpAmount), 0);
-    dataBuffer.writeBigUInt64LE(BigInt(mecoRaw), 8);
-    dataBuffer.writeBigUInt64LE(BigInt(usdtRaw), 16);
-    const depositData = Buffer.concat([Buffer.from([0x02]), dataBuffer]);
+    // 🌟 [إصلاح Buffer]: إنشاء البيانات (Data) باستخدام DataView وهي متوافقة 100% مع الهواتف الذكية!
+    const depositData = new Uint8Array(25);
+    depositData[0] = 2; // instruction discriminator (0x02)
+    const dataView = new DataView(depositData.buffer);
+    dataView.setBigUint64(1, BigInt(estimatedLpAmount), true);
+    dataView.setBigUint64(9, BigInt(mecoRaw), true);
+    dataView.setBigUint64(17, BigInt(usdtRaw), true);
+
+    // 🌟 [إصلاح Buffer]: إنشاء مصفوفة يدوية لكلمة "observation" بدلاً من Buffer.from
+    const obsSeed = new Uint8Array([111, 98, 115, 101, 114, 118, 97, 116, 105, 111, 110]);
+    const [observationState] = web3.PublicKey.findProgramAddressSync(
+      [obsSeed, poolState.toBytes()],
+      cpmmProgram
+    );
 
     const depositIx = new web3.TransactionInstruction({
       programId: cpmmProgram,
@@ -154,13 +166,13 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
         { pubkey: userLpAta, isSigner: false, isWritable: true },
         { pubkey: lpMint, isSigner: false, isWritable: true },
         { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: observationState, isSigner: false, isWritable: false },
       ],
-      data: depositData,
+      data: depositData, // البيانات الجاهزة والنقية
     });
 
     const transaction = new web3.Transaction().add(depositIx);
 
-    // رسم الخدمة
     const feeLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
     transaction.add(
       web3.SystemProgram.transfer({
@@ -174,6 +186,7 @@ export async function depositLiquidity(mecoAmount, usdtAmount) {
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = userPubkey;
 
+    console.log('🚀 [Staking] جاري إرسال المعاملة للبلوكشين...');
     const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
 
     console.log(`🎉 [Staking] إيداع ناجح: ${signature}`);
@@ -197,11 +210,23 @@ export async function withdrawLiquidity(lpAmount) {
     const poolState = new web3.PublicKey(POOL_STATE);
     const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
     
-    const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
-    const userUsdtAta = await splToken.getAssociatedTokenAddress(usdtMint, userPubkey);
-    const userLpAta = await splToken.getAssociatedTokenAddress(lpMint, userPubkey);
+    const userMecoAta = getATAAddress(mecoMint, userPubkey);
+    const userUsdtAta = getATAAddress(usdtMint, userPubkey);
+    const userLpAta = getATAAddress(lpMint, userPubkey);
     
+    const obsSeed = new Uint8Array([111, 98, 115, 101, 114, 118, 97, 116, 105, 111, 110]);
+    const [observationState] = web3.PublicKey.findProgramAddressSync(
+      [obsSeed, poolState.toBytes()],
+      cpmmProgram
+    );
+
     const transaction = new web3.Transaction();
+    
+    // 🌟 [إصلاح Buffer]: إنشاء البيانات للسحب بنقاء بدون Buffer
+    const withdrawData = new Uint8Array(9);
+    withdrawData[0] = 3; // instruction discriminator (0x03)
+    const withdrawView = new DataView(withdrawData.buffer);
+    withdrawView.setBigUint64(1, BigInt(Math.floor(lpAmount * 1e9)), true);
     
     const withdrawIx = new web3.TransactionInstruction({
       programId: cpmmProgram,
@@ -215,8 +240,9 @@ export async function withdrawLiquidity(lpAmount) {
         { pubkey: userUsdtAta, isSigner: false, isWritable: true },
         { pubkey: lpMint, isSigner: false, isWritable: true },
         { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: observationState, isSigner: false, isWritable: false },
       ],
-      data: Buffer.from([0x03, ...new Uint8Array(new BigUint64Array([BigInt(Math.floor(lpAmount * 1e9))]).buffer)]),
+      data: withdrawData,
     });
     
     transaction.add(withdrawIx);

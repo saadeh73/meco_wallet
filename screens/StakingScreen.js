@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
-  Image
+  Image, Modal, FlatList
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +16,10 @@ import {
   withdrawLiquidity
 } from '../services/stakingService';
 import * as SwapAPI from '../services/swapService';
+// ✅ جديد: استيراد خدمة السوق للحصول على سعر MECO الحقيقي
+import { getJupiterMarketData } from '../services/jupiterMarketService';
+
+const SLIPPAGE_OPTIONS = [0.5, 1.0, 3.0];
 
 export default function StakingScreen() {
   const navigation = useNavigation();
@@ -31,7 +35,7 @@ export default function StakingScreen() {
     textSecondary: isDark ? '#A0A0B0' : '#6B7280',
     border: isDark ? '#2A2A3E' : '#E5E7EB',
     success: '#10B981',
-    error: '#EF4444',
+    error: '#10B981', // تم تغييره ليتناسب مع الثيم
     warning: '#F59E0B',
   };
 
@@ -48,55 +52,60 @@ export default function StakingScreen() {
   const [error, setError] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [estimatedReceive, setEstimatedReceive] = useState({ meco: 0, usdt: 0 });
+  
+  // ✅ جديد: حالات slippage وسعر MECO
+  const [slippageBps, setSlippageBps] = useState(100); // افتراضي 1%
+  const [showSlippageModal, setShowSlippageModal] = useState(false);
+  const [mecoPrice, setMecoPrice] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsOffline(!state.isConnected);
-    });
+    const unsubscribe = NetInfo.addEventListener(state => setIsOffline(!state.isConnected));
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     loadData();
+    fetchMecoPrice();
   }, []);
+
+  const fetchMecoPrice = async () => {
+    try {
+      const marketData = await getJupiterMarketData();
+      const meco = marketData.find(t => t.symbol === 'MECO');
+      if (meco) setMecoPrice(meco.current_price);
+    } catch (e) {
+      console.warn('Failed to fetch MECO price');
+    }
+  };
 
   const loadData = async () => {
     setLoadingData(true);
     setError('');
     try {
-      console.log('🔄 [StakingScreen] بدء تحميل البيانات...');
-      
       const [pool, lpBal, mecoBal, usdtBal] = await Promise.all([
-        getPoolInfo().catch(err => {
-          console.warn('⚠️ [StakingScreen] فشل getPoolInfo:', err);
-          return { apy: 0, mecoReserve: 0, usdtReserve: 0, totalLiquidity: 0 };
-        }),
+        getPoolInfo(),
         getUserLPBalance(),
-        SwapAPI.checkBalance('MECO', 0).catch(err => {
-          console.warn('⚠️ [StakingScreen] فشل checkBalance MECO:', err);
-          return { balance: 0 };
-        }),
-        SwapAPI.checkBalance('USDT', 0).catch(err => {
-          console.warn('⚠️ [StakingScreen] فشل checkBalance USDT:', err);
-          return { balance: 0 };
-        }),
+        SwapAPI.checkBalance('MECO', 0),
+        SwapAPI.checkBalance('USDT', 0),
       ]);
-      
-      console.log('📊 [StakingScreen] Pool Info:', pool);
-      console.log('📊 [StakingScreen] LP Balance:', lpBal);
-      console.log('📊 [StakingScreen] MECO Balance:', mecoBal.balance);
-      console.log('📊 [StakingScreen] USDT Balance:', usdtBal.balance);
-      
       setPoolInfo(pool);
       setLpBalance(lpBal);
       setMecoBalance(mecoBal.balance || 0);
       setUsdtBalance(usdtBal.balance || 0);
-      setError('');
     } catch (err) {
-      console.error('❌ [StakingScreen] فشل تحميل البيانات:', err);
       setError(t('staking.load_error'));
     } finally {
       setLoadingData(false);
+    }
+  };
+
+  // ✅ جديد: حساب USDT تلقائيًا عند تغيير MECO
+  const handleMecoChange = (value) => {
+    setMecoAmount(value);
+    const meco = parseFloat(value) || 0;
+    if (mecoPrice > 0) {
+      const usdtValue = meco * mecoPrice;
+      setUsdtAmount(usdtValue.toFixed(6));
     }
   };
 
@@ -104,9 +113,10 @@ export default function StakingScreen() {
     if (activeTab === 'unstake' && poolInfo && lpBalance > 0) {
       const lpValue = parseFloat(lpAmount) || 0;
       const share = lpValue / lpBalance;
-      const mecoShare = (poolInfo.mecoReserve || 0) * share;
-      const usdtShare = (poolInfo.usdtReserve || 0) * share;
-      setEstimatedReceive({ meco: mecoShare, usdt: usdtShare });
+      setEstimatedReceive({
+        meco: (poolInfo.mecoReserve || 0) * share,
+        usdt: (poolInfo.usdtReserve || 0) * share,
+      });
     }
   }, [lpAmount, poolInfo, lpBalance, activeTab]);
 
@@ -124,16 +134,16 @@ export default function StakingScreen() {
 
     Alert.alert(
       t('staking.confirm_stake'),
-      `${mecoVal} MECO + ${usdtVal} USDT`,
+      `${mecoVal} MECO + ${usdtVal} USDT (Slippage: ${slippageBps / 100}%)`,
       [
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('confirm'),
           onPress: async () => {
             setLoading(true);
-            setError('');
             try {
-              const result = await depositLiquidity(mecoVal, usdtVal);
+              // ✅ تمرير slippageBps إلى دالة الإيداع
+              const result = await depositLiquidity(mecoVal, usdtVal, slippageBps);
               if (result.success) {
                 Alert.alert(t('success'), t('staking.stake_success'), [
                   { text: t('ok'), onPress: () => { setMecoAmount(''); setUsdtAmount(''); loadData(); } }
@@ -172,7 +182,6 @@ export default function StakingScreen() {
           text: t('confirm'),
           onPress: async () => {
             setLoading(true);
-            setError('');
             try {
               const result = await withdrawLiquidity(lpVal);
               if (result.success) {
@@ -193,19 +202,14 @@ export default function StakingScreen() {
     );
   };
 
-  const useMaxMeco = () => setMecoAmount(mecoBalance.toString());
+  const useMaxMeco = () => {
+    setMecoAmount(mecoBalance.toString());
+    if (mecoPrice > 0) {
+      setUsdtAmount((mecoBalance * mecoPrice).toFixed(6));
+    }
+  };
   const useMaxUsdt = () => setUsdtAmount(usdtBalance.toString());
   const useMaxLp = () => setLpAmount(lpBalance.toString());
-
-  const renderError = () => {
-    if (!error) return null;
-    return (
-      <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
-        <Ionicons name="warning" size={20} color={colors.error} />
-        <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
-      </View>
-    );
-  };
 
   if (loadingData) {
     return (
@@ -217,7 +221,7 @@ export default function StakingScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
@@ -231,6 +235,21 @@ export default function StakingScreen() {
             <Text style={[styles.offlineText, { color: colors.warning }]}>{t('offline_mode')}</Text>
           </View>
         )}
+
+        {/* ✅ جديد: عرض سعر MECO الحالي */}
+        <View style={[styles.priceCard, { backgroundColor: colors.card }]}>
+          <Text style={{ color: colors.textSecondary }}>MECO Price:</Text>
+          <Text style={{ color: colors.text, fontWeight: 'bold' }}>${mecoPrice.toFixed(8)}</Text>
+        </View>
+
+        {/* ✅ جديد: زر اختيار slippage */}
+        <TouchableOpacity
+          style={[styles.slippageButton, { backgroundColor: colors.card }]}
+          onPress={() => setShowSlippageModal(true)}
+        >
+          <Text style={{ color: colors.text }}>Slippage Tolerance: {slippageBps / 100}%</Text>
+          <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+        </TouchableOpacity>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.poolHeader}>
@@ -283,7 +302,7 @@ export default function StakingScreen() {
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={mecoAmount}
-                onChangeText={setMecoAmount}
+                onChangeText={handleMecoChange} // ✅ استخدام الدالة الجديدة
               />
               <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
                 {t('balance')}: {mecoBalance.toFixed(4)} MECO
@@ -292,7 +311,7 @@ export default function StakingScreen() {
 
             <View style={styles.inputGroup}>
               <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>USDT</Text>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>USDT (Auto-calculated)</Text>
                 <TouchableOpacity onPress={useMaxUsdt}>
                   <Text style={[styles.maxButton, { color: primaryColor }]}>{t('max')}</Text>
                 </TouchableOpacity>
@@ -304,6 +323,7 @@ export default function StakingScreen() {
                 keyboardType="numeric"
                 value={usdtAmount}
                 onChangeText={setUsdtAmount}
+                editable={false} // ✅ جعله للقراءة فقط لأنه يحسب تلقائيًا
               />
               <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
                 {t('balance')}: {usdtBalance.toFixed(4)} USDT
@@ -362,7 +382,36 @@ export default function StakingScreen() {
           </View>
         )}
 
-        {renderError()}
+        {error ? (
+          <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
+            <Ionicons name="warning" size={20} color={colors.error} />
+            <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
+          </View>
+        ) : null}
+
+        {/* ✅ مودال اختيار slippage */}
+        <Modal visible={showSlippageModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Select Slippage Tolerance</Text>
+              {SLIPPAGE_OPTIONS.map(opt => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.slippageOption, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setSlippageBps(Math.floor(opt * 100));
+                    setShowSlippageModal(false);
+                  }}
+                >
+                  <Text style={{ color: colors.text }}>{opt}%</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.modalClose} onPress={() => setShowSlippageModal(false)}>
+                <Text style={{ color: primaryColor }}>{t('close')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -402,4 +451,12 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: 14 },
   offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 15, gap: 8 },
   offlineText: { fontSize: 14, fontWeight: '500' },
+  // ✅ أنماط جديدة
+  priceCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderRadius: 12, marginBottom: 12 },
+  slippageButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '80%', borderRadius: 20, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  slippageOption: { paddingVertical: 14, borderBottomWidth: 1 },
+  modalClose: { marginTop: 16, alignItems: 'center', padding: 10 },
 });
