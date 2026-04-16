@@ -2,21 +2,21 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
-  Image, Modal, FlatList
+  Image, Modal
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
 import {
   getPoolInfo,
   getUserLPBalance,
-  depositLiquidity,
+  depositLiquidity, // الدالة المعدلة تستقبل (privateKey, mecoAmount, usdtAmount)
   withdrawLiquidity
 } from '../services/stakingService';
 import * as SwapAPI from '../services/swapService';
-// ✅ جديد: استيراد خدمة السوق للحصول على سعر MECO الحقيقي
 import { getJupiterMarketData } from '../services/jupiterMarketService';
 
 const SLIPPAGE_OPTIONS = [0.5, 1.0, 3.0];
@@ -35,7 +35,7 @@ export default function StakingScreen() {
     textSecondary: isDark ? '#A0A0B0' : '#6B7280',
     border: isDark ? '#2A2A3E' : '#E5E7EB',
     success: '#10B981',
-    error: '#10B981', // تم تغييره ليتناسب مع الثيم
+    error: '#EF4444',
     warning: '#F59E0B',
   };
 
@@ -52,9 +52,8 @@ export default function StakingScreen() {
   const [error, setError] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [estimatedReceive, setEstimatedReceive] = useState({ meco: 0, usdt: 0 });
-  
-  // ✅ جديد: حالات slippage وسعر MECO
-  const [slippageBps, setSlippageBps] = useState(100); // افتراضي 1%
+
+  const [slippageBps, setSlippageBps] = useState(100);
   const [showSlippageModal, setShowSlippageModal] = useState(false);
   const [mecoPrice, setMecoPrice] = useState(0);
 
@@ -99,7 +98,6 @@ export default function StakingScreen() {
     }
   };
 
-  // ✅ جديد: حساب USDT تلقائيًا عند تغيير MECO
   const handleMecoChange = (value) => {
     setMecoAmount(value);
     const meco = parseFloat(value) || 0;
@@ -132,9 +130,16 @@ export default function StakingScreen() {
       return;
     }
 
+    // ✅ الحصول على المفتاح الخاص من SecureStore
+    const privateKey = await SecureStore.getItemAsync('wallet_private_key');
+    if (!privateKey) {
+      Alert.alert(t('error'), 'لم يتم العثور على المفتاح الخاص للمحفظة');
+      return;
+    }
+
     Alert.alert(
       t('staking.confirm_stake'),
-      `${mecoVal} MECO + ${usdtVal} USDT (Slippage: ${slippageBps / 100}%)`,
+      `${mecoVal} MECO + ${usdtVal} USDT`,
       [
         { text: t('cancel'), style: 'cancel' },
         {
@@ -142,8 +147,8 @@ export default function StakingScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              // ✅ تمرير slippageBps إلى دالة الإيداع
-              const result = await depositLiquidity(mecoVal, usdtVal, slippageBps);
+              // ✅ تمرير المفتاح الخاص كأول معامل
+              const result = await depositLiquidity(privateKey, mecoVal, usdtVal);
               if (result.success) {
                 Alert.alert(t('success'), t('staking.stake_success'), [
                   { text: t('ok'), onPress: () => { setMecoAmount(''); setUsdtAmount(''); loadData(); } }
@@ -236,13 +241,11 @@ export default function StakingScreen() {
           </View>
         )}
 
-        {/* ✅ جديد: عرض سعر MECO الحالي */}
         <View style={[styles.priceCard, { backgroundColor: colors.card }]}>
           <Text style={{ color: colors.textSecondary }}>MECO Price:</Text>
           <Text style={{ color: colors.text, fontWeight: 'bold' }}>${mecoPrice.toFixed(8)}</Text>
         </View>
 
-        {/* ✅ جديد: زر اختيار slippage */}
         <TouchableOpacity
           style={[styles.slippageButton, { backgroundColor: colors.card }]}
           onPress={() => setShowSlippageModal(true)}
@@ -302,7 +305,7 @@ export default function StakingScreen() {
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={mecoAmount}
-                onChangeText={handleMecoChange} // ✅ استخدام الدالة الجديدة
+                onChangeText={handleMecoChange}
               />
               <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
                 {t('balance')}: {mecoBalance.toFixed(4)} MECO
@@ -311,7 +314,7 @@ export default function StakingScreen() {
 
             <View style={styles.inputGroup}>
               <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>USDT (Auto-calculated)</Text>
+                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>USDT (Auto)</Text>
                 <TouchableOpacity onPress={useMaxUsdt}>
                   <Text style={[styles.maxButton, { color: primaryColor }]}>{t('max')}</Text>
                 </TouchableOpacity>
@@ -323,7 +326,7 @@ export default function StakingScreen() {
                 keyboardType="numeric"
                 value={usdtAmount}
                 onChangeText={setUsdtAmount}
-                editable={false} // ✅ جعله للقراءة فقط لأنه يحسب تلقائيًا
+                editable={false}
               />
               <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
                 {t('balance')}: {usdtBalance.toFixed(4)} USDT
@@ -389,7 +392,6 @@ export default function StakingScreen() {
           </View>
         ) : null}
 
-        {/* ✅ مودال اختيار slippage */}
         <Modal visible={showSlippageModal} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
@@ -451,7 +453,6 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: 14 },
   offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 15, gap: 8 },
   offlineText: { fontSize: 14, fontWeight: '500' },
-  // ✅ أنماط جديدة
   priceCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderRadius: 12, marginBottom: 12 },
   slippageButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
