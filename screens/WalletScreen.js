@@ -14,9 +14,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { getSolBalance, getTokenAccounts, getTokenMarketPrice } from '../services/heliusService';
 
-// ✅ 1. استيراد قائمة العملات المركزية
+// ✅ استيراد قائمة العملات المركزية
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 import { web3wallet } from '../services/walletConnectService';
+
+// ✅ استيراد دوال المجمع و web3
+import { getPoolInfo } from '../services/stakingService';
+import * as web3 from '@solana/web3.js';
+import * as splToken from '@solana/spl-token';
 
 const { width } = Dimensions.get('window');
 
@@ -113,6 +118,22 @@ export default function WalletScreen() {
         if (getTokenAccounts) tokenAccounts = await getTokenAccounts();
       } catch (e) { console.warn('Token fetch error', e); }
 
+      // ✅ جلب معلومات المجمع وسعر MECO لحساب قيمة LP
+      let lpPriceUSD = 0;
+      let mecoPrice = 0;
+      try {
+        const poolInfo = await getPoolInfo();
+        mecoPrice = await getTokenMarketPrice('MECO');
+        const totalPoolValueUSD = (poolInfo.mecoReserve * mecoPrice) + poolInfo.usdtReserve;
+        const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
+        const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+        const lpMintInfo = await splToken.getMint(connection, new web3.PublicKey(LP_MINT));
+        const lpSupply = Number(lpMintInfo.supply) / 1e9;
+        lpPriceUSD = totalPoolValueUSD / lpSupply;
+      } catch (e) {
+        console.warn('Failed to calculate LP price:', e);
+      }
+
       let calculatedTotalUSD = 0;
 
       // ✅ 2. استخدام CORE_TOKENS، وحساب الأرصدة، ثم الفلترة الذكية
@@ -127,11 +148,15 @@ export default function WalletScreen() {
         }
 
         let price = 0;
-        try {
-          if (getTokenMarketPrice) {
-            price = await getTokenMarketPrice(asset.symbol);
-          }
-        } catch (e) { console.warn(`Price fetch error for ${asset.symbol}`, e); }
+        if (asset.symbol === 'MECO-USDT LP') {
+          price = lpPriceUSD;
+        } else {
+          try {
+            if (getTokenMarketPrice) {
+              price = await getTokenMarketPrice(asset.symbol);
+            }
+          } catch (e) { console.warn(`Price fetch error for ${asset.symbol}`, e); }
+        }
 
         const valueUSD = amount * price;
         calculatedTotalUSD += valueUSD;
