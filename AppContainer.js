@@ -29,7 +29,8 @@ import SendScreen from './screens/SendScreen';
 import BackupScreen from './screens/BackupScreen';
 import TransactionHistoryScreen from './screens/TransactionHistoryScreen';
 import MarketScreen from './screens/MarketScreen';
-import MecoWorldScreen from './screens/MecoWorldScreen';
+// ✅ تم استبدال MecoWorldScreen بـ AppPortalScreen
+import AppPortalScreen from './screens/AppPortalScreen';
 import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
@@ -59,8 +60,9 @@ function BottomTabs() {
             iconName = focused ? 'wallet' : 'wallet-outline';
           } else if (route.name === 'Market') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
-          } else if (route.name === 'MecoWorld') {
-            iconName = focused ? 'globe' : 'globe-outline';
+          } else if (route.name === 'AppPortal') {
+            // ✅ أيقونة جديدة لبوابة التطبيقات
+            iconName = focused ? 'compass' : 'compass-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -90,7 +92,8 @@ function BottomTabs() {
     >
       <Tab.Screen name="Wallet" component={WalletScreen} options={{ tabBarLabel: t('wallet') }} />
       <Tab.Screen name="Market" component={MarketScreen} options={{ tabBarLabel: t('market') }} />
-      <Tab.Screen name="MecoWorld" component={MecoWorldScreen} options={{ tabBarLabel: t('meco_world') || 'Meco World' }} />
+      {/* ✅ تم استبدال MecoWorld بـ AppPortal مع مفتاح الترجمة explore */}
+      <Tab.Screen name="AppPortal" component={AppPortalScreen} options={{ tabBarLabel: t('explore') || 'استكشف' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: t('user_settings') }} />
     </Tab.Navigator>
   );
@@ -232,7 +235,8 @@ export default function AppContainer() {
         <Stack.Screen name="TokenDetails" component={TokenDetailsScreen} options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: t('qr_scanner.title'), headerBackTitle: t('back'), headerShown: false }} />
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
-        <Stack.Screen name="MecoWorld" component={MecoWorldScreen} options={{ title: t('meco_world') || 'Meco World' }} />
+        {/* ✅ تم استبدال MecoWorld بـ AppPortal */}
+        <Stack.Screen name="AppPortal" component={AppPortalScreen} options={{ title: t('explore') || 'استكشف' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

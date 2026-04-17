@@ -51,6 +51,9 @@ const resources = {
       version: 'الإصدار',
       swap_title: 'تبادل',
 
+      // ✅ مفتاح بوابة التطبيقات الجديد
+      explore: 'استكشف',
+
       // ========== مفاتيح Web3 (WalletConnect) ==========
       web3: {
         disconnect_success: 'تم قطع الاتصال بنجاح.',
@@ -273,7 +276,6 @@ const resources = {
       wallet_address: "عنوان المحفظة",
       share_message_with_address: "عنوان محفظتي على سولانا: {{address}}\n\nيمكنك إرسال أي عملة رقمية إليها.",
 
-      
 
       // ========== SwapScreen.js ==========
       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
@@ -452,6 +454,9 @@ const resources = {
       back: 'Back',
       version: 'Version',
       swap_title: 'Swap',
+
+      // ✅ New App Portal key
+      explore: 'Explore',
 
       // ========== Web3 (WalletConnect) keys ==========
       web3: {
@@ -675,7 +680,6 @@ const resources = {
       wallet_address: "Wallet Address",
       share_message_with_address: "My Solana wallet address: {{address}}\n\nYou can send any cryptocurrency to it.",
 
-      
 
       // ========== SwapScreen.js ==========
       swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',

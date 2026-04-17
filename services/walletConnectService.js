@@ -20,12 +20,13 @@ export async function initWalletConnect() {
     });
 
     const metadata = {
-      name: 'meco wallet',
+      name: 'MECO Wallet', // ✅ تم التصحيح
       description: 'The First Arab Crypto Wallet on Solana',
-      url: 'https://monycoin.github.io/meco-token/',
+      url: 'https://monycoin.github.io/meco_wallet-app/', // ✅ تم التصحيح
       icons: ['https://raw.githubusercontent.com/MonyCoin/meco_wallet/refs/heads/main/assets/logo.png'],
       redirect: {
-        native: 'meco-wallet://', // ✅ تم التصحيح ليطابق scheme الفعلي
+        native: 'meco-wallet://',
+        universal: 'https://monycoin.github.io/meco_wallet-app/', // ✅ أضفنا universal
       },
     };
 
