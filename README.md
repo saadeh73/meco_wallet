@@ -83,13 +83,6 @@
 
 ---
 
-**WalletConnect Verification:** 
-This repository and the `MonyCoin` organization are officially owned by Mohamed Saadeh.
-- **Founder Email:** saadeh7380@gmail.com
-- **Official Submission Email:** mecowallet@gmail.com
-- **WalletConnect Project ID:** [21dc279d9fb09e92a14421d4a189efec]
-
----
 
 ## 📡 **معلومات الشبكة (Network Info)**
 

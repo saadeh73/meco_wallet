@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 const resources = {
   ar: {
     translation: {
-      // ========== Staking Keys (جديد) ==========
+      // ========== Staking Keys ==========
       staking: {
         title: 'تخزين السيولة',
         subtitle: 'أودع MECO و USDT لكسب عوائد من رسوم التبادل',
@@ -39,22 +39,42 @@ const resources = {
       copied: "تم النسخ",
       cancel: "إلغاء",
       save: "حفظ",
+      confirm: "تأكيد",
+      delete: "حذف",
+      close: "إغلاق",
+      max: "أقصى",
+      back: "رجوع",
+      version: 'الإصدار',
+      loading: 'جارٍ التحميل...',
+      ok: 'موافق',
       light: "فاتح",
       dark: "غامق",
-      loading: 'جارٍ التحميل...',
       wallet: 'المحفظة',
       market: 'السوق',
       user_settings: 'إعدادات المستخدم',
-      presale: "البيع المسبق",
-      ok: 'موافق',
-      back: 'رجوع',
-      version: 'الإصدار',
       swap_title: 'تبادل',
-
-      // ✅ مفتاح بوابة التطبيقات الجديد
       explore: 'استكشف',
+      earn: 'اكتسب',
 
-      // ========== مفاتيح Web3 (WalletConnect) ==========
+      // ========== جهات الاتصال (Contacts) ==========
+      contacts: 'جهات الاتصال',
+      add_contact: 'إضافة جهة اتصال',
+      edit_contact: 'تعديل جهة الاتصال',
+      delete_contact: 'حذف جهة الاتصال',
+      delete_contact_confirmation: 'هل أنت متأكد من حذف "{{name}}" من جهات الاتصال؟',
+      search_contacts: 'بحث في جهات الاتصال...',
+      contact_name: 'الاسم',
+      contact_address: 'العنوان (Solana)',
+      contact_name_placeholder: 'أدخل اسمًا مميزًا',
+      contact_address_placeholder: 'أدخل عنوان Solana',
+      contact_name_required: 'الرجاء إدخال اسم جهة الاتصال',
+      contact_address_required: 'الرجاء إدخال عنوان المحفظة',
+      invalid_solana_address: 'عنوان Solana غير صالح',
+      no_contacts_yet: 'لا توجد جهات اتصال محفوظة بعد',
+      no_contacts_found: 'لا توجد نتائج تطابق البحث',
+      add_first_contact: 'إضافة أول جهة اتصال',
+
+      // ========== Web3 (WalletConnect) ==========
       web3: {
         disconnect_success: 'تم قطع الاتصال بنجاح.',
         connected_apps: 'التطبيقات المتصلة',
@@ -63,7 +83,6 @@ const resources = {
         connect_new_dapp: 'ربط تطبيق جديد',
       },
 
-      // ========== مفاتيح WalletConnect للرسائل ==========
       walletConnect: {
         connection_request: 'طلب اتصال 🔗',
         connection_request_message: 'يرغب موقع "{{name}}" ({{url}}) في الاتصال بمحفظتك (Solana).',
@@ -78,14 +97,14 @@ const resources = {
         connection_failed: 'فشل الاتصال',
       },
 
-      // ========== HomeScreen.js ==========
+      // ========== HomeScreen ==========
       first_arab_wallet: 'أول محفظة عملات رقمية عربية',
       secure_and_encrypted: 'آمن ومشفر',
       fast_transactions: 'معاملات سريعة',
       multi_language_support: 'دعم متعدد اللغات',
       choose_language: 'اختر اللغة',
 
-      // ========== WalletScreen.js ==========
+      // ========== WalletScreen ==========
       my_wallet: 'محفظتي',
       total_balance: 'إجمالي الرصيد',
       copy_address: 'نسخ العنوان',
@@ -96,7 +115,7 @@ const resources = {
       market_all_coins: 'جميع العملات',
       loading_market_data: 'جاري تحميل بيانات السوق...',
 
-      // ========== MarketScreen.js ==========
+      // ========== MarketScreen ==========
       market_title: "سوق العملات",
       market_subtitle: "أسعار حقيقية • تحديث مباشر",
       market_track_prices: "تتبع الأسعار والعملات",
@@ -118,7 +137,7 @@ const resources = {
       market_unavailable: "غير متاح",
       market_balance: "رصيد",
 
-      // ========== TokenDetailsScreen.js ==========
+      // ========== TokenDetailsScreen ==========
       token_details: 'تفاصيل العملة',
       market_cap: 'القيمة السوقية',
       volume_24h: 'حجم التداول (24h)',
@@ -139,7 +158,7 @@ const resources = {
       explorer: 'المستكشف',
       meco_description: 'MECO هي عملة رقمية مبنية على شبكة سولانا، مصممة للمدفوعات الصغيرة السريعة والآمنة ومنخفضة التكلفة.',
 
-      // ========== SettingsScreen.js ==========
+      // ========== SettingsScreen ==========
       settings: 'الإعدادات',
       manage_your_wallet_preferences: 'إدارة تفضيلات محفظتك',
       wallet_settings: 'إعدادات المحفظة',
@@ -178,10 +197,8 @@ const resources = {
       logout_failed: 'فشل تسجيل الخروج',
       choose_accent_color: 'اختر لون التمييز',
       color_change_applies_immediately: 'سيطبق تغيير اللون فوراً',
-      close: 'إغلاق',
       secure_crypto_wallet_description: 'محفظة تشفير آمنة مصممة للعملات الرقمية مع دعم متعدد اللغات وميزات أمان متقدمة.',
 
-      // ========== Safety Keys ==========
       safety: 'الأمان',
       show_recovery_phrase: 'عرض عبارة الاسترداد',
       view_your_secret_phrase: 'اعرض عبارتك السرية للنسخ أو الحفظ',
@@ -189,14 +206,13 @@ const resources = {
       phrase_copied: 'تم نسخ العبارة السرية',
       warning_phrase: '⚠️ لا تشارك هذه العبارة مع أي شخص. يمكن لأي شخص يملكها الوصول إلى أموالك.',
       copy: 'نسخ',
-
       change_language: "تغيير اللغة",
       toggle_theme: "تبديل النمط",
       biometric: "المصادقة الحيوية",
       language: "اللغة",
       logout: "تسجيل الخروج",
 
-      // ========== SendScreen.js ==========
+      // ========== SendScreen ==========
       sendScreen: {
         title: "إرسال",
         subtitle: "تحويل إلى محفظة أخرى",
@@ -254,11 +270,15 @@ const resources = {
           transactionHash: "🔗",
           done: "تم",
           sendFailed: "فشل الإرسال",
-          unexpectedError: "حدث خطأ غير متوقع"
+          unexpectedError: "حدث خطأ غير متوقع",
+          privateKeyNotFound: "لم يتم العثور على المفتاح الخاص بالمحفظة"
+        },
+        errors: {
+          privateKeyNotFound: "لم يتم العثور على المفتاح الخاص بالمحفظة"
         }
       },
 
-      // ========== ReceiveScreen.js ==========
+      // ========== ReceiveScreen ==========
       receive_crypto: "استلام عملة",
       your_address: "عنوانك",
       share_address: "شارك العنوان",
@@ -270,14 +290,13 @@ const resources = {
       security_tips: "نصائح أمنية",
       tip1: "شارك هذا العنوان فقط مع أشخاص تثق بهم",
       tip2: "يمكن استلام أي عملة على شبكة سولانا",
-      tip3: "تأكيد من صحة العنوان قبل الإرسال",
+      tip3: "تأكد من صحة العنوان قبل الإرسال",
       transaction_time_note: "المعاملات تستغرق عادةً بضع ثوانٍ على شبكة سولانا",
       copy_failed: "فشل نسخ العنوان",
       wallet_address: "عنوان المحفظة",
       share_message_with_address: "عنوان محفظتي على سولانا: {{address}}\n\nيمكنك إرسال أي عملة رقمية إليها.",
 
-
-      // ========== SwapScreen.js ==========
+      // ========== SwapScreen ==========
       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
       swap_from: 'من',
       swap_max: 'أقصى',
@@ -293,8 +312,11 @@ const resources = {
       swap_error: 'فشل في الحصول على السعر',
       select_token: 'اختر العملة',
       view_on_solscan: 'عرض على Solscan',
+      network_error: 'لا يوجد اتصال بالإنترنت',
+      offline_mode: 'أنت غير متصل بالإنترنت',
+      meco_sell_disabled: 'عذراً، بيع MECO غير متاح حالياً. يمكنك شراؤها فقط.',
 
-      // ========== TransactionHistoryScreen.js ==========
+      // ========== TransactionHistoryScreen ==========
       all: 'الكل',
       fee: 'الرسوم',
       fees: 'الرسوم',
@@ -334,7 +356,7 @@ const resources = {
       cannot_open_link: 'لا يمكن فتح الرابط',
       unexpected_error: 'حدث خطأ غير متوقع',
 
-      // ========== BackupScreen.js ==========
+      // ========== BackupScreen ==========
       backup_wallet: "نسخ احتياطي للمحفظة",
       backup_phrase: "نسخة احتياطية للمفاتيح",
       security_phrase: "العبارة الأمنية",
@@ -342,7 +364,7 @@ const resources = {
       wallet_created: "تم إنشاء المحفظة",
       keep_secret: "احفظ هذه المعلومات في مكان آمن",
 
-      // ========== CreateWalletScreen.js و ImportWalletScreen.js ==========
+      // ========== CreateWalletScreen & ImportWalletScreen ==========
       fill_fields: "يرجى ملء جميع الحقول",
       confirm_send: "تأكيد الإرسال",
       create_wallet_failed: 'فشل في إنشاء المحفظة',
@@ -374,7 +396,7 @@ const resources = {
       biometric_failed: 'فشل التحقق بالبصمة',
       biometric_error: 'حدث خطأ في التحقق بالبصمة',
 
-      // ========== QRScannerScreen.js ==========
+      // ========== QRScannerScreen ==========
       qr_scanner: {
         title: 'مسح QR',
         requesting: 'جاري طلب إذن الكاميرا...',
@@ -388,28 +410,11 @@ const resources = {
         invalid_address: 'هذا الرمز لا يحتوي على عنوان محفظة صالح',
         rescan: 'مسح مرة أخرى',
       },
-
-      // ========== Meco World ==========
-      meco_world: 'عالم ميكو',
-      mecoWorld: {
-        tab_title: "عالم ميكو",
-        banner_title: "مؤسسة MonyCoin للتطوير",
-        banner_desc: "تعرف على سعر MECO الحالي، وقم بالشراء والمبادلة فوراً عبر Jupiter.",
-        buy_on_jupiter: "شراء ومبادلة MECO 🪐",
-        community: "انضم للمجتمع",
-        desc_twitter: "تابع آخر الأخبار والتحديثات",
-        desc_telegram: "تواصل مع المجتمع والدعم الفني",
-        desc_github: "استكشف الكود المصدري المفتوح",
-        desc_website: "الموقع الرسمي للمشروع",
-        transparency: "الشفافية والثقة",
-        solscan_title: "محفظة البيع المسبق",
-        solscan_desc: "تتبع جميع المعاملات بشفافية تامة على البلوكتشين."
-      }
     }
   },
   en: {
     translation: {
-      // ========== Staking Keys (New) ==========
+      // ========== Staking Keys ==========
       staking: {
         title: 'Stake Liquidity',
         subtitle: 'Deposit MECO and USDT to earn fees from trades',
@@ -443,20 +448,40 @@ const resources = {
       copied: "Copied",
       cancel: "Cancel",
       save: "Save",
+      confirm: "Confirm",
+      delete: "Delete",
+      close: "Close",
+      max: "MAX",
+      back: "Back",
+      version: 'Version',
+      loading: 'Loading...',
+      ok: 'OK',
       light: "Light",
       dark: "Dark",
-      loading: 'Loading...',
       wallet: 'Wallet',
       market: 'Market',
       user_settings: 'User Settings',
-      presale: "Presale",
-      ok: 'OK',
-      back: 'Back',
-      version: 'Version',
       swap_title: 'Swap',
-
-      // ✅ New App Portal key
       explore: 'Explore',
+      earn: 'Earn',
+
+      // ========== Contacts ==========
+      contacts: 'Contacts',
+      add_contact: 'Add Contact',
+      edit_contact: 'Edit Contact',
+      delete_contact: 'Delete Contact',
+      delete_contact_confirmation: 'Are you sure you want to delete "{{name}}" from contacts?',
+      search_contacts: 'Search contacts...',
+      contact_name: 'Name',
+      contact_address: 'Address (Solana)',
+      contact_name_placeholder: 'Enter a memorable name',
+      contact_address_placeholder: 'Enter Solana address',
+      contact_name_required: 'Please enter a contact name',
+      contact_address_required: 'Please enter a wallet address',
+      invalid_solana_address: 'Invalid Solana address',
+      no_contacts_yet: 'No contacts saved yet',
+      no_contacts_found: 'No matching contacts found',
+      add_first_contact: 'Add First Contact',
 
       // ========== Web3 (WalletConnect) keys ==========
       web3: {
@@ -467,7 +492,6 @@ const resources = {
         connect_new_dapp: 'Connect New DApp',
       },
 
-      // ========== WalletConnect alert messages ==========
       walletConnect: {
         connection_request: 'Connection Request 🔗',
         connection_request_message: 'Website "{{name}}" ({{url}}) wants to connect to your wallet (Solana).',
@@ -482,14 +506,14 @@ const resources = {
         connection_failed: 'Connection failed',
       },
 
-      // ========== HomeScreen.js ==========
+      // ========== HomeScreen ==========
       first_arab_wallet: 'The first Arabic cryptocurrency wallet',
       secure_and_encrypted: 'Secure and encrypted',
       fast_transactions: 'Fast transactions',
       multi_language_support: 'Multi-language support',
       choose_language: 'Choose Language',
 
-      // ========== WalletScreen.js ==========
+      // ========== WalletScreen ==========
       my_wallet: 'My Wallet',
       total_balance: 'Total Balance',
       copy_address: 'Copy Address',
@@ -500,7 +524,7 @@ const resources = {
       market_all_coins: 'All Coins',
       loading_market_data: 'Loading market data...',
 
-      // ========== MarketScreen.js ==========
+      // ========== MarketScreen ==========
       market_title: "Market",
       market_subtitle: "Real prices • Live updates",
       market_track_prices: "Track prices and tokens",
@@ -522,7 +546,7 @@ const resources = {
       market_unavailable: "Unavailable",
       market_balance: "Balance",
 
-      // ========== TokenDetailsScreen.js ==========
+      // ========== TokenDetailsScreen ==========
       token_details: 'Token Details',
       market_cap: 'Market Cap',
       volume_24h: 'Volume (24h)',
@@ -543,7 +567,7 @@ const resources = {
       explorer: 'Explorer',
       meco_description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments.',
 
-      // ========== SettingsScreen.js ==========
+      // ========== SettingsScreen ==========
       settings: 'Settings',
       manage_your_wallet_preferences: 'Manage your wallet preferences',
       wallet_settings: 'Wallet Settings',
@@ -582,10 +606,8 @@ const resources = {
       logout_failed: 'Logout failed',
       choose_accent_color: 'Choose Accent Color',
       color_change_applies_immediately: 'Color change applies immediately',
-      close: 'Close',
       secure_crypto_wallet_description: 'Secure crypto wallet designed for digital currencies with multi-language support and advanced security features.',
 
-      // ========== Safety Keys ==========
       safety: 'Safety',
       show_recovery_phrase: 'Show Recovery Phrase',
       view_your_secret_phrase: 'View your secret phrase to copy or save',
@@ -593,14 +615,13 @@ const resources = {
       phrase_copied: 'Recovery phrase copied',
       warning_phrase: '⚠️ Do not share this phrase with anyone. Anyone with it can access your funds.',
       copy: 'Copy',
-
       change_language: "Change Language",
       toggle_theme: "Toggle Theme",
       biometric: "Biometric",
       language: "Language",
       logout: "Logout",
 
-      // ========== SendScreen.js ==========
+      // ========== SendScreen ==========
       sendScreen: {
         title: "Send",
         subtitle: "Transfer to another wallet",
@@ -658,11 +679,15 @@ const resources = {
           transactionHash: "🔗",
           done: "Done",
           sendFailed: "Send failed",
-          unexpectedError: "An unexpected error occurred"
+          unexpectedError: "An unexpected error occurred",
+          privateKeyNotFound: "Private key not found"
+        },
+        errors: {
+          privateKeyNotFound: "Private key not found"
         }
       },
 
-      // ========== ReceiveScreen.js ==========
+      // ========== ReceiveScreen ==========
       receive_crypto: "Receive Crypto",
       your_address: "Your Address",
       share_address: "Share Address",
@@ -680,8 +705,7 @@ const resources = {
       wallet_address: "Wallet Address",
       share_message_with_address: "My Solana wallet address: {{address}}\n\nYou can send any cryptocurrency to it.",
 
-
-      // ========== SwapScreen.js ==========
+      // ========== SwapScreen ==========
       swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
       swap_from: 'From',
       swap_max: 'MAX',
@@ -697,8 +721,11 @@ const resources = {
       swap_error: 'Failed to get quote',
       select_token: 'Select Token',
       view_on_solscan: 'View on Solscan',
+      network_error: 'No internet connection',
+      offline_mode: 'You are offline',
+      meco_sell_disabled: 'Sorry, selling MECO is currently unavailable. You can only buy it.',
 
-      // ========== TransactionHistoryScreen.js ==========
+      // ========== TransactionHistoryScreen ==========
       all: 'All',
       fee: 'Fee',
       fees: 'Fees',
@@ -738,7 +765,7 @@ const resources = {
       cannot_open_link: 'Cannot open link',
       unexpected_error: 'Unexpected error occurred',
 
-      // ========== BackupScreen.js ==========
+      // ========== BackupScreen ==========
       backup_wallet: "Backup Wallet",
       backup_phrase: "Backup Phrase",
       security_phrase: "Security Phrase",
@@ -746,7 +773,7 @@ const resources = {
       wallet_created: "Wallet Created",
       keep_secret: "Keep this information in a safe place",
 
-      // ========== CreateWalletScreen.js & ImportWalletScreen.js ==========
+      // ========== CreateWalletScreen & ImportWalletScreen ==========
       fill_fields: "Please fill all fields",
       confirm_send: "Confirm Send",
       create_wallet_failed: 'Failed to create wallet',
@@ -778,7 +805,7 @@ const resources = {
       biometric_failed: 'Biometric verification failed',
       biometric_error: 'Error in biometric verification',
 
-      // ========== QRScannerScreen.js ==========
+      // ========== QRScannerScreen ==========
       qr_scanner: {
         title: 'QR Scanner',
         requesting: 'Requesting camera permission...',
@@ -792,23 +819,6 @@ const resources = {
         invalid_address: 'This QR does not contain a valid wallet address',
         rescan: 'Scan again',
       },
-
-      // ========== Meco World ==========
-      meco_world: 'Meco World',
-      mecoWorld: {
-        tab_title: "Meco World",
-        banner_title: "MonyCoin Foundation",
-        banner_desc: "Track MECO price, buy and swap instantly via Jupiter.",
-        buy_on_jupiter: "Buy & Swap MECO 🪐",
-        community: "Join Community",
-        desc_twitter: "Follow latest news & updates",
-        desc_telegram: "Chat with community & support",
-        desc_github: "Explore our open source code",
-        desc_website: "Official project website",
-        transparency: "Transparency & Trust",
-        solscan_title: "Presale Wallet",
-        solscan_desc: "Track all transactions transparently on the blockchain."
-      }
     }
   }
 };

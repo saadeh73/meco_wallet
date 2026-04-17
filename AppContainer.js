@@ -29,13 +29,13 @@ import SendScreen from './screens/SendScreen';
 import BackupScreen from './screens/BackupScreen';
 import TransactionHistoryScreen from './screens/TransactionHistoryScreen';
 import MarketScreen from './screens/MarketScreen';
-// ✅ تم استبدال MecoWorldScreen بـ AppPortalScreen
 import AppPortalScreen from './screens/AppPortalScreen';
 import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
-// ✅ إضافة استيراد StakingScreen
 import StakingScreen from './screens/StakingScreen';
+// ✅ استيراد شاشة جهات الاتصال
+import ContactsScreen from './screens/ContactsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -61,7 +61,6 @@ function BottomTabs() {
           } else if (route.name === 'Market') {
             iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           } else if (route.name === 'AppPortal') {
-            // ✅ أيقونة جديدة لبوابة التطبيقات
             iconName = focused ? 'compass' : 'compass-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'settings' : 'settings-outline';
@@ -92,7 +91,6 @@ function BottomTabs() {
     >
       <Tab.Screen name="Wallet" component={WalletScreen} options={{ tabBarLabel: t('wallet') }} />
       <Tab.Screen name="Market" component={MarketScreen} options={{ tabBarLabel: t('market') }} />
-      {/* ✅ تم استبدال MecoWorld بـ AppPortal مع مفتاح الترجمة explore */}
       <Tab.Screen name="AppPortal" component={AppPortalScreen} options={{ tabBarLabel: t('explore') || 'استكشف' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: t('user_settings') }} />
     </Tab.Navigator>
@@ -222,7 +220,6 @@ export default function AppContainer() {
           }}
         />
 
-        {/* ✅ إضافة شاشة Staking */}
         <Stack.Screen
           name="Staking"
           component={StakingScreen}
@@ -232,10 +229,19 @@ export default function AppContainer() {
           }}
         />
 
+        {/* ✅ شاشة جهات الاتصال الجديدة */}
+        <Stack.Screen
+          name="Contacts"
+          component={ContactsScreen}
+          options={{
+            title: t('contacts') || 'جهات الاتصال',
+            headerBackTitle: t('back') || 'رجوع',
+          }}
+        />
+
         <Stack.Screen name="TokenDetails" component={TokenDetailsScreen} options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: t('qr_scanner.title'), headerBackTitle: t('back'), headerShown: false }} />
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
-        {/* ✅ تم استبدال MecoWorld بـ AppPortal */}
         <Stack.Screen name="AppPortal" component={AppPortalScreen} options={{ title: t('explore') || 'استكشف' }} />
       </Stack.Navigator>
     </NavigationContainer>

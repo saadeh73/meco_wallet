@@ -87,11 +87,16 @@ export default function SendScreen() {
   const validationTimeoutRef = useRef(null);
 
   useEffect(() => {
+    // ✅ تم دعم كل من scannedAddress (من QR) و selectedAddress (من جهات الاتصال)
     if (route.params?.scannedAddress) {
       setState(prev => ({ ...prev, recipient: route.params.scannedAddress }));
       navigation.setParams({ scannedAddress: undefined });
     }
-  }, [route.params?.scannedAddress, navigation]);
+    if (route.params?.selectedAddress) {
+      setState(prev => ({ ...prev, recipient: route.params.selectedAddress }));
+      navigation.setParams({ selectedAddress: undefined });
+    }
+  }, [route.params?.scannedAddress, route.params?.selectedAddress, navigation]);
 
   // ✅ 2. استخدام القاموس المركزي لتحديد العملة الحالية
   const currentToken = useMemo(() => CORE_TOKENS.find(t => t.symbol === state.currency) || CORE_TOKENS[0], [state.currency]);
@@ -328,6 +333,11 @@ export default function SendScreen() {
     if (text) setState(prev => ({ ...prev, recipient: text.trim() }));
   }, []);
 
+  // ✅ فتح شاشة جهات الاتصال في وضع الاختيار
+  const openContacts = useCallback(() => {
+    navigation.navigate('Contacts', { selectMode: true });
+  }, [navigation]);
+
   useEffect(() => {
     isMounted.current = true;
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
@@ -406,6 +416,10 @@ export default function SendScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity onPress={handlePasteAddress}>
                   <Ionicons name="clipboard-outline" size={20} color={primaryColor} />
+                </TouchableOpacity>
+                {/* ✅ زر جهات الاتصال الجديد */}
+                <TouchableOpacity onPress={openContacts}>
+                  <Ionicons name="people-outline" size={20} color={primaryColor} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => navigation.navigate('QRScanner')}>
                   <Ionicons name="qr-code-outline" size={22} color={primaryColor} />
