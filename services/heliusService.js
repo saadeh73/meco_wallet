@@ -57,7 +57,7 @@ class LRUCache {
 }
 
 const CACHE = {
-  sol: { balance: 0, timestamp: 0 },
+  sol: {}, // ✅ تم تعديله ليصبح كائن فارغ يستوعب أرصدة حسابات متعددة
   tokens: new LRUCache(MAX_TOKEN_CACHE_SIZE, CACHE_DURATION),
   blockhash: null,
   blockhashTime: 0,
@@ -279,17 +279,19 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
   }
 };
 
-export async function getSolBalance(forceRefresh = false) {
+// ✅ تم إضافة معامل address مع الحفاظ على التوافقية بنسبة 100%
+export async function getSolBalance(forceRefresh = false, address = null) {
   try {
+    const pubKeyStr = address || await SecureStore.getItemAsync('wallet_public_key');
+    if (!pubKeyStr) return 0;
+
     const now = Date.now();
-    const cache = CACHE.sol;
+    if (!CACHE.sol[pubKeyStr]) CACHE.sol[pubKeyStr] = { balance: 0, timestamp: 0 };
+    const cache = CACHE.sol[pubKeyStr];
 
     if (!forceRefresh && (now - cache.timestamp) < CACHE_DURATION) {
       return cache.balance;
     }
-
-    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) return 0;
 
     const balanceLamports = await withRetry(
       () => rpcManager.execute('getBalance', new web3.PublicKey(pubKeyStr)),
@@ -297,25 +299,26 @@ export async function getSolBalance(forceRefresh = false) {
     );
 
     const balance = balanceLamports / web3.LAMPORTS_PER_SOL;
-    CACHE.sol = { balance, timestamp: now };
+    CACHE.sol[pubKeyStr] = { balance, timestamp: now };
 
     return balance;
   } catch (error) {
-    return CACHE.sol.balance || 0;
+    return CACHE.sol[address || 'default']?.balance || 0;
   }
 }
 
-export async function getTokenBalance(mintAddress, forceRefresh = false) {
+// ✅ تم إضافة معامل address وفصل الكاش لكل حساب لمنع تداخل الأرصدة
+export async function getTokenBalance(mintAddress, forceRefresh = false, address = null) {
   try {
-    const now = Date.now();
-    const cache = CACHE.tokens.get(mintAddress);
+    const pubKeyStr = address || await SecureStore.getItemAsync('wallet_public_key');
+    if (!pubKeyStr) return 0;
 
-    if (!forceRefresh && cache) {
+    const cacheKey = `${pubKeyStr}_${mintAddress}`;
+    const cache = CACHE.tokens.get(cacheKey);
+
+    if (!forceRefresh && cache !== null && cache !== undefined) {
       return cache;
     }
-
-    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) return 0;
 
     const pubKey = new web3.PublicKey(pubKeyStr);
     const mint = new web3.PublicKey(mintAddress);
@@ -324,7 +327,7 @@ export async function getTokenBalance(mintAddress, forceRefresh = false) {
     try {
       const accountInfo = await rpcManager.execute('getAccountInfo', ata);
       if (!accountInfo) {
-        CACHE.tokens.set(mintAddress, 0);
+        CACHE.tokens.set(cacheKey, 0);
         return 0;
       }
       const tokenAccount = splToken.AccountLayout.decode(accountInfo.data);
@@ -332,20 +335,22 @@ export async function getTokenBalance(mintAddress, forceRefresh = false) {
       const mintInfo = await splToken.getMint(await rpcManager.getConnection(), mint);
       const balance = Number(rawBalance) / Math.pow(10, mintInfo.decimals);
 
-      CACHE.tokens.set(mintAddress, balance);
+      CACHE.tokens.set(cacheKey, balance);
       return balance;
     } catch (ataError) {
-      CACHE.tokens.set(mintAddress, 0);
+      CACHE.tokens.set(cacheKey, 0);
       return 0;
     }
   } catch (error) {
-    return CACHE.tokens.get(mintAddress) || 0;
+    const pubKeyStr = address || '';
+    return CACHE.tokens.get(`${pubKeyStr}_${mintAddress}`) || 0;
   }
 }
 
-export async function getTokenAccounts() {
+// ✅ تم إضافة معامل address مع الحفاظ على التوافقية
+export async function getTokenAccounts(address = null) {
   try {
-    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+    const pubKeyStr = address || await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) return [];
 
     const pubKey = new web3.PublicKey(pubKeyStr);
@@ -481,7 +486,7 @@ export async function sendTokenTransaction(fromKeypair, toAddress, mintAddress, 
       { commitment: 'confirmed' }
     );
 
-    CACHE.tokens.delete(mintAddress);
+    CACHE.tokens.clear(); // تفريغ كاش العملات لضمان التحديث بعد الإرسال
     return signature;
   } catch (error) {
     throw error;
@@ -515,19 +520,19 @@ export async function heliusRpcRequest(method, params = []) {
 
 export function clearBalanceCache(mintAddress) {
   if (mintAddress) {
-    CACHE.tokens.delete(mintAddress);
+    CACHE.tokens.clear(); // تفريغ عام لتجنب مشاكل المفاتيح المركبة
   } else {
-    CACHE.sol = { balance: 0, timestamp: 0 };
+    CACHE.sol = {}; // تفريغ آمن لجميع الحسابات
     CACHE.tokens.clear();
   }
   CACHE.blockhash = null;
   CACHE.blockhashTime = 0;
 }
 
-// ✅ المحلل الذكي القديم (الذي يصطاد المستلمات بدقة ويصنف التوكنات)
-export async function getTransactionHistory(limit = 20) {
+// ✅ تم إضافة معامل address مع الحفاظ على التوافقية والمحلل الذكي
+export async function getTransactionHistory(limit = 20, address = null) {
   try {
-    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+    const pubKeyStr = address || await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) return [];
 
     const connection = await rpcManager.getConnection();

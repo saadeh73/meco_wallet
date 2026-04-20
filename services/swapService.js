@@ -75,14 +75,26 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 30000) => {
   }
 };
 
-async function getKeypair() {
-  const secretKeyStr = await SecureStore.getItemAsync('wallet_private_key');
-  if (!secretKeyStr) throw new Error('المفتاح الخاص غير موجود');
-  let secretKey = secretKeyStr.startsWith('[') ? new Uint8Array(JSON.parse(secretKeyStr)) : bs58.decode(secretKeyStr);
+// ✅ دالة مساعدة لتحويل privateKey (سواء base58 أو JSON array) إلى Keypair
+function getKeypairFromPrivateKey(privateKey) {
+  if (!privateKey) throw new Error('المفتاح الخاص غير موجود');
+  let secretKey;
+  if (privateKey.startsWith('[')) {
+    secretKey = new Uint8Array(JSON.parse(privateKey));
+  } else {
+    secretKey = bs58.decode(privateKey);
+  }
   return web3.Keypair.fromSecretKey(secretKey);
 }
 
-// ✅ دالة اتصال تستخدم heliusService الموثوق (لا تعتمد على متغيرات البيئة)
+// للتوافق مع الكود القديم (تستخدم SecureStore)
+async function getKeypair() {
+  const secretKeyStr = await SecureStore.getItemAsync('wallet_private_key');
+  if (!secretKeyStr) throw new Error('المفتاح الخاص غير موجود');
+  return getKeypairFromPrivateKey(secretKeyStr);
+}
+
+// ✅ دالة اتصال تستخدم heliusService الموثوق
 async function getConnection() {
   try {
     return await heliusService.getConnection();
@@ -164,18 +176,27 @@ export async function buildSwapTransaction(quote, userPublicKey) {
 }
 
 // --- تنفيذ التبادل ---
-export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100, maxRetries = 3) {
+export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100, maxRetries = 3, publicKey, privateKey) {
   console.log(`🚀 [Swap] بدء التبادل: ${amount} ${inputSymbol} -> ${outputSymbol}`);
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔄 [Swap] المحاولة ${attempt} من ${maxRetries}...`);
       
-      const keypair = await getKeypair();
+      // ✅ استخدام المفاتيح الممررة أو جلبها من SecureStore (للتطبيقات القديمة)
+      let keypair;
+      if (privateKey) {
+        keypair = getKeypairFromPrivateKey(privateKey);
+      } else {
+        keypair = await getKeypair();
+      }
+      
+      const userPublicKey = publicKey || keypair.publicKey.toString();
+      
       const connection = await getConnection();
-      console.log(`🔑 [Swap] المفتاح العام: ${keypair.publicKey.toString()}`);
+      console.log(`🔑 [Swap] المفتاح العام: ${userPublicKey}`);
 
-      const balanceCheck = await checkBalance(inputSymbol, amount);
+      const balanceCheck = await checkBalance(inputSymbol, amount, userPublicKey);
       if (!balanceCheck.hasBalance) {
         throw new Error(`رصيد ${inputSymbol} غير كاف. المطلوب: ${amount}, المتاح: ${balanceCheck.balance}`);
       }
@@ -189,7 +210,7 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
       console.log(`📊 [Swap] عرض السعر: 1 ${inputSymbol} ≈ ${quote.outAmount / Math.pow(10, TOKEN_DECIMALS[outputSymbol] || 9)} ${outputSymbol}`);
 
       // 2. بناء المعاملة
-      const swapData = await buildSwapTransaction(quote, keypair.publicKey);
+      const swapData = await buildSwapTransaction(quote, new web3.PublicKey(userPublicKey));
 
       // 3. توقيع المعاملة
       const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
@@ -293,23 +314,23 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
   return { success: false, error: 'فشلت جميع محاولات التبادل' };
 }
 
-// ✅ دالة checkBalance معدلة لاستخدام heliusService الموثوق
-export async function checkBalance(tokenSymbol, amount) {
+// ✅ دالة checkBalance معدلة لتقبل publicKey
+export async function checkBalance(tokenSymbol, amount, publicKey) {
   try {
-    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
+    const pubKeyStr = publicKey || await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) {
       return { hasBalance: false, balance: 0, required: amount };
     }
     
     let balance = 0;
     if (tokenSymbol === 'SOL') {
-      balance = await getSolBalance(true);
+      balance = await getSolBalance(true, pubKeyStr);
     } else {
       const mint = TOKEN_MINTS[tokenSymbol];
       if (!mint) {
         return { hasBalance: false, balance: 0, required: amount };
       }
-      balance = await getTokenBalance(mint, true);
+      balance = await getTokenBalance(mint, true, pubKeyStr);
     }
     
     return { hasBalance: balance >= amount, balance, required: amount };

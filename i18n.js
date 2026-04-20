@@ -56,6 +56,17 @@ const resources = {
       explore: 'استكشف',
       earn: 'اكتسب',
 
+      // ========== حسابات متعددة (Multi-Account) ==========
+      accounts: 'الحسابات',
+      add_account: 'إضافة حساب',
+      account_added: 'تم إضافة {{name}} بنجاح',
+      account_add_failed: 'فشل إضافة الحساب',
+      delete_account: 'حذف حساب',
+      delete_account_confirmation: 'هل أنت متأكد من حذف "{{name}}"؟ لا يمكن التراجع عن هذا الإجراء.',
+      swipe_hint: 'اضغط على الأيقونة لنسخ العنوان',
+      edit: 'تعديل',
+      copy: 'نسخ',
+
       // ========== جهات الاتصال (Contacts) ==========
       contacts: 'جهات الاتصال',
       add_contact: 'إضافة جهة اتصال',
@@ -216,6 +227,7 @@ const resources = {
       sendScreen: {
         title: "إرسال",
         subtitle: "تحويل إلى محفظة أخرى",
+        sendingFrom: "الإرسال من",
         balance: {
           available: "الرصيد المتاح",
           solForFees: "رصيد SOL للرسوم:"
@@ -297,6 +309,7 @@ const resources = {
       share_message_with_address: "عنوان محفظتي على سولانا: {{address}}\n\nيمكنك إرسال أي عملة رقمية إليها.",
 
       // ========== SwapScreen ==========
+      swapping_from: "التبديل من حساب",
       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
       swap_from: 'من',
       swap_max: 'أقصى',
@@ -465,6 +478,17 @@ const resources = {
       explore: 'Explore',
       earn: 'Earn',
 
+      // ========== Multi-Account ==========
+      accounts: 'Accounts',
+      add_account: 'Add Account',
+      account_added: '{{name}} added successfully',
+      account_add_failed: 'Failed to add account',
+      delete_account: 'Delete Account',
+      delete_account_confirmation: 'Are you sure you want to delete "{{name}}"? This cannot be undone.',
+      swipe_hint: 'Tap the icon to copy address',
+      edit: 'Edit',
+      copy: 'Copy',
+
       // ========== Contacts ==========
       contacts: 'Contacts',
       add_contact: 'Add Contact',
@@ -625,6 +649,7 @@ const resources = {
       sendScreen: {
         title: "Send",
         subtitle: "Transfer to another wallet",
+        sendingFrom: "Sending from",
         balance: {
           available: "Available Balance",
           solForFees: "SOL Balance for Fees:"
@@ -706,6 +731,7 @@ const resources = {
       share_message_with_address: "My Solana wallet address: {{address}}\n\nYou can send any cryptocurrency to it.",
 
       // ========== SwapScreen ==========
+      swapping_from: "Swapping from",
       swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
       swap_from: 'From',
       swap_max: 'MAX',

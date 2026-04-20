@@ -7,15 +7,15 @@ import {
 } from 'react-native';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
-import * as SecureStore from 'expo-secure-store';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { 
-  getSolBalance, 
-  getTokenBalance, 
-  validateSolanaAddress, 
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import {
+  getSolBalance,
+  getTokenBalance,
+  validateSolanaAddress,
   getCurrentNetworkFee,
   getLatestBlockhash,
-  clearBalanceCache
+  clearBalanceCache,
+  heliusRpcRequest // ✅ أضفنا هذا لنستخدم Helius بدلاً من الشبكة المجانية
 } from '../services/heliusService';
 import { logTransaction } from '../services/transactionLogger';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,22 +24,19 @@ import bs58 from 'bs58';
 import * as splToken from '@solana/spl-token';
 import * as Clipboard from 'expo-clipboard';
 
-// ✅ 1. استدعاء القاموس المركزي للعملات لتوحيد التطبيق
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
-const SERVICE_FEE_SOL = 0.0005; 
+const SERVICE_FEE_SOL = 0.0005;
 
-async function getKeypair(t) {
+function getKeypairFromStore(storePrivateKey) {
   try {
-    const secretKeyStr = await SecureStore.getItemAsync('wallet_private_key');
-    if (!secretKeyStr) throw new Error(t('sendScreen.errors.privateKeyNotFound'));
-
+    if (!storePrivateKey) throw new Error('No private key in store');
     let secretKey;
-    if (secretKeyStr.startsWith('[')) {
-      secretKey = new Uint8Array(JSON.parse(secretKeyStr));
+    if (storePrivateKey.startsWith('[')) {
+      secretKey = new Uint8Array(JSON.parse(storePrivateKey));
     } else {
-      secretKey = bs58.decode(secretKeyStr);
+      secretKey = bs58.decode(storePrivateKey);
     }
     return web3.Keypair.fromSecretKey(secretKey);
   } catch (error) {
@@ -56,7 +53,13 @@ export default function SendScreen() {
   const primaryColor = useAppStore(state => state.primaryColor);
   const isDark = theme === 'dark';
   const isMounted = useRef(true);
-  
+
+  const activeAccount = useAppStore(state => {
+    const accounts = state.accounts;
+    const activeIndex = state.activeAccountIndex;
+    return accounts.length > 0 ? accounts[activeIndex] : null;
+  });
+
   const colors = {
     background: isDark ? '#0A0A0F' : '#FFFFFF',
     card: isDark ? '#1A1A2E' : '#F8FAFD',
@@ -85,9 +88,21 @@ export default function SendScreen() {
   const [balances, setBalances] = useState({ sol: 0, tokens: {}, lastUpdated: 0 });
   const [fadeAnim] = useState(new Animated.Value(0));
   const validationTimeoutRef = useRef(null);
+  const tokenFetchInProgress = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (activeAccount?.publicKey) {
+        loadInitialBalance();
+        updateNetworkFee();
+      }
+      return () => {
+        if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current);
+      };
+    }, [activeAccount?.publicKey])
+  );
 
   useEffect(() => {
-    // ✅ تم دعم كل من scannedAddress (من QR) و selectedAddress (من جهات الاتصال)
     if (route.params?.scannedAddress) {
       setState(prev => ({ ...prev, recipient: route.params.scannedAddress }));
       navigation.setParams({ scannedAddress: undefined });
@@ -96,19 +111,9 @@ export default function SendScreen() {
       setState(prev => ({ ...prev, recipient: route.params.selectedAddress }));
       navigation.setParams({ selectedAddress: undefined });
     }
-  }, [route.params?.scannedAddress, route.params?.selectedAddress, navigation]);
+  }, [route.params?.scannedAddress, route.params?.selectedAddress]);
 
-  // ✅ 2. استخدام القاموس المركزي لتحديد العملة الحالية
   const currentToken = useMemo(() => CORE_TOKENS.find(t => t.symbol === state.currency) || CORE_TOKENS[0], [state.currency]);
-
-  // ✅ 3. فلترة ذكية: إظهار العملات التي يملكها المستخدم فقط في شاشة الإرسال (إضافة للأساسيات)
-  const availableTokensToSend = useMemo(() => {
-    return CORE_TOKENS.filter(token => {
-      if (token.symbol === 'SOL' || token.symbol === 'MECO') return true; 
-      const bal = balances.tokens[token.symbol] || 0;
-      return bal > 0; 
-    });
-  }, [balances]);
 
   const totalFees = useMemo(() => state.networkFee + SERVICE_FEE_SOL, [state.networkFee]);
 
@@ -126,33 +131,72 @@ export default function SendScreen() {
     }
   }, []);
 
-  const loadBalances = useCallback(async (forceRefresh = false) => {
+  const loadInitialBalance = useCallback(async () => {
+    if (!activeAccount?.publicKey) return;
     try {
-      if (!isMounted.current) return;
-      setState(prev => ({ ...prev, loadingTokens: true }));
-      
-      const solBalance = await getSolBalance(forceRefresh);
-      
-      // ✅ جلب أرصدة الـ 16 عملة باستخدام القاموس الموحد
-      const tokenPromises = CORE_TOKENS.filter(t => t.mint).map(async (token) => {
-          const balance = await getTokenBalance(token.mint, forceRefresh);
-          return { symbol: token.symbol, balance };
-      });
-      
-      const tokenResults = await Promise.allSettled(tokenPromises);
-      const tokenBalances = {};
-      tokenResults.forEach(result => {
-        if (result.status === 'fulfilled') tokenBalances[result.value.symbol] = result.value.balance;
-      });
-      
+      const solBalance = await getSolBalance(false, activeAccount.publicKey);
       if (isMounted.current) {
-        setBalances({ sol: solBalance, tokens: tokenBalances, lastUpdated: Date.now() });
-        setState(prev => ({ ...prev, loadingTokens: false }));
+        setBalances(prev => ({ ...prev, sol: solBalance, lastUpdated: Date.now() }));
       }
     } catch (error) {
-      if (isMounted.current) setState(prev => ({ ...prev, loadingTokens: false }));
+      console.warn('Failed to load SOL balance');
     }
-  }, []);
+  }, [activeAccount?.publicKey]);
+
+  const loadAllTokenBalances = useCallback(async () => {
+    if (!activeAccount?.publicKey) return;
+    if (tokenFetchInProgress.current) return;
+    tokenFetchInProgress.current = true;
+    setState(prev => ({ ...prev, loadingTokens: true }));
+
+    try {
+      const publicKey = activeAccount.publicKey;
+      const newTokenBalances = { ...balances.tokens };
+
+      const solBalance = await getSolBalance(false, publicKey);
+      const tokensToFetch = CORE_TOKENS.filter(t => t.mint && t.symbol !== 'SOL');
+      
+      for (const token of tokensToFetch) {
+        try {
+          const balance = await getTokenBalance(token.mint, false, publicKey);
+          newTokenBalances[token.symbol] = balance;
+          // ✅ إبقائنا على التعديل الذكي الذي قمت به أنت
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (e) {
+          newTokenBalances[token.symbol] = 0;
+        }
+      }
+
+      if (isMounted.current) {
+        setBalances({ sol: solBalance, tokens: newTokenBalances, lastUpdated: Date.now() });
+      }
+    } catch (error) {
+      console.warn('Failed to load token balances');
+    } finally {
+      tokenFetchInProgress.current = false;
+      setState(prev => ({ ...prev, loadingTokens: false }));
+    }
+  }, [activeAccount?.publicKey, balances.tokens]);
+
+  const refreshCurrentTokenBalance = useCallback(async (tokenSymbol) => {
+    if (!activeAccount?.publicKey) return;
+    try {
+      if (tokenSymbol === 'SOL') {
+        const bal = await getSolBalance(false, activeAccount.publicKey);
+        setBalances(prev => ({ ...prev, sol: bal }));
+      } else {
+        const token = CORE_TOKENS.find(t => t.symbol === tokenSymbol);
+        if (token?.mint) {
+          const bal = await getTokenBalance(token.mint, false, activeAccount.publicKey);
+          setBalances(prev => ({ ...prev, tokens: { ...prev.tokens, [tokenSymbol]: bal } }));
+        }
+      }
+    } catch (e) {}
+  }, [activeAccount?.publicKey]);
+
+  useEffect(() => {
+    if (state.currency) refreshCurrentTokenBalance(state.currency);
+  }, [state.currency, refreshCurrentTokenBalance]);
 
   const validateRecipient = useCallback(async (address, tokenMint) => {
     if (!address || address.length < 32) {
@@ -164,11 +208,12 @@ export default function SendScreen() {
       let hasTokenAcc = true;
       if (validation.isValid && tokenMint) {
         try {
-          const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+          // ✅ تم مسح الاتصال بالشبكة المجانية، واستخدام Helius الذي لا يعطي 429
           const mintKey = new web3.PublicKey(tokenMint);
           const ownerKey = new web3.PublicKey(address);
           const ata = await splToken.getAssociatedTokenAddress(mintKey, ownerKey);
-          const info = await connection.getAccountInfo(ata);
+          
+          const info = await heliusRpcRequest('getAccountInfo', [ata.toBase58()]);
           hasTokenAcc = (info !== null);
         } catch (e) { hasTokenAcc = false; }
       }
@@ -179,6 +224,13 @@ export default function SendScreen() {
       if (isMounted.current) setState(prev => ({ ...prev, recipientExists: null }));
     }
   }, []);
+
+  useEffect(() => {
+    if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current);
+    if (state.recipient.length >= 32) {
+      validationTimeoutRef.current = setTimeout(() => validateRecipient(state.recipient, currentToken.mint), 800);
+    }
+  }, [state.recipient, currentToken.mint]);
 
   const handleSend = useCallback(async () => {
     const amountNum = parseFloat(state.amount) || 0;
@@ -195,7 +247,7 @@ export default function SendScreen() {
     }
 
     setState(prev => ({ ...prev, loading: true }));
-    
+
     try {
       await executeTransaction(amountNum, recipient, currentToken);
     } catch (error) {
@@ -208,87 +260,51 @@ export default function SendScreen() {
 
   const executeTransaction = useCallback(async (amount, recipient, token) => {
     try {
-      const keypair = await getKeypair(t);
+      const privateKeyFromStore = useAppStore.getState().walletPrivateKey;
+      if (!privateKeyFromStore) throw new Error('No private key in store');
+
+      const keypair = getKeypairFromStore(privateKeyFromStore);
       const fromPubkey = keypair.publicKey;
       const toPubkey = new web3.PublicKey(recipient);
       const feeCollectorPubkey = new web3.PublicKey(FEE_COLLECTOR_ADDRESS);
+
+      // ✅ استبدال الاتصال المجاني باتصال قوي لمنع فشل التحويل
+      const rpcEndpoint = 'https://mainnet.helius-rpc.com/?api-key=fb28d3cf-7dd1-4667-9167-7941c3aceb66';
+      const connection = new web3.Connection(rpcEndpoint, 'confirmed');
       
-      const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
       const { blockhash } = await getLatestBlockhash();
-      
+
       const transaction = new web3.Transaction();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
 
       const serviceLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
-      
+
       if (token.symbol === 'SOL') {
         const lamportsToSend = Math.floor(amount * web3.LAMPORTS_PER_SOL);
-        
-        transaction.add(
-          web3.SystemProgram.transfer({
-            fromPubkey,
-            toPubkey,
-            lamports: lamportsToSend,
-          })
-        );
-        
-        transaction.add(
-          web3.SystemProgram.transfer({
-            fromPubkey,
-            toPubkey: feeCollectorPubkey,
-            lamports: serviceLamports,
-          })
-        );
-        
+        transaction.add(web3.SystemProgram.transfer({ fromPubkey, toPubkey, lamports: lamportsToSend }));
+        transaction.add(web3.SystemProgram.transfer({ fromPubkey, toPubkey: feeCollectorPubkey, lamports: serviceLamports }));
       } else if (token.mint) {
         const mint = new web3.PublicKey(token.mint);
         const mintInfo = await splToken.getMint(connection, mint);
         const realDecimals = mintInfo.decimals;
+        const amountBigInt = BigInt(Math.floor(amount * Math.pow(10, realDecimals)));
         
-        const amountBigInt = BigInt(Math.round(amount * Math.pow(10, realDecimals)));
-
         const fromATA = await splToken.getAssociatedTokenAddress(mint, fromPubkey);
         const toATA = await splToken.getAssociatedTokenAddress(mint, toPubkey);
         
-        const toAccountInfo = await connection.getAccountInfo(toATA);
-        
+        // ✅ استخدام Helius للتحقق
+        const toAccountInfo = await heliusRpcRequest('getAccountInfo', [toATA.toBase58()]);
         if (!toAccountInfo) {
-          transaction.add(
-            splToken.createAssociatedTokenAccountInstruction(
-              fromPubkey,
-              toATA,
-              toPubkey,
-              mint
-            )
-          );
+          transaction.add(splToken.createAssociatedTokenAccountInstruction(fromPubkey, toATA, toPubkey, mint));
         }
         
-        transaction.add(
-          splToken.createTransferInstruction(
-            fromATA,
-            toATA,
-            fromPubkey,
-            amountBigInt
-          )
-        );
-        
-        transaction.add(
-          web3.SystemProgram.transfer({
-            fromPubkey,
-            toPubkey: feeCollectorPubkey,
-            lamports: serviceLamports,
-          })
-        );
+        transaction.add(splToken.createTransferInstruction(fromATA, toATA, fromPubkey, amountBigInt));
+        transaction.add(web3.SystemProgram.transfer({ fromPubkey, toPubkey: feeCollectorPubkey, lamports: serviceLamports }));
       }
-      
-      const signature = await web3.sendAndConfirmTransaction(
-        connection,
-        transaction,
-        [keypair],
-        { commitment: 'confirmed' }
-      );
-      
+
+      const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
+
       await logTransaction({
         type: 'send',
         to: recipient,
@@ -300,10 +316,10 @@ export default function SendScreen() {
         timestamp: new Date().toISOString(),
         status: 'completed'
       });
-      
-      await loadBalances(true);
+
+      await loadInitialBalance();
       clearBalanceCache();
-      
+
       Alert.alert(
         t('sendScreen.alerts.success'),
         `${t('sendScreen.alerts.sent')} ${amount} ${token.symbol}`,
@@ -311,12 +327,11 @@ export default function SendScreen() {
             if (isMounted.current) setState(prev => ({ ...prev, recipient: '', amount: '' }));
         }}]
       );
-      
     } catch (error) {
       console.error('Exec Transaction Failed:', error);
       throw error;
     }
-  }, [state.networkFee, loadBalances, t]);
+  }, [state.networkFee, loadInitialBalance, t]);
 
   const handleMaxAmount = useCallback(() => {
     let maxAmount = 0;
@@ -333,7 +348,6 @@ export default function SendScreen() {
     if (text) setState(prev => ({ ...prev, recipient: text.trim() }));
   }, []);
 
-  // ✅ فتح شاشة جهات الاتصال في وضع الاختيار
   const openContacts = useCallback(() => {
     navigation.navigate('Contacts', { selectMode: true });
   }, [navigation]);
@@ -341,19 +355,14 @@ export default function SendScreen() {
   useEffect(() => {
     isMounted.current = true;
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-    const init = async () => { await updateNetworkFee(); await loadBalances(); };
-    init();
     return () => { isMounted.current = false; };
   }, []);
 
-  useEffect(() => {
-    if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current);
-    if (state.recipient.length >= 32) {
-      validationTimeoutRef.current = setTimeout(() => validateRecipient(state.recipient, currentToken.mint), 800);
-    }
-  }, [state.recipient, currentToken.mint]);
+  const handleOpenTokenModal = () => {
+    setState(prev => ({ ...prev, modalVisible: true }));
+    loadAllTokenBalances();
+  };
 
-  // ✅ 4. عرض الأيقونات الحقيقية في القائمة المنسدلة
   const renderTokenItem = useCallback(({ item }) => {
     const isSelected = state.currency === item.symbol;
     const balance = item.symbol === 'SOL' ? balances.sol : balances.tokens[item.symbol] || 0;
@@ -382,18 +391,29 @@ export default function SendScreen() {
             <Text style={[styles.title, { color: colors.text }]}>{t('sendScreen.title')}</Text>
           </View>
 
+          {activeAccount && (
+            <View style={[styles.activeAccountCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.activeAccountLabel, { color: colors.textSecondary }]}>
+                {t('sendScreen.sendingFrom', 'الإرسال من')}
+              </Text>
+              <Text style={[styles.activeAccountName, { color: colors.text }]}>{activeAccount.name}</Text>
+              <Text style={[styles.activeAccountAddress, { color: primaryColor }]}>
+                {activeAccount.publicKey.slice(0, 8)}...{activeAccount.publicKey.slice(-8)}
+              </Text>
+            </View>
+          )}
+
           <View style={[styles.balanceCard, { backgroundColor: colors.card }]}>
             <View style={styles.balanceHeader}>
               <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('sendScreen.balance.available')}</Text>
-              <TouchableOpacity onPress={() => loadBalances(true)}>
+              <TouchableOpacity onPress={() => refreshCurrentTokenBalance(state.currency)}>
                 <Ionicons name="refresh-outline" size={20} color={primaryColor} />
               </TouchableOpacity>
             </View>
             <Text style={[styles.balanceAmount, { color: colors.text }]}>{currentBalance.toFixed(6)} {state.currency}</Text>
           </View>
 
-          {/* ✅ 5. عرض اللوجو للعملة المحددة */}
-          <TouchableOpacity style={[styles.tokenSelector, { backgroundColor: colors.card }]} onPress={() => setState(prev => ({ ...prev, modalVisible: true }))}>
+          <TouchableOpacity style={[styles.tokenSelector, { backgroundColor: colors.card }]} onPress={handleOpenTokenModal}>
             <View style={styles.tokenSelectorContent}>
               <View style={styles.tokenInfo}>
                 <Image source={{ uri: currentToken.image }} style={styles.selectedTokenIcon} />
@@ -417,7 +437,6 @@ export default function SendScreen() {
                 <TouchableOpacity onPress={handlePasteAddress}>
                   <Ionicons name="clipboard-outline" size={20} color={primaryColor} />
                 </TouchableOpacity>
-                {/* ✅ زر جهات الاتصال الجديد */}
                 <TouchableOpacity onPress={openContacts}>
                   <Ionicons name="people-outline" size={20} color={primaryColor} />
                 </TouchableOpacity>
@@ -473,13 +492,16 @@ export default function SendScreen() {
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendScreen.modals.chooseCurrency')}</Text>
               <TouchableOpacity onPress={() => setState(prev => ({ ...prev, modalVisible: false }))}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
             </View>
-            {/* ✅ 6. عرض القائمة المفلترة (فقط العملات التي يملكها المستخدم) */}
-            <FlatList 
-              data={availableTokensToSend} 
-              keyExtractor={(item) => item.symbol} 
-              renderItem={renderTokenItem} 
-              contentContainerStyle={styles.tokenList} 
-            />
+            {state.loadingTokens ? (
+              <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 20 }} />
+            ) : (
+              <FlatList
+                data={CORE_TOKENS.filter(t => t.symbol === 'SOL' || t.symbol === 'MECO' || (balances.tokens[t.symbol] || 0) > 0)}
+                keyExtractor={(item) => item.symbol}
+                renderItem={renderTokenItem}
+                contentContainerStyle={styles.tokenList}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -492,6 +514,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { alignItems: 'center', marginBottom: 20 },
   title: { fontSize: 24, fontWeight: '700' },
+  activeAccountCard: { borderRadius: 16, padding: 16, marginBottom: 16, alignItems: 'center' },
+  activeAccountLabel: { fontSize: 12, marginBottom: 4 },
+  activeAccountName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  activeAccountAddress: { fontSize: 14, fontWeight: '500' },
   balanceCard: { borderRadius: 16, padding: 20, marginBottom: 16 },
   balanceHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   balanceAmount: { fontSize: 28, fontWeight: '700' },

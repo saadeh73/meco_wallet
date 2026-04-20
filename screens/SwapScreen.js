@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
   Modal, FlatList, Image, Linking
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as SwapAPI from '../services/swapService';
 import NetInfo from '@react-native-community/netinfo';
-
-// ✅ ربط الشاشة بالقاموس
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 export default function SwapScreen({ route }) {
@@ -22,17 +20,23 @@ export default function SwapScreen({ route }) {
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
 
+  const activeAccount = useAppStore(state => {
+    const accounts = state.accounts;
+    const activeIndex = state.activeAccountIndex;
+    return accounts.length > 0 ? accounts[activeIndex] : null;
+  });
+
   const initialTokenSymbol = route.params?.fromToken || 'SOL';
   const initialFromToken = CORE_TOKENS.find(t => t.symbol === initialTokenSymbol) || CORE_TOKENS[0];
   const initialToToken = CORE_TOKENS.find(t => t.symbol === 'USDC') || CORE_TOKENS[3];
 
-  const [fromToken, setFromToken] = useState(initialFromToken); 
-  const [toToken, setToToken] = useState(initialToToken); 
+  const [fromToken, setFromToken] = useState(initialFromToken);
+  const [toToken, setToToken] = useState(initialToToken);
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
   const [rate, setRate] = useState(null);
   const [priceImpact, setPriceImpact] = useState(0);
-  
+
   const [loading, setLoading] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [balances, setBalances] = useState({});
@@ -52,7 +56,6 @@ export default function SwapScreen({ route }) {
     warning: '#F59E0B',
   };
 
-  // ✅ فحص الاتصال بالإنترنت
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsOffline(!state.isConnected);
@@ -60,15 +63,22 @@ export default function SwapScreen({ route }) {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => { loadBalances(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (activeAccount?.publicKey) {
+        loadBalances();
+      }
+    }, [activeAccount?.publicKey])
+  );
 
   const loadBalances = async () => {
+    if (!activeAccount?.publicKey) return;
     try {
       const newBalances = {};
       for (const token of CORE_TOKENS) {
         if (!token.swapAvailable) continue;
         try {
-          const result = await SwapAPI.checkBalance(token.symbol, 0);
+          const result = await SwapAPI.checkBalance(token.symbol, 0, activeAccount.publicKey);
           newBalances[token.symbol] = result.balance;
         } catch (e) {
           newBalances[token.symbol] = 0;
@@ -80,7 +90,6 @@ export default function SwapScreen({ route }) {
     }
   };
 
-  // ✅ دالة جلب السعر مع سياسة MECO: شراء مسموح، بيع ممنوع
   const fetchSwapRate = async () => {
     if (!fromAmount || parseFloat(fromAmount) <= 0) {
       setToAmount('');
@@ -96,15 +105,13 @@ export default function SwapScreen({ route }) {
       return;
     }
 
-    // ✅ سياسة MECO: السماح بالشراء فقط (toToken = MECO) ، منع البيع (fromToken = MECO)
     if (fromToken.symbol === 'MECO') {
       setError(t('meco_sell_disabled', 'عذراً، بيع MECO غير متاح حالياً. يمكنك شراؤها فقط.'));
       setToAmount('');
       setRate(null);
       return;
     }
-    // لا نمنع إذا كانت MECO هي العملة المستقبلة (toToken)
-    
+
     setQuoteLoading(true);
     setError('');
     try {
@@ -141,6 +148,11 @@ export default function SwapScreen({ route }) {
       return;
     }
 
+    if (!activeAccount) {
+      Alert.alert(t('error'), t('no_active_account'));
+      return;
+    }
+
     Alert.alert(
       t('swap_confirm'),
       `${t('swap_from')}: ${fromAmount} ${fromToken.symbol}\n${t('swap_to')}: ${toAmount} ${toToken.symbol}\n${t('swap_rate')}: 1 ${fromToken.symbol} = ${rate?.toFixed(6)} ${toToken.symbol}`,
@@ -152,7 +164,17 @@ export default function SwapScreen({ route }) {
             setLoading(true);
             setError('');
             try {
-              const result = await SwapAPI.executeSwap(fromToken.symbol, toToken.symbol, parseFloat(fromAmount));
+              const privateKey = useAppStore.getState().walletPrivateKey;
+              const result = await SwapAPI.executeSwap(
+                fromToken.symbol,
+                toToken.symbol,
+                parseFloat(fromAmount),
+                100,
+                3,
+                activeAccount.publicKey,
+                privateKey
+              );
+
               if (result.success) {
                 Alert.alert(
                   t('swap_completed'),
@@ -193,39 +215,41 @@ export default function SwapScreen({ route }) {
     Alert.alert(t('copied'), t('copied_to_clipboard', 'تم نسخ عنوان العقد'));
   };
 
-  const renderTokenModal = (visible, onClose, onSelect, selectedToken) => (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('select_token')}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={CORE_TOKENS.filter(t => t.swapAvailable)}
-            keyExtractor={item => item.symbol}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.tokenItem, { borderBottomColor: colors.border }]}
-                onPress={() => { onSelect(item); onClose(); }}
-              >
-                <Image source={{ uri: item.image }} style={styles.tokenIcon} />
-                <View style={styles.tokenInfo}>
-                  <Text style={[styles.tokenSymbol, { color: colors.text }]}>{item.symbol}</Text>
-                  <Text style={[styles.tokenName, { color: colors.textSecondary }]}>{item.name}</Text>
-                </View>
-                {item.symbol === selectedToken.symbol && (
-                  <Ionicons name="checkmark-circle" size={24} color={primaryColor} />
-                )}
+  const renderTokenModal = (visible, onClose, onSelect, selectedToken) => {
+    return (
+      <Modal visible={visible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('select_token')}</Text>
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
-            )}
-          />
+            </View>
+            <FlatList
+              data={CORE_TOKENS.filter(t => t.swapAvailable)}
+              keyExtractor={item => item.symbol}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.tokenItem, { borderBottomColor: colors.border }]}
+                  onPress={() => { onSelect(item); onClose(); }}
+                >
+                  <Image source={{ uri: item.image }} style={styles.tokenIcon} />
+                  <View style={styles.tokenInfo}>
+                    <Text style={[styles.tokenSymbol, { color: colors.text }]}>{item.symbol}</Text>
+                    <Text style={[styles.tokenName, { color: colors.textSecondary }]}>{item.name}</Text>
+                  </View>
+                  {item.symbol === selectedToken.symbol && (
+                    <Ionicons name="checkmark-circle" size={24} color={primaryColor} />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
   const renderError = () => {
     if (!error) return null;
@@ -252,6 +276,18 @@ export default function SwapScreen({ route }) {
 
         <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle', 'قم بتبديل عملاتك بأمان عبر Jupiter')}</Text>
+
+        {activeAccount && (
+          <View style={[styles.activeAccountCard, { backgroundColor: colors.card }]}>
+            <Text style={[styles.activeAccountLabel, { color: colors.textSecondary }]}>
+              {t('swapping_from', 'التبديل من حساب')}
+            </Text>
+            <Text style={[styles.activeAccountName, { color: colors.text }]}>{activeAccount.name}</Text>
+            <Text style={[styles.activeAccountAddress, { color: primaryColor }]}>
+              {activeAccount.publicKey.slice(0, 8)}...{activeAccount.publicKey.slice(-8)}
+            </Text>
+          </View>
+        )}
 
         {isOffline && (
           <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
@@ -378,7 +414,6 @@ export default function SwapScreen({ route }) {
             </>
           )}
         </TouchableOpacity>
-
       </ScrollView>
 
       {renderTokenModal(fromModalVisible, () => setFromModalVisible(false), setFromToken, fromToken)}
@@ -392,7 +427,26 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40 },
   backButton: { marginBottom: 10 },
   title: { fontSize: 28, fontWeight: 'bold', marginBottom: 5, textAlign: 'center' },
-  subtitle: { fontSize: 14, textAlign: 'center', marginBottom: 25 },
+  subtitle: { fontSize: 14, textAlign: 'center', marginBottom: 15 },
+  activeAccountCard: {
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  activeAccountLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  activeAccountName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  activeAccountAddress: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
   card: { borderRadius: 20, padding: 16, marginBottom: 10, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   cardLabel: { fontSize: 14, fontWeight: '500' },

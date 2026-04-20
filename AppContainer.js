@@ -14,11 +14,9 @@ import { useAppStore } from './store';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
-// Deep Linking و WalletConnect
 import * as Linking from 'expo-linking';
 import { initWalletConnect, pairWalletConnect } from './services/walletConnectService';
 
-// Screens
 import HomeScreen from './screens/HomeScreen';
 import CreateWalletScreen from './screens/CreateWalletScreen';
 import ImportWalletScreen from './screens/ImportWalletScreen';
@@ -34,7 +32,6 @@ import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
 import StakingScreen from './screens/StakingScreen';
-// ✅ استيراد شاشة جهات الاتصال
 import ContactsScreen from './screens/ContactsScreen';
 
 const Stack = createStackNavigator();
@@ -104,7 +101,6 @@ export default function AppContainer() {
   const [initialRoute, setInitialRoute] = useState(null);
   const { t } = useTranslation();
 
-  // تحميل اللغة واللون الأساسي
   useEffect(() => {
     const loadSettings = async () => {
       await useAppStore.getState().loadLanguage();
@@ -113,7 +109,6 @@ export default function AppContainer() {
     loadSettings();
   }, []);
 
-  // تطبيق اللغة واتجاه RTL
   useEffect(() => {
     if (language) {
       i18n.changeLanguage(language);
@@ -121,16 +116,13 @@ export default function AppContainer() {
     }
   }, [language]);
 
-  // تهيئة WalletConnect
   useEffect(() => {
     initWalletConnect().catch(console.warn);
   }, []);
 
-  // معالجة الروابط العميقة (WalletConnect)
   const handleDeepLink = async (url) => {
     if (!url) return;
     console.log('🔗 Deep link received:', url);
-
     if (url.startsWith('meco-wallet://wc')) {
       const uri = url.replace('meco-wallet://wc?uri=', '');
       if (uri) {
@@ -143,23 +135,42 @@ export default function AppContainer() {
     }
   };
 
-  // التقاط الرابط الأولي والمستمع
   useEffect(() => {
     Linking.getInitialURL().then(url => {
       if (url) handleDeepLink(url);
     });
-
     const subscription = Linking.addEventListener('url', ({ url }) => {
       handleDeepLink(url);
     });
-
     return () => subscription.remove();
   }, []);
 
-  // التحقق من وجود محفظة وتهيئة الدخول
   useEffect(() => {
     const init = async () => {
       try {
+        // ✅ انتظار تحميل الحساب النشط من SecureStore
+        const success = await useAppStore.getState().loadActiveAccount();
+        
+        if (success) {
+          // نجح تحميل الحساب النشط
+          const hasHardware = await LocalAuthentication.hasHardwareAsync();
+          const hasBiometrics = await LocalAuthentication.isEnrolledAsync();
+          if (hasHardware && hasBiometrics) {
+            const result = await LocalAuthentication.authenticateAsync({
+              promptMessage: 'تأكيد الهوية للدخول',
+              cancelLabel: 'إلغاء',
+              disableDeviceFallback: true,
+            });
+            if (!result.success) {
+              setInitialRoute('Home');
+              return;
+            }
+          }
+          setInitialRoute('BottomTabs');
+          return;
+        }
+
+        // التحقق من وجود محفظة قديمة
         const initialized = await SecureStore.getItemAsync('wallet_initialized');
         if (initialized === 'true') {
           const loadWallet = useAppStore.getState().loadWallet;
@@ -206,39 +217,12 @@ export default function AppContainer() {
         <Stack.Screen name="CreateWallet" component={CreateWalletScreen} options={{ title: t('create_wallet') }} />
         <Stack.Screen name="ImportWallet" component={ImportWalletScreen} options={{ title: t('import_wallet') }} />
         <Stack.Screen name="BottomTabs" component={BottomTabs} options={{ headerShown: false }} />
-
         <Stack.Screen name="Send" component={SendScreen} options={{ title: t('send') }} />
         <Stack.Screen name="Receive" component={ReceiveScreen} options={{ title: t('receive') }} />
         <Stack.Screen name="Backup" component={BackupScreen} options={{ title: t('backup_wallet') }} />
-
-        <Stack.Screen
-          name="Swap"
-          component={SwapScreen}
-          options={{
-            title: t('swap_title') || 'تبادل',
-            headerBackTitle: t('back') || 'رجوع',
-          }}
-        />
-
-        <Stack.Screen
-          name="Staking"
-          component={StakingScreen}
-          options={{
-            title: t('staking.title') || 'تخزين السيولة',
-            headerBackTitle: t('back') || 'رجوع',
-          }}
-        />
-
-        {/* ✅ شاشة جهات الاتصال الجديدة */}
-        <Stack.Screen
-          name="Contacts"
-          component={ContactsScreen}
-          options={{
-            title: t('contacts') || 'جهات الاتصال',
-            headerBackTitle: t('back') || 'رجوع',
-          }}
-        />
-
+        <Stack.Screen name="Swap" component={SwapScreen} options={{ title: t('swap_title') || 'تبادل', headerBackTitle: t('back') || 'رجوع' }} />
+        <Stack.Screen name="Staking" component={StakingScreen} options={{ title: t('staking.title') || 'تخزين السيولة', headerBackTitle: t('back') || 'رجوع' }} />
+        <Stack.Screen name="Contacts" component={ContactsScreen} options={{ title: t('contacts') || 'جهات الاتصال', headerBackTitle: t('back') || 'رجوع' }} />
         <Stack.Screen name="TokenDetails" component={TokenDetailsScreen} options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: t('qr_scanner.title'), headerBackTitle: t('back'), headerShown: false }} />
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
