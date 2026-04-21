@@ -37,7 +37,7 @@ export const TOKEN_DECIMALS = {
 };
 
 // ✅ عنوان خزينة المشروع ورسم الخدمة
-const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
+const FEE_COLLECTOR_ADDRESS = 'FosXqkRpbRnvtn7D1995BYv4BFNgsTfXs8WXhVXCjQqZ';
 const SERVICE_FEE_SOL = 0.0005;
 
 // ✅ نقاط نهاية Jupiter
@@ -75,7 +75,6 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 30000) => {
   }
 };
 
-// ✅ دالة مساعدة لتحويل privateKey (سواء base58 أو JSON array) إلى Keypair
 function getKeypairFromPrivateKey(privateKey) {
   if (!privateKey) throw new Error('المفتاح الخاص غير موجود');
   let secretKey;
@@ -87,14 +86,12 @@ function getKeypairFromPrivateKey(privateKey) {
   return web3.Keypair.fromSecretKey(secretKey);
 }
 
-// للتوافق مع الكود القديم (تستخدم SecureStore)
 async function getKeypair() {
   const secretKeyStr = await SecureStore.getItemAsync('wallet_private_key');
   if (!secretKeyStr) throw new Error('المفتاح الخاص غير موجود');
   return getKeypairFromPrivateKey(secretKeyStr);
 }
 
-// ✅ دالة اتصال تستخدم heliusService الموثوق
 async function getConnection() {
   try {
     return await heliusService.getConnection();
@@ -175,7 +172,7 @@ export async function buildSwapTransaction(quote, userPublicKey) {
   throw new Error(`فشل بناء المعاملة: ${lastError?.message || 'جميع المحاولات باءت بالفشل'}`);
 }
 
-// --- تنفيذ التبادل ---
+// --- تنفيذ التبادل (مع تحصيل رسوم التطبيق بذكاء) ---
 export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100, maxRetries = 3, publicKey, privateKey) {
   console.log(`🚀 [Swap] بدء التبادل: ${amount} ${inputSymbol} -> ${outputSymbol}`);
   
@@ -183,7 +180,6 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
     try {
       console.log(`🔄 [Swap] المحاولة ${attempt} من ${maxRetries}...`);
       
-      // ✅ استخدام المفاتيح الممررة أو جلبها من SecureStore (للتطبيقات القديمة)
       let keypair;
       if (privateKey) {
         keypair = getKeypairFromPrivateKey(privateKey);
@@ -192,129 +188,123 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
       }
       
       const userPublicKey = publicKey || keypair.publicKey.toString();
-      
       const connection = await getConnection();
-      console.log(`🔑 [Swap] المفتاح العام: ${userPublicKey}`);
-
+      
+      // ✅ 1. التأكد من الأرصدة (بما في ذلك رسوم الخدمة 0.0005)
       const balanceCheck = await checkBalance(inputSymbol, amount, userPublicKey);
       if (!balanceCheck.hasBalance) {
-        throw new Error(`رصيد ${inputSymbol} غير كاف. المطلوب: ${amount}, المتاح: ${balanceCheck.balance}`);
+        throw new Error(`رصيد ${inputSymbol} غير كاف. أو لا تملك رسوم الشبكة والخدمة.`);
       }
-      console.log(`💰 [Swap] الرصيد كافٍ`);
 
       const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
       const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
 
-      // 1. عرض السعر
-      const quote = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit, slippageBps);
-      console.log(`📊 [Swap] عرض السعر: 1 ${inputSymbol} ≈ ${quote.outAmount / Math.pow(10, TOKEN_DECIMALS[outputSymbol] || 9)} ${outputSymbol}`);
+      // ✅ 2. بناء معاملة خصم رسوم الخدمة (Fee Transaction)
+      console.log(`💸 [Fee] جاري بناء معاملة رسوم التطبيق (${SERVICE_FEE_SOL} SOL)...`);
+      const feeTx = new web3.Transaction().add(
+        web3.SystemProgram.transfer({
+          fromPubkey: keypair.publicKey,
+          toPubkey: new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
+          lamports: Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
+        })
+      );
+      let latestBlockhash = await connection.getLatestBlockhash('confirmed');
+      feeTx.recentBlockhash = latestBlockhash.blockhash;
+      feeTx.feePayer = keypair.publicKey;
 
-      // 2. بناء المعاملة
+      // ✅ 3. جلب عرض السعر وبناء معاملة المبادلة (Jupiter Swap)
+      const quote = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit, slippageBps);
       const swapData = await buildSwapTransaction(quote, new web3.PublicKey(userPublicKey));
 
-      // 3. توقيع المعاملة
+      // ✅ 4. توقيع المعاملتين في نفس اللحظة
+      feeTx.sign(keypair);
+      
       const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
-      const transaction = web3.VersionedTransaction.deserialize(swapTransactionBuf);
-      transaction.sign([keypair]);
-      console.log(`✍️ [Swap] تم توقيع المعاملة`);
+      const swapTx = web3.VersionedTransaction.deserialize(swapTransactionBuf);
+      swapTx.sign([keypair]);
 
-      // 4. إرسال المعاملة للشبكة
-      console.log(`📡 [Swap] جاري إرسال المعاملة للشبكة...`);
+      console.log(`📡 [Swap] جاري إرسال معاملة الرسوم والمبادلة للشبكة...`);
       
-      const serializedTx = transaction.serialize();
-      const uint8ArrayTx = new Uint8Array(serializedTx.buffer, serializedTx.byteOffset, serializedTx.byteLength);
+      // ✅ 5. إرسال المعاملتين للشبكة (إرسال رسوم الخدمة أولاً ثم المبادلة فوراً)
+      const feeSignature = await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true });
+      console.log(`✅ [Fee] تم إرسال الرسوم: ${feeSignature}`);
+
+      const serializedSwapTx = swapTx.serialize();
+      const uint8ArraySwapTx = new Uint8Array(serializedSwapTx.buffer, serializedSwapTx.byteOffset, serializedSwapTx.byteLength);
       
-      let signature;
-      let latestBlockhash = await connection.getLatestBlockhash('confirmed');
-      
+      let swapSignature;
       try {
-        signature = await connection.sendRawTransaction(uint8ArrayTx, {
+        swapSignature = await connection.sendRawTransaction(uint8ArraySwapTx, {
           skipPreflight: true,
           maxRetries: 5,
           preflightCommitment: 'processed',
         });
       } catch (sendError) {
-        console.warn(`⚠️ [Swap] sendRawTransaction فشل:`, sendError.message);
-        const txSignature = await web3.sendAndConfirmTransaction(
+        swapSignature = await web3.sendAndConfirmTransaction(
           connection,
-          transaction,
+          swapTx,
           [keypair],
-          { skipPreflight: true, commitment: 'confirmed', preflightCommitment: 'processed' }
+          { skipPreflight: true, commitment: 'confirmed' }
         );
-        signature = txSignature;
       }
 
-      console.log(`📤 [Swap] تم الإرسال، التوقيع: ${signature}`);
+      console.log(`📤 [Swap] تم إرسال المبادلة: ${swapSignature}`);
 
-      // 5. تأكيد المعاملة
-      console.log(`⏳ [Swap] في انتظار التأكيد...`);
-      
+      // 6. تأكيد معاملة المبادلة
       let confirmation;
       let confirmAttempt = 0;
-      const maxConfirmAttempts = 3;
       
-      while (confirmAttempt < maxConfirmAttempts) {
+      while (confirmAttempt < 3) {
         try {
           confirmation = await connection.confirmTransaction({
-            signature,
+            signature: swapSignature,
             blockhash: latestBlockhash.blockhash,
             lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
           }, 'confirmed');
           
           if (!confirmation.value.err) break;
-          else throw new Error(`رفضت الشبكة المعاملة: ${JSON.stringify(confirmation.value.err)}`);
+          else throw new Error(`رفضت الشبكة المعاملة`);
         } catch (confirmError) {
           confirmAttempt++;
-          console.warn(`⚠️ [Swap] تأكيد المحاولة ${confirmAttempt} فشل:`, confirmError.message);
-          
-          if (confirmError.message.includes('block height exceeded') || 
-              confirmError.message.includes('Blockhash not found') ||
-              confirmError.message.includes('expired')) {
-            
-            if (confirmAttempt < maxConfirmAttempts) {
-              console.log(`🔄 [Swap] تجديد blockhash وإعادة محاولة التأكيد...`);
-              latestBlockhash = await connection.getLatestBlockhash('confirmed');
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              continue;
-            }
+          if (confirmAttempt < 3) {
+            latestBlockhash = await connection.getLatestBlockhash('confirmed');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
           }
           throw confirmError;
         }
       }
 
-      if (confirmation?.value?.err) throw new Error(`رفضت الشبكة المعاملة: ${JSON.stringify(confirmation.value.err)}`);
+      if (confirmation?.value?.err) throw new Error(`رفضت الشبكة المعاملة`);
 
-      console.log(`🎉 [Swap] نجاح! تم تأكيد المعاملة: ${signature}`);
+      console.log(`🎉 [Swap] نجاح! تم تأكيد المعاملة: ${swapSignature}`);
 
       const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
       const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
 
       return {
         success: true,
-        signature,
+        signature: swapSignature,
         inputAmount: amount,
         outputAmount,
         inputSymbol,
         outputSymbol,
-        explorerUrl: `https://solscan.io/tx/${signature}`
+        explorerUrl: `https://solscan.io/tx/${swapSignature}`
       };
 
     } catch (error) {
       console.error(`💥 [Swap] المحاولة ${attempt} فشلت:`, error.message);
-      
       if (attempt < maxRetries) {
-        console.log(`⏳ [Swap] انتظار 3 ثوان قبل إعادة المحاولة...`);
         await new Promise(resolve => setTimeout(resolve, 3000));
       } else {
         return { success: false, error: error.message };
       }
     }
   }
-  
   return { success: false, error: 'فشلت جميع محاولات التبادل' };
 }
 
-// ✅ دالة checkBalance معدلة لتقبل publicKey
+// ✅ دالة checkBalance معدلة لضمان وجود رسوم الخدمة (0.0005) + رسوم الشبكة
 export async function checkBalance(tokenSymbol, amount, publicKey) {
   try {
     const pubKeyStr = publicKey || await SecureStore.getItemAsync('wallet_public_key');
@@ -322,18 +312,32 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
       return { hasBalance: false, balance: 0, required: amount };
     }
     
-    let balance = 0;
-    if (tokenSymbol === 'SOL') {
-      balance = await getSolBalance(true, pubKeyStr);
-    } else {
-      const mint = TOKEN_MINTS[tokenSymbol];
-      if (!mint) {
-        return { hasBalance: false, balance: 0, required: amount };
-      }
-      balance = await getTokenBalance(mint, true, pubKeyStr);
-    }
+    // جلب رصيد الـ SOL دائماً لأننا نحتاجه للرسوم
+    const solBalance = await getSolBalance(true, pubKeyStr);
     
-    return { hasBalance: balance >= amount, balance, required: amount };
+    // 1. إذا كان يتبادل SOL، يجب أن يمتلك: الكمية المطلوبة + رسوم الخدمة + رسوم الشبكة
+    if (tokenSymbol === 'SOL') {
+      const requiredSol = amount + SERVICE_FEE_SOL + 0.00001;
+      return { hasBalance: solBalance >= requiredSol, balance: solBalance, required: requiredSol };
+    } 
+    
+    // 2. إذا كان يتبادل Token، يجب أن يمتلك الكمية من الـ Token + رسوم الخدمة بالـ SOL
+    else {
+      const mint = TOKEN_MINTS[tokenSymbol];
+      if (!mint) return { hasBalance: false, balance: 0, required: amount };
+      
+      const tokenBalance = await getTokenBalance(mint, true, pubKeyStr);
+      
+      // التأكد من وجود رصيد كافٍ من العملة، ووجود SOL كافٍ لدفع العمولة
+      const hasEnoughToken = tokenBalance >= amount;
+      const hasEnoughSolForFee = solBalance >= (SERVICE_FEE_SOL + 0.00001);
+      
+      return { 
+        hasBalance: hasEnoughToken && hasEnoughSolForFee, 
+        balance: tokenBalance, 
+        required: amount 
+      };
+    }
   } catch (error) {
     console.error('❌ [checkBalance] خطأ:', error.message);
     return { hasBalance: false, balance: 0, required: amount };

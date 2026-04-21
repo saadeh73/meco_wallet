@@ -26,7 +26,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 
-const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
+const FEE_COLLECTOR_ADDRESS = 'FosXqkRpbRnvtn7D1995BYv4BFNgsTfXs8WXhVXCjQqZ';
 const SERVICE_FEE_SOL = 0.0005;
 
 function getKeypairFromStore(storePrivateKey) {
