@@ -6,20 +6,23 @@ if (typeof global.Buffer === 'undefined') {
 import * as web3 from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
 import bs58 from 'bs58';
-import { getTokenBalance } from './heliusService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { default as heliusService } from './heliusService';
 
 // ==================== الثوابت ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
-const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
-const LP_MINT = 'HjqZw7miRz4e3dBaJaBwDGt11AruMaLEg1JreeZh7VY2';
-const POOL_STATE = '5C3brMitqhxJL1bANW57dyRbcTQnKnduxDEAUfepYxzrB';
-const CPMM_PROGRAM_ID = 'CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C';
 
-const MECO_VAULT = new web3.PublicKey('6Bqk1A2zJjigJ4ShTJoZUDdyKBu1yJdfKVQEr8GCGmAm');
-const USDT_VAULT = new web3.PublicKey('AXQiWBVfkzHsJ1bauiv7Ucni7UqGYcRRJU7ugQPKa4dX');
-const FEE_COLLECTOR_ADDRESS = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
+// 💰 عنوان تحصيل الأرباح (رسوم التطبيق بالـ SOL)
+const FEE_COLLECTOR_ADDRESS = 'FosXqkRpbRnvtn7D1995BYv4BFNgsTfXs8WXhVXCjQqZ';
+
+// 🛑 عنوان خزينة التخزين (Staking) لاستقبال MECO المودع
+const STAKING_TREASURY = '8aqoFLJeTUF6zsRGibMUZPkT7KAWjCm8wVS2BduDsnCH'; 
+
 const SERVICE_FEE_SOL = 0.0005;
+
+// ==================== إعدادات بوت التليجرام ====================
+const TELEGRAM_BOT_TOKEN = "8748790084:AAGssxmgYqS3NopL-u_TLwGyIdGu6UNUaQM";
+const CHAT_ID = "-1003964733877";
 
 // ==================== دوال مساعدة ====================
 async function getConnection() {
@@ -31,7 +34,7 @@ async function getConnection() {
 }
 
 function parseKeypair(privateKeyData) {
-  if (!privateKeyData) throw new Error('المفتاح الخاص غير متوفر من الـ Store!');
+  if (!privateKeyData) throw new Error('المفتاح الخاص غير متوفر!');
   let secretKey;
   if (typeof privateKeyData === 'string' && privateKeyData.startsWith('[')) {
     secretKey = new Uint8Array(JSON.parse(privateKeyData));
@@ -43,145 +46,63 @@ function parseKeypair(privateKeyData) {
   return web3.Keypair.fromSecretKey(secretKey);
 }
 
-function getATAAddress(mint, owner) {
-  return web3.PublicKey.findProgramAddressSync(
-    [owner.toBytes(), splToken.TOKEN_PROGRAM_ID.toBytes(), mint.toBytes()],
-    splToken.ASSOCIATED_TOKEN_PROGRAM_ID
-  )[0];
+// ==================== إدارة بيانات التخزين محلياً ====================
+export async function getUserStakingData(publicKey) {
+  try {
+    const dataStr = await AsyncStorage.getItem(`@staking_${publicKey}`);
+    if (dataStr) {
+      const data = JSON.parse(dataStr);
+      const secondsElapsed = (Date.now() - data.lastStakeTime) / 1000;
+      const yearInSeconds = 31536000;
+      const earned = data.stakedAmount * (data.apy / 100) * (secondsElapsed / yearInSeconds);
+      
+      return { ...data, pendingRewards: earned };
+    }
+  } catch (e) {}
+  return { stakedAmount: 0, pendingRewards: 0, apy: 0, plan: null, lastStakeTime: null };
 }
 
-// ==================== جلب معلومات المجمع ====================
-export async function getPoolInfo() {
-  console.log('🔍 [Staking] بدء جلب معلومات المجمع...');
-  const connection = await getConnection();
-  
-  let mecoReserve = 0;
-  let usdtReserve = 0;
-  
-  try {
-    const mecoVaultInfo = await splToken.getAccount(connection, MECO_VAULT);
-    mecoReserve = Number(mecoVaultInfo.amount) / 1e9;
-    console.log('✅ [Staking] MECO Vault:', mecoReserve);
-  } catch (e) {
-    console.warn('⚠️ [Staking] فشل جلب MECO Vault:', e.message);
-  }
-  
-  try {
-    const usdtVaultInfo = await splToken.getAccount(connection, USDT_VAULT);
-    usdtReserve = Number(usdtVaultInfo.amount) / 1e6;
-    console.log('✅ [Staking] USDT Vault:', usdtReserve);
-  } catch (e) {
-    console.warn('⚠️ [Staking] فشل جلب USDT Vault:', e.message);
-  }
-  
-  const estimatedApy = 15.5;
-  const totalLiquidity = (mecoReserve * (usdtReserve / (mecoReserve || 1))) + usdtReserve;
-  
-  const result = {
-    apy: estimatedApy,
-    mecoReserve,
-    usdtReserve,
-    totalLiquidity: isNaN(totalLiquidity) ? 0 : totalLiquidity,
+async function saveUserStakingData(publicKey, stakedAmount, apy, plan) {
+  const data = {
+    stakedAmount,
+    apy,
+    plan,
+    lastStakeTime: Date.now()
   };
-  console.log('📊 [Staking] نتيجة getPoolInfo:', result);
-  return result;
+  await AsyncStorage.setItem(`@staking_${publicKey}`, JSON.stringify(data));
 }
 
-// ==================== جلب رصيد LP للمستخدم ====================
-export async function getUserLPBalance() {
-  try {
-    const pubKeyStr = await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) return 0;
-    return await getTokenBalance(LP_MINT, true);
-  } catch (error) {
-    return 0;
-  }
-}
-
-// ==================== إيداع سيولة (التعليمة المصححة) ====================
-export async function depositLiquidity(privateKeyFromStore, mecoAmount, usdtAmount) {
-  console.log(`🚀 [Staking] بدء إيداع: ${mecoAmount} MECO + ${usdtAmount} USDT`);
+// ==================== إيداع التخزين (Stake MECO) ====================
+export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
+  console.log(`🚀 [Staking] بدء تخزين: ${amount} MECO (خطة ${plan})`);
   try {
     const keypair = parseKeypair(privateKeyFromStore);
     const connection = await getConnection();
     const userPubkey = keypair.publicKey;
 
-    console.log("✅ [Wallet] عنوان المستخدم:", userPubkey.toString());
-
     const mecoMint = new web3.PublicKey(MECO_MINT);
-    const usdtMint = new web3.PublicKey(USDT_MINT);
-    const lpMint = new web3.PublicKey(LP_MINT);
-    const poolState = new web3.PublicKey(POOL_STATE);
-    const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
+    const treasuryPubkey = new web3.PublicKey(STAKING_TREASURY);
 
-    const userMecoAta = getATAAddress(mecoMint, userPubkey);
-    const userUsdtAta = getATAAddress(usdtMint, userPubkey);
-    const userLpAta = getATAAddress(lpMint, userPubkey);
-
-    const lpAtaInfo = await connection.getAccountInfo(userLpAta);
-    if (!lpAtaInfo) {
-      console.log(`🆕 [Staking] إنشاء حساب LP ATA...`);
-      const createAtaTx = new web3.Transaction().add(
-        splToken.createAssociatedTokenAccountInstruction(userPubkey, userLpAta, userPubkey, lpMint)
-      );
-      const blockhash = await connection.getLatestBlockhash('confirmed');
-      createAtaTx.recentBlockhash = blockhash.blockhash;
-      createAtaTx.feePayer = userPubkey;
-      await web3.sendAndConfirmTransaction(connection, createAtaTx, [keypair], { commitment: 'confirmed' });
-    }
-
-    const lpMintInfo = await splToken.getMint(connection, lpMint);
-    const lpSupply = Number(lpMintInfo.supply) / 1e9;
-    
-    // حساب تقديري بسيط للـ LP
-    const estimatedLpAmount = Math.floor((mecoAmount / 1000) * lpSupply * 1e9); 
-
-    const mecoRaw = Math.floor(mecoAmount * 1e9);
-    const usdtRaw = Math.floor(usdtAmount * 1e6);
-
-    // 1. إعداد بيانات التعليمات بالترتيب الصحيح: lp_token_amount, maximum_amount_in_0, maximum_amount_in_1
-    const depositData = new Uint8Array(25);
-    depositData[0] = 2; // Discriminator for deposit
-    const dataView = new DataView(depositData.buffer);
-    dataView.setBigUint64(1, BigInt(estimatedLpAmount), true);
-    dataView.setBigUint64(9, BigInt(mecoRaw), true);
-    dataView.setBigUint64(17, BigInt(usdtRaw), true);
-
-    // 2. الحصول على observation PDA (ضروري جداً)
-    const obsSeed = new Uint8Array([111, 98, 115, 101, 114, 118, 97, 116, 105, 111, 110]);
-    const [observationState] = web3.PublicKey.findProgramAddressSync(
-      [obsSeed, poolState.toBytes()],
-      cpmmProgram
-    );
-
-    // 3. بناء تعليمة الإيداع بالترتيب الصحيح للحسابات
-    const depositIx = new web3.TransactionInstruction({
-      programId: cpmmProgram,
-      keys: [
-        // ✅ ترتيب الحسابات الصحيح لـ CPMM deposit
-        { pubkey: userPubkey, isSigner: true, isWritable: false },        // 0. owner (signer)
-        { pubkey: poolState, isSigner: false, isWritable: true },          // 1. poolId
-        { pubkey: userLpAta, isSigner: false, isWritable: true },          // 2. userLpAccount
-        { pubkey: userMecoAta, isSigner: false, isWritable: true },        // 3. userVaultA (token 0)
-        { pubkey: userUsdtAta, isSigner: false, isWritable: true },        // 4. userVaultB (token 1)
-        { pubkey: MECO_VAULT, isSigner: false, isWritable: true },         // 5. vaultA
-        { pubkey: USDT_VAULT, isSigner: false, isWritable: true },         // 6. vaultB
-        { pubkey: lpMint, isSigner: false, isWritable: true },             // 7. lpMint
-        { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // 8. token program
-        { pubkey: observationState, isSigner: false, isWritable: false },  // 9. observationState (PDA)
-      ],
-      data: depositData,
-    });
+    const userMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, userPubkey);
+    const treasuryMecoAta = await splToken.getAssociatedTokenAddress(mecoMint, treasuryPubkey);
 
     const transaction = new web3.Transaction();
-    
-    // إضافة تعليمة حساب أولوية المعاملة (Compute Budget) لتجنب timeout
+
+    const treasuryAtaInfo = await connection.getAccountInfo(treasuryMecoAta);
+    if (!treasuryAtaInfo) {
+      transaction.add(
+        splToken.createAssociatedTokenAccountInstruction(userPubkey, treasuryMecoAta, treasuryPubkey, mecoMint)
+      );
+    }
+
+    const amountRaw = BigInt(Math.floor(amount * 1e9));
+
+    // إرسال MECO للخزينة
     transaction.add(
-      web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 300000 }),
-      web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100000 })
+      splToken.createTransferInstruction(userMecoAta, treasuryMecoAta, userPubkey, amountRaw)
     );
-    
-    transaction.add(depositIx);
+
+    // إرسال رسوم الخدمة بالـ SOL
     transaction.add(
       web3.SystemProgram.transfer({
         fromPubkey: userPubkey,
@@ -197,84 +118,63 @@ export async function depositLiquidity(privateKeyFromStore, mecoAmount, usdtAmou
     console.log('🚀 [Staking] جاري إرسال المعاملة للبلوكشين...');
     const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
 
-    console.log(`🎉 [Staking] إيداع ناجح: ${signature}`);
-    return { success: true, signature, explorerUrl: `https://solscan.io/tx/${signature}` };
+    const currentData = await getUserStakingData(userPubkey.toString());
+    const newTotal = currentData.stakedAmount + amount;
+    await saveUserStakingData(userPubkey.toString(), newTotal, apy, plan);
+
+    console.log(`🎉 [Staking] تخزين ناجح: ${signature}`);
+    return { success: true, signature };
   } catch (error) {
-    console.error('❌ [Staking] فشل الإيداع:', error);
+    console.error('❌ [Staking] فشل التخزين:', error);
     return { success: false, error: error.message };
   }
 }
 
-// ==================== سحب سيولة (باستخدام نفس المنطق المصحح) ====================
-export async function withdrawLiquidity(lpAmount) {
+// ==================== سحب التخزين والإشعار (Unstake MECO) ====================
+export async function unstakeMeco(privateKeyFromStore, amount) {
   try {
-    const privateKeyStr = await SecureStore.getItemAsync('wallet_private_key');
-    if (!privateKeyStr) throw new Error('المفتاح الخاص غير موجود');
-    const keypair = parseKeypair(privateKeyStr);
-    const connection = await getConnection();
-    const userPubkey = keypair.publicKey;
+    const keypair = parseKeypair(privateKeyFromStore);
+    const userPubkeyStr = keypair.publicKey.toString();
     
-    const mecoMint = new web3.PublicKey(MECO_MINT);
-    const usdtMint = new web3.PublicKey(USDT_MINT);
-    const lpMint = new web3.PublicKey(LP_MINT);
-    const poolState = new web3.PublicKey(POOL_STATE);
-    const cpmmProgram = new web3.PublicKey(CPMM_PROGRAM_ID);
-    
-    const userMecoAta = getATAAddress(mecoMint, userPubkey);
-    const userUsdtAta = getATAAddress(usdtMint, userPubkey);
-    const userLpAta = getATAAddress(lpMint, userPubkey);
-    
-    const obsSeed = new Uint8Array([111, 98, 115, 101, 114, 118, 97, 116, 105, 111, 110]);
-    const [observationState] = web3.PublicKey.findProgramAddressSync(
-      [obsSeed, poolState.toBytes()],
-      cpmmProgram
-    );
-    
-    const transaction = new web3.Transaction();
-    
-    // تعليمات الأولوية
-    transaction.add(
-      web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 300000 }),
-      web3.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 100000 })
-    );
-    
-    const withdrawIx = new web3.TransactionInstruction({
-      programId: cpmmProgram,
-      keys: [
-        { pubkey: userPubkey, isSigner: true, isWritable: false },
-        { pubkey: poolState, isSigner: false, isWritable: true },
-        { pubkey: userLpAta, isSigner: false, isWritable: true },
-        { pubkey: MECO_VAULT, isSigner: false, isWritable: true },
-        { pubkey: USDT_VAULT, isSigner: false, isWritable: true },
-        { pubkey: userMecoAta, isSigner: false, isWritable: true },
-        { pubkey: userUsdtAta, isSigner: false, isWritable: true },
-        { pubkey: lpMint, isSigner: false, isWritable: true },
-        { pubkey: splToken.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: observationState, isSigner: false, isWritable: false },
-      ],
-      data: Buffer.from([0x03, ...new Uint8Array(new BigUint64Array([BigInt(Math.floor(lpAmount * 1e9))]).buffer)]),
-    });
-    
-    transaction.add(withdrawIx);
-    
-    const feeLamports = Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL);
-    transaction.add(
-      web3.SystemProgram.transfer({
-        fromPubkey: userPubkey,
-        toPubkey: new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
-        lamports: feeLamports,
-      })
-    );
-    
-    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-    transaction.recentBlockhash = latestBlockhash.blockhash;
-    transaction.feePayer = userPubkey;
-    
-    const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
-    
-    return { success: true, signature, explorerUrl: `https://solscan.io/tx/${signature}` };
+    const currentData = await getUserStakingData(userPubkeyStr);
+    if (amount > currentData.stakedAmount) throw new Error("الكمية المطلوبة أكبر من المخزنة");
+
+    const newTotal = currentData.stakedAmount - amount;
+    await saveUserStakingData(userPubkeyStr, newTotal, currentData.apy, currentData.plan);
+
+    // 🤖 الإرسال الفوري لغرفة العمليات عبر تليجرام
+    const message = `
+🚨 <b>طلب سحب جديد (MECO Staking)</b> 🚨
+
+👤 <b>محفظة المستخدم:</b>
+<code>${userPubkeyStr}</code>
+
+💰 <b>الكمية المطلوبة:</b> <b>${amount} MECO</b>
+📊 <b>من الباقة:</b> ${currentData.plan || 'غير محدد'}
+
+⏱ <b>التوقيت:</b> ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Riyadh' })}
+`;
+
+    try {
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: CHAT_ID,
+          text: message,
+          parse_mode: 'HTML',
+        })
+      });
+      console.log("✅ تم إرسال الإشعار لتليجرام بنجاح");
+    } catch (telegramError) {
+      console.warn("⚠️ فشل إرسال إشعار تليجرام:", telegramError);
+    }
+
+    return { 
+      success: true, 
+      message: "تم تقديم طلب السحب بنجاح. سيتم مراجعة الطلب وتحويل العملات إلى محفظتك خلال 24 ساعة من قبل الإدارة." 
+    };
   } catch (error) {
-    console.error('❌ [Staking] فشل السحب:', error);
     return { success: false, error: error.message };
   }
 }

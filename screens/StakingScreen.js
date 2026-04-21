@@ -1,25 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  SafeAreaView, ScrollView, Alert, ActivityIndicator,
-  Image, Modal
+  SafeAreaView, ScrollView, Alert, ActivityIndicator, Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import NetInfo from '@react-native-community/netinfo';
-import {
-  getPoolInfo,
-  getUserLPBalance,
-  depositLiquidity, // الدالة المعدلة تستقبل (privateKey, mecoAmount, usdtAmount)
-  withdrawLiquidity
-} from '../services/stakingService';
-import * as SwapAPI from '../services/swapService';
-import { getJupiterMarketData } from '../services/jupiterMarketService';
+import { checkBalance } from '../services/swapService';
+import { stakeMeco, unstakeMeco, getUserStakingData } from '../services/stakingService';
 
-const SLIPPAGE_OPTIONS = [0.5, 1.0, 3.0];
+// باقات التخزين
+const STAKING_PLANS = [
+  { id: 'flex', nameKey: 'plan_flex', apy: 15, durationKey: 'plan_flex_duration' },
+  { id: '30d', nameKey: 'plan_30d', apy: 25, durationKey: 'plan_30d_duration' },
+  { id: '60d', nameKey: 'plan_60d', apy: 40, durationKey: 'plan_60d_duration' },
+];
+
+const VIP_THRESHOLD = 10000;
 
 export default function StakingScreen() {
   const navigation = useNavigation();
@@ -28,139 +26,81 @@ export default function StakingScreen() {
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
 
+  const walletPublicKey = useAppStore(state => state.walletPublicKey);
+  const walletPrivateKey = useAppStore(state => state.walletPrivateKey);
+
   const colors = {
     background: isDark ? '#0A0A0F' : '#F8FAFD',
     card: isDark ? '#1A1A2E' : '#FFFFFF',
     text: isDark ? '#FFFFFF' : '#1A1A2E',
     textSecondary: isDark ? '#A0A0B0' : '#6B7280',
     border: isDark ? '#2A2A3E' : '#E5E7EB',
-    success: '#10B981',
+    gold: '#FFD700',
     error: '#EF4444',
-    warning: '#F59E0B',
+    success: '#10B981',
   };
 
-  const [poolInfo, setPoolInfo] = useState(null);
-  const [lpBalance, setLpBalance] = useState(0);
-  const [mecoBalance, setMecoBalance] = useState(0);
-  const [usdtBalance, setUsdtBalance] = useState(0);
   const [activeTab, setActiveTab] = useState('stake');
-  const [mecoAmount, setMecoAmount] = useState('');
-  const [usdtAmount, setUsdtAmount] = useState('');
-  const [lpAmount, setLpAmount] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState(STAKING_PLANS[1]);
+  const [mecoBalance, setMecoBalance] = useState(0);
+  const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
-  const [error, setError] = useState('');
-  const [isOffline, setIsOffline] = useState(false);
-  const [estimatedReceive, setEstimatedReceive] = useState({ meco: 0, usdt: 0 });
-
-  const [slippageBps, setSlippageBps] = useState(100);
-  const [showSlippageModal, setShowSlippageModal] = useState(false);
-  const [mecoPrice, setMecoPrice] = useState(0);
-
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => setIsOffline(!state.isConnected));
-    return () => unsubscribe();
-  }, []);
+  const [stakingData, setStakingData] = useState({ stakedAmount: 0, pendingRewards: 0 });
 
   useEffect(() => {
     loadData();
-    fetchMecoPrice();
-  }, []);
-
-  const fetchMecoPrice = async () => {
-    try {
-      const marketData = await getJupiterMarketData();
-      const meco = marketData.find(t => t.symbol === 'MECO');
-      if (meco) setMecoPrice(meco.current_price);
-    } catch (e) {
-      console.warn('Failed to fetch MECO price');
-    }
-  };
+    const interval = setInterval(async () => {
+      if (walletPublicKey) {
+        const data = await getUserStakingData(walletPublicKey);
+        setStakingData(data);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [walletPublicKey]);
 
   const loadData = async () => {
-    setLoadingData(true);
-    setError('');
+    if (!walletPublicKey) return;
     try {
-      const [pool, lpBal, mecoBal, usdtBal] = await Promise.all([
-        getPoolInfo(),
-        getUserLPBalance(),
-        SwapAPI.checkBalance('MECO', 0),
-        SwapAPI.checkBalance('USDT', 0),
-      ]);
-      setPoolInfo(pool);
-      setLpBalance(lpBal);
+      const mecoBal = await checkBalance('MECO', 0, walletPublicKey);
       setMecoBalance(mecoBal.balance || 0);
-      setUsdtBalance(usdtBal.balance || 0);
+      const sData = await getUserStakingData(walletPublicKey);
+      setStakingData(sData);
     } catch (err) {
-      setError(t('staking.load_error'));
-    } finally {
-      setLoadingData(false);
+      console.warn('Failed to load staking data');
     }
   };
-
-  const handleMecoChange = (value) => {
-    setMecoAmount(value);
-    const meco = parseFloat(value) || 0;
-    if (mecoPrice > 0) {
-      const usdtValue = meco * mecoPrice;
-      setUsdtAmount(usdtValue.toFixed(6));
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === 'unstake' && poolInfo && lpBalance > 0) {
-      const lpValue = parseFloat(lpAmount) || 0;
-      const share = lpValue / lpBalance;
-      setEstimatedReceive({
-        meco: (poolInfo.mecoReserve || 0) * share,
-        usdt: (poolInfo.usdtReserve || 0) * share,
-      });
-    }
-  }, [lpAmount, poolInfo, lpBalance, activeTab]);
 
   const handleStake = async () => {
-    const mecoVal = parseFloat(mecoAmount);
-    const usdtVal = parseFloat(usdtAmount);
-    if (isNaN(mecoVal) || mecoVal <= 0 || isNaN(usdtVal) || usdtVal <= 0) {
-      Alert.alert(t('error'), t('staking.enter_valid_amounts'));
-      return;
+    const val = parseFloat(amount);
+    if (isNaN(val) || val <= 0) {
+      return Alert.alert(t('staking.error'), t('staking.enter_valid_amount'));
     }
-    if (mecoVal > mecoBalance || usdtVal > usdtBalance) {
-      Alert.alert(t('error'), t('staking.insufficient_balance'));
-      return;
+    if (val > mecoBalance) {
+      return Alert.alert(t('staking.error'), t('staking.insufficient_balance'));
     }
-
-    // ✅ الحصول على المفتاح الخاص من SecureStore
-    const privateKey = await SecureStore.getItemAsync('wallet_private_key');
-    if (!privateKey) {
-      Alert.alert(t('error'), 'لم يتم العثور على المفتاح الخاص للمحفظة');
-      return;
+    if (!walletPrivateKey) {
+      return Alert.alert(t('staking.error'), t('staking.wallet_not_connected'));
     }
 
+    const planName = t(`staking.${selectedPlan.nameKey}`);
     Alert.alert(
       t('staking.confirm_stake'),
-      `${mecoVal} MECO + ${usdtVal} USDT`,
+      t('staking.stake_confirmation_message', { val, planName }),
       [
-        { text: t('cancel'), style: 'cancel' },
+        { text: t('staking.cancel'), style: 'cancel' },
         {
-          text: t('confirm'),
+          text: t('staking.confirm'),
           onPress: async () => {
             setLoading(true);
-            try {
-              // ✅ تمرير المفتاح الخاص كأول معامل
-              const result = await depositLiquidity(privateKey, mecoVal, usdtVal);
-              if (result.success) {
-                Alert.alert(t('success'), t('staking.stake_success'), [
-                  { text: t('ok'), onPress: () => { setMecoAmount(''); setUsdtAmount(''); loadData(); } }
-                ]);
-              } else {
-                Alert.alert(t('error'), result.error);
-              }
-            } catch (err) {
-              Alert.alert(t('error'), err.message);
-            } finally {
-              setLoading(false);
+            const res = await stakeMeco(walletPrivateKey, val, selectedPlan.apy, selectedPlan.id);
+            if (res.success) {
+              Alert.alert(t('staking.success'), t('staking.stake_success'));
+              setAmount('');
+              loadData();
+            } else {
+              Alert.alert(t('staking.failed'), res.error);
             }
+            setLoading(false);
           }
         }
       ]
@@ -168,252 +108,182 @@ export default function StakingScreen() {
   };
 
   const handleUnstake = async () => {
-    const lpVal = parseFloat(lpAmount);
-    if (isNaN(lpVal) || lpVal <= 0) {
-      Alert.alert(t('error'), t('staking.enter_valid_lp_amount'));
-      return;
+    const val = parseFloat(amount);
+    if (isNaN(val) || val <= 0) {
+      return Alert.alert(t('staking.error'), t('staking.enter_valid_amount'));
     }
-    if (lpVal > lpBalance) {
-      Alert.alert(t('error'), t('staking.insufficient_lp'));
-      return;
+    if (val > stakingData.stakedAmount) {
+      return Alert.alert(t('staking.error'), t('staking.insufficient_balance'));
     }
 
     Alert.alert(
-      t('staking.confirm_unstake'),
-      t('staking.unstake_confirmation', { amount: lpVal }),
+      t('staking.request_unstake'),
+      t('staking.unstake_confirmation_message', { val }),
       [
-        { text: t('cancel'), style: 'cancel' },
+        { text: t('staking.cancel'), style: 'cancel' },
         {
-          text: t('confirm'),
+          text: t('staking.confirm'),
           onPress: async () => {
             setLoading(true);
-            try {
-              const result = await withdrawLiquidity(lpVal);
-              if (result.success) {
-                Alert.alert(t('success'), t('staking.unstake_success'), [
-                  { text: t('ok'), onPress: () => { setLpAmount(''); loadData(); } }
-                ]);
-              } else {
-                Alert.alert(t('error'), result.error);
-              }
-            } catch (err) {
-              Alert.alert(t('error'), err.message);
-            } finally {
-              setLoading(false);
+            const res = await unstakeMeco(walletPrivateKey, val);
+            if (res.success) {
+              Alert.alert(t('staking.request_sent'), res.message);
+              setAmount('');
+              loadData();
+            } else {
+              Alert.alert(t('staking.failed'), res.error);
             }
+            setLoading(false);
           }
         }
       ]
     );
   };
 
-  const useMaxMeco = () => {
-    setMecoAmount(mecoBalance.toString());
-    if (mecoPrice > 0) {
-      setUsdtAmount((mecoBalance * mecoPrice).toFixed(6));
-    }
-  };
-  const useMaxUsdt = () => setUsdtAmount(usdtBalance.toString());
-  const useMaxLp = () => setLpAmount(lpBalance.toString());
-
-  if (loadingData) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={primaryColor} />
-      </View>
-    );
-  }
+  // الحصول على اسم ومدة الخطة مترجمين
+  const getPlanName = (plan) => t(`staking.${plan.nameKey}`);
+  const getPlanDuration = (plan) => t(`staking.${plan.durationKey}`);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-
-        <Text style={[styles.title, { color: colors.text }]}>{t('staking.title')}</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('staking.subtitle')}</Text>
-
-        {isOffline && (
-          <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
-            <Ionicons name="cloud-offline" size={16} color={colors.warning} />
-            <Text style={[styles.offlineText, { color: colors.warning }]}>{t('offline_mode')}</Text>
-          </View>
-        )}
-
-        <View style={[styles.priceCard, { backgroundColor: colors.card }]}>
-          <Text style={{ color: colors.textSecondary }}>MECO Price:</Text>
-          <Text style={{ color: colors.text, fontWeight: 'bold' }}>${mecoPrice.toFixed(8)}</Text>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>{t('staking.title')}</Text>
+          <View style={{ width: 24 }} />
         </View>
 
-        <TouchableOpacity
-          style={[styles.slippageButton, { backgroundColor: colors.card }]}
-          onPress={() => setShowSlippageModal(true)}
-        >
-          <Text style={{ color: colors.text }}>Slippage Tolerance: {slippageBps / 100}%</Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
-
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <View style={styles.poolHeader}>
-            <Image source={{ uri: 'https://raydium.io/icons/raydium.svg' }} style={styles.poolIcon} />
-            <Text style={[styles.poolTitle, { color: colors.text }]}>MECO-USDT</Text>
-          </View>
-          <View style={styles.poolStats}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>APY</Text>
-              <Text style={[styles.statValue, { color: colors.success }]}>{poolInfo?.apy || '--'}%</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>TVL</Text>
-              <Text style={[styles.statValue, { color: colors.text }]}>${(poolInfo?.totalLiquidity || 0).toLocaleString()}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Your LP</Text>
-              <Text style={[styles.statValue, { color: primaryColor }]}>{lpBalance.toFixed(4)}</Text>
-            </View>
+        {/* VIP Banner */}
+        <View style={[styles.vipBanner, { backgroundColor: colors.gold + '20', borderColor: colors.gold }]}>
+          <Ionicons name="diamond" size={28} color={colors.gold} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.vipTitle, { color: colors.gold }]}>{t('staking.vip_title')}</Text>
+            <Text style={[styles.vipText, { color: colors.text }]}>
+              {t('staking.vip_description', { amount: VIP_THRESHOLD.toLocaleString() })}
+            </Text>
           </View>
         </View>
 
+        {/* User Stats */}
+        <View style={[styles.statsCard, { backgroundColor: colors.card }]}>
+          <View style={styles.statBox}>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t('staking.available_to_stake')}</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{mecoBalance.toFixed(2)}</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statBox}>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t('staking.currently_staked')}</Text>
+            <Text style={[styles.statValue, { color: primaryColor }]}>{stakingData.stakedAmount.toFixed(2)}</Text>
+          </View>
+        </View>
+
+        {/* Rewards */}
+        <View style={[styles.rewardsCard, { backgroundColor: primaryColor + '15', borderColor: primaryColor }]}>
+          <Ionicons name="gift" size={24} color={primaryColor} />
+          <View style={{ marginLeft: 12, flex: 1 }}>
+            <Text style={[styles.rewardsLabel, { color: colors.textSecondary }]}>{t('staking.accumulated_rewards')}</Text>
+            <Text style={[styles.rewardsValue, { color: primaryColor }]}>
+              {t('staking.rewards_value', { rewards: stakingData.pendingRewards.toFixed(6) })}
+            </Text>
+          </View>
+          <TouchableOpacity style={[styles.harvestBtn, { backgroundColor: primaryColor }]}>
+            <Text style={styles.harvestText}>{t('staking.harvest')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Tabs */}
         <View style={[styles.tabContainer, { backgroundColor: colors.card }]}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'stake' && { borderBottomColor: primaryColor, borderBottomWidth: 2 }]}
-            onPress={() => setActiveTab('stake')}
+            onPress={() => { setActiveTab('stake'); setAmount(''); }}
           >
-            <Text style={[styles.tabText, { color: activeTab === 'stake' ? primaryColor : colors.textSecondary }]}>{t('staking.stake_tab')}</Text>
+            <Text style={[styles.tabText, { color: activeTab === 'stake' ? primaryColor : colors.textSecondary }]}>
+              {t('staking.stake_tab')}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'unstake' && { borderBottomColor: primaryColor, borderBottomWidth: 2 }]}
-            onPress={() => setActiveTab('unstake')}
+            onPress={() => { setActiveTab('unstake'); setAmount(''); }}
           >
-            <Text style={[styles.tabText, { color: activeTab === 'unstake' ? primaryColor : colors.textSecondary }]}>{t('staking.unstake_tab')}</Text>
+            <Text style={[styles.tabText, { color: activeTab === 'unstake' ? primaryColor : colors.textSecondary }]}>
+              {t('staking.unstake_tab')}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {activeTab === 'stake' ? (
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <View style={styles.inputGroup}>
-              <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>MECO</Text>
-                <TouchableOpacity onPress={useMaxMeco}>
-                  <Text style={[styles.maxButton, { color: primaryColor }]}>{t('max')}</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={[styles.input, { color: colors.text, borderColor: colors.border }]}
-                placeholder="0.00"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={mecoAmount}
-                onChangeText={handleMecoChange}
-              />
-              <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
-                {t('balance')}: {mecoBalance.toFixed(4)} MECO
-              </Text>
+        <View style={[styles.mainCard, { backgroundColor: colors.card }]}>
+          {activeTab === 'stake' && (
+            <View style={styles.plansContainer}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('staking.choose_plan')}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {STAKING_PLANS.map(plan => {
+                  const isSelected = selectedPlan.id === plan.id;
+                  return (
+                    <TouchableOpacity
+                      key={plan.id}
+                      style={[
+                        styles.planCard,
+                        {
+                          backgroundColor: isSelected ? primaryColor + '20' : colors.background,
+                          borderColor: isSelected ? primaryColor : colors.border
+                        }
+                      ]}
+                      onPress={() => setSelectedPlan(plan)}
+                    >
+                      <Text style={[styles.planApy, { color: isSelected ? primaryColor : colors.success }]}>
+                        {plan.apy}% APY
+                      </Text>
+                      <Text style={[styles.planName, { color: colors.text }]}>{getPlanName(plan)}</Text>
+                      <Text style={[styles.planDuration, { color: colors.textSecondary }]}>{getPlanDuration(plan)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
+          )}
 
-            <View style={styles.inputGroup}>
-              <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>USDT (Auto)</Text>
-                <TouchableOpacity onPress={useMaxUsdt}>
-                  <Text style={[styles.maxButton, { color: primaryColor }]}>{t('max')}</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={[styles.input, { color: colors.text, borderColor: colors.border }]}
-                placeholder="0.00"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={usdtAmount}
-                onChangeText={setUsdtAmount}
-                editable={false}
-              />
-              <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
-                {t('balance')}: {usdtBalance.toFixed(4)} USDT
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: primaryColor, opacity: loading ? 0.6 : 1 }]}
-              onPress={handleStake}
-              disabled={loading}
-            >
-              {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.actionButtonText}>{t('staking.stake')}</Text>}
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <View style={styles.inputGroup}>
-              <View style={styles.inputHeader}>
-                <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>LP Tokens</Text>
-                <TouchableOpacity onPress={useMaxLp}>
-                  <Text style={[styles.maxButton, { color: primaryColor }]}>{t('max')}</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={[styles.input, { color: colors.text, borderColor: colors.border }]}
-                placeholder="0.00"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={lpAmount}
-                onChangeText={setLpAmount}
-              />
-              <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
-                {t('balance')}: {lpBalance.toFixed(4)} LP
-              </Text>
-            </View>
-
-            <View style={[styles.estimateCard, { backgroundColor: colors.background }]}>
-              <Text style={[styles.estimateTitle, { color: colors.text }]}>{t('staking.you_will_receive')}</Text>
-              <View style={styles.estimateRow}>
-                <Text style={[styles.estimateLabel, { color: colors.textSecondary }]}>MECO</Text>
-                <Text style={[styles.estimateValue, { color: colors.text }]}>{estimatedReceive.meco.toFixed(4)}</Text>
-              </View>
-              <View style={styles.estimateRow}>
-                <Text style={[styles.estimateLabel, { color: colors.textSecondary }]}>USDT</Text>
-                <Text style={[styles.estimateValue, { color: colors.text }]}>{estimatedReceive.usdt.toFixed(4)}</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: primaryColor, opacity: loading ? 0.6 : 1 }]}
-              onPress={handleUnstake}
-              disabled={loading}
-            >
-              {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.actionButtonText}>{t('staking.unstake')}</Text>}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {error ? (
-          <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
-            <Ionicons name="warning" size={20} color={colors.error} />
-            <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
-          </View>
-        ) : null}
-
-        <Modal visible={showSlippageModal} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Select Slippage Tolerance</Text>
-              {SLIPPAGE_OPTIONS.map(opt => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.slippageOption, { borderBottomColor: colors.border }]}
-                  onPress={() => {
-                    setSlippageBps(Math.floor(opt * 100));
-                    setShowSlippageModal(false);
-                  }}
-                >
-                  <Text style={{ color: colors.text }}>{opt}%</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity style={styles.modalClose} onPress={() => setShowSlippageModal(false)}>
-                <Text style={{ color: primaryColor }}>{t('close')}</Text>
+          <View style={styles.inputContainer}>
+            <View style={styles.inputHeader}>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{t('staking.amount_label')}</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  setAmount(
+                    activeTab === 'stake' ? mecoBalance.toString() : stakingData.stakedAmount.toString()
+                  )
+                }
+              >
+                <Text style={[styles.maxText, { color: primaryColor }]}>{t('staking.max')}</Text>
               </TouchableOpacity>
             </View>
+            <View style={[styles.inputBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                placeholder="0.00"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="numeric"
+                value={amount}
+                onChangeText={setAmount}
+              />
+              <Text style={[styles.currencyLabel, { color: colors.text }]}>MECO</Text>
+            </View>
           </View>
-        </Modal>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: primaryColor, opacity: loading ? 0.7 : 1 }]}
+            onPress={activeTab === 'stake' ? handleStake : handleUnstake}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.actionBtnText}>
+                {activeTab === 'stake' ? t('staking.confirm_stake') : t('staking.request_unstake')}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -421,43 +291,40 @@ export default function StakingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
-  backButton: { marginBottom: 10 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 5, textAlign: 'center' },
-  subtitle: { fontSize: 14, textAlign: 'center', marginBottom: 20 },
-  card: { borderRadius: 20, padding: 16, marginBottom: 16 },
-  poolHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  poolIcon: { width: 32, height: 32, borderRadius: 16, marginRight: 10 },
-  poolTitle: { fontSize: 18, fontWeight: '700' },
-  poolStats: { flexDirection: 'row', justifyContent: 'space-around' },
-  statItem: { alignItems: 'center' },
-  statLabel: { fontSize: 12, marginBottom: 4 },
-  statValue: { fontSize: 16, fontWeight: '600' },
-  tabContainer: { flexDirection: 'row', borderRadius: 16, marginBottom: 16, paddingHorizontal: 8 },
+  content: { padding: 20 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  backBtn: { padding: 5 },
+  title: { fontSize: 24, fontWeight: 'bold' },
+  vipBanner: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
+  vipTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  vipText: { fontSize: 13, lineHeight: 20 },
+  statsCard: { flexDirection: 'row', borderRadius: 16, padding: 20, marginBottom: 16 },
+  statBox: { flex: 1, alignItems: 'center' },
+  statDivider: { width: 1, backgroundColor: '#333', marginHorizontal: 10 },
+  statLabel: { fontSize: 14, marginBottom: 8 },
+  statValue: { fontSize: 22, fontWeight: 'bold' },
+  rewardsCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 24 },
+  rewardsLabel: { fontSize: 12, marginBottom: 4 },
+  rewardsValue: { fontSize: 18, fontWeight: 'bold' },
+  harvestBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  harvestText: { color: '#FFF', fontWeight: 'bold' },
+  tabContainer: { flexDirection: 'row', borderRadius: 16, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  tabText: { fontSize: 16, fontWeight: '600' },
-  inputGroup: { marginBottom: 20 },
+  tabText: { fontSize: 16, fontWeight: 'bold' },
+  mainCard: { borderRadius: 16, padding: 20 },
+  plansContainer: { marginBottom: 24 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
+  planCard: { width: 110, padding: 16, borderRadius: 12, borderWidth: 1, marginRight: 12, alignItems: 'center' },
+  planApy: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  planName: { fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  planDuration: { fontSize: 12 },
+  inputContainer: { marginBottom: 24 },
   inputHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  inputLabel: { fontSize: 14, fontWeight: '500' },
-  maxButton: { fontSize: 14, fontWeight: '600' },
-  input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16 },
-  balanceText: { fontSize: 12, marginTop: 6, textAlign: 'right' },
-  actionButton: { padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 8 },
-  actionButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
-  estimateCard: { borderRadius: 12, padding: 16, marginBottom: 20 },
-  estimateTitle: { fontSize: 14, fontWeight: '600', marginBottom: 12 },
-  estimateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  estimateLabel: { fontSize: 14 },
-  estimateValue: { fontSize: 14, fontWeight: '600' },
-  errorCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginTop: 10, gap: 8 },
-  errorText: { flex: 1, fontSize: 14 },
-  offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 15, gap: 8 },
-  offlineText: { fontSize: 14, fontWeight: '500' },
-  priceCard: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderRadius: 12, marginBottom: 12 },
-  slippageButton: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '80%', borderRadius: 20, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  slippageOption: { paddingVertical: 14, borderBottomWidth: 1 },
-  modalClose: { marginTop: 16, alignItems: 'center', padding: 10 },
+  inputLabel: { fontSize: 14 },
+  maxText: { fontSize: 14, fontWeight: 'bold' },
+  inputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 16 },
+  input: { flex: 1, height: 56, fontSize: 18 },
+  currencyLabel: { fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
+  actionBtn: { paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  actionBtnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 });
