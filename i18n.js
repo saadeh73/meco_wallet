@@ -83,24 +83,6 @@ const resources = {
       edit: 'تعديل',
       copy: 'نسخ',
 
-      // ========== جهات الاتصال (Contacts) ==========
-      contacts: 'جهات الاتصال',
-      add_contact: 'إضافة جهة اتصال',
-      edit_contact: 'تعديل جهة الاتصال',
-      delete_contact: 'حذف جهة الاتصال',
-      delete_contact_confirmation: 'هل أنت متأكد من حذف "{{name}}" من جهات الاتصال؟',
-      search_contacts: 'بحث في جهات الاتصال...',
-      contact_name: 'الاسم',
-      contact_address: 'العنوان (Solana)',
-      contact_name_placeholder: 'أدخل اسمًا مميزًا',
-      contact_address_placeholder: 'أدخل عنوان Solana',
-      contact_name_required: 'الرجاء إدخال اسم جهة الاتصال',
-      contact_address_required: 'الرجاء إدخال عنوان المحفظة',
-      invalid_solana_address: 'عنوان Solana غير صالح',
-      no_contacts_yet: 'لا توجد جهات اتصال محفوظة بعد',
-      no_contacts_found: 'لا توجد نتائج تطابق البحث',
-      add_first_contact: 'إضافة أول جهة اتصال',
-
       // ========== Web3 (WalletConnect) ==========
       web3: {
         disconnect_success: 'تم قطع الاتصال بنجاح.',
@@ -520,24 +502,6 @@ const resources = {
       swipe_hint: 'Tap the icon to copy address',
       edit: 'Edit',
       copy: 'Copy',
-
-      // ========== Contacts ==========
-      contacts: 'Contacts',
-      add_contact: 'Add Contact',
-      edit_contact: 'Edit Contact',
-      delete_contact: 'Delete Contact',
-      delete_contact_confirmation: 'Are you sure you want to delete "{{name}}" from contacts?',
-      search_contacts: 'Search contacts...',
-      contact_name: 'Name',
-      contact_address: 'Address (Solana)',
-      contact_name_placeholder: 'Enter a memorable name',
-      contact_address_placeholder: 'Enter Solana address',
-      contact_name_required: 'Please enter a contact name',
-      contact_address_required: 'Please enter a wallet address',
-      invalid_solana_address: 'Invalid Solana address',
-      no_contacts_yet: 'No contacts saved yet',
-      no_contacts_found: 'No matching contacts found',
-      add_first_contact: 'Add First Contact',
 
       // ========== Web3 (WalletConnect) keys ==========
       web3: {

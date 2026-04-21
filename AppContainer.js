@@ -32,7 +32,6 @@ import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
 import StakingScreen from './screens/StakingScreen';
-import ContactsScreen from './screens/ContactsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -222,7 +221,6 @@ export default function AppContainer() {
         <Stack.Screen name="Backup" component={BackupScreen} options={{ title: t('backup_wallet') }} />
         <Stack.Screen name="Swap" component={SwapScreen} options={{ title: t('swap_title') || 'تبادل', headerBackTitle: t('back') || 'رجوع' }} />
         <Stack.Screen name="Staking" component={StakingScreen} options={{ title: t('staking.title') || 'تخزين السيولة', headerBackTitle: t('back') || 'رجوع' }} />
-        <Stack.Screen name="Contacts" component={ContactsScreen} options={{ title: t('contacts') || 'جهات الاتصال', headerBackTitle: t('back') || 'رجوع' }} />
         <Stack.Screen name="TokenDetails" component={TokenDetailsScreen} options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="QRScanner" component={QRScannerScreen} options={{ title: t('qr_scanner.title'), headerBackTitle: t('back'), headerShown: false }} />
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />

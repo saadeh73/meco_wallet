@@ -15,7 +15,7 @@ import {
   getCurrentNetworkFee,
   getLatestBlockhash,
   clearBalanceCache,
-  heliusRpcRequest // ✅ أضفنا هذا لنستخدم Helius بدلاً من الشبكة المجانية
+  heliusRpcRequest
 } from '../services/heliusService';
 import { logTransaction } from '../services/transactionLogger';
 import { Ionicons } from '@expo/vector-icons';
@@ -160,7 +160,6 @@ export default function SendScreen() {
         try {
           const balance = await getTokenBalance(token.mint, false, publicKey);
           newTokenBalances[token.symbol] = balance;
-          // ✅ إبقائنا على التعديل الذكي الذي قمت به أنت
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch (e) {
           newTokenBalances[token.symbol] = 0;
@@ -208,7 +207,6 @@ export default function SendScreen() {
       let hasTokenAcc = true;
       if (validation.isValid && tokenMint) {
         try {
-          // ✅ تم مسح الاتصال بالشبكة المجانية، واستخدام Helius الذي لا يعطي 429
           const mintKey = new web3.PublicKey(tokenMint);
           const ownerKey = new web3.PublicKey(address);
           const ata = await splToken.getAssociatedTokenAddress(mintKey, ownerKey);
@@ -268,7 +266,6 @@ export default function SendScreen() {
       const toPubkey = new web3.PublicKey(recipient);
       const feeCollectorPubkey = new web3.PublicKey(FEE_COLLECTOR_ADDRESS);
 
-      // ✅ استبدال الاتصال المجاني باتصال قوي لمنع فشل التحويل
       const rpcEndpoint = 'https://mainnet.helius-rpc.com/?api-key=fb28d3cf-7dd1-4667-9167-7941c3aceb66';
       const connection = new web3.Connection(rpcEndpoint, 'confirmed');
       
@@ -293,7 +290,6 @@ export default function SendScreen() {
         const fromATA = await splToken.getAssociatedTokenAddress(mint, fromPubkey);
         const toATA = await splToken.getAssociatedTokenAddress(mint, toPubkey);
         
-        // ✅ استخدام Helius للتحقق
         const toAccountInfo = await heliusRpcRequest('getAccountInfo', [toATA.toBase58()]);
         if (!toAccountInfo) {
           transaction.add(splToken.createAssociatedTokenAccountInstruction(fromPubkey, toATA, toPubkey, mint));
@@ -347,10 +343,6 @@ export default function SendScreen() {
     const text = await Clipboard.getStringAsync();
     if (text) setState(prev => ({ ...prev, recipient: text.trim() }));
   }, []);
-
-  const openContacts = useCallback(() => {
-    navigation.navigate('Contacts', { selectMode: true });
-  }, [navigation]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -436,9 +428,6 @@ export default function SendScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity onPress={handlePasteAddress}>
                   <Ionicons name="clipboard-outline" size={20} color={primaryColor} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={openContacts}>
-                  <Ionicons name="people-outline" size={20} color={primaryColor} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => navigation.navigate('QRScanner')}>
                   <Ionicons name="qr-code-outline" size={22} color={primaryColor} />
