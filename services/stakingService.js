@@ -11,21 +11,14 @@ import { default as heliusService } from './heliusService';
 
 // ==================== الثوابت والعناوين ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
-
-// 💰 عنوان تحصيل الأرباح (رسوم التطبيق بالـ SOL) كما طلبت
 const FEE_COLLECTOR_ADDRESS = 'FosXqkRpbRnvtn7D1995BYv4BFNgsTfXs8WXhVXCjQqZ';
-
-// 🛑 عنوان خزينة التخزين (Staking) لاستقبال MECO المودع
 const STAKING_TREASURY = '8aqoFLJeTUF6zsRGibMUZPkT7KAWjCm8wVS2BduDsnCH'; 
-
 const SERVICE_FEE_SOL = 0.0005;
 
-// ==================== حماية بيانات التليجرام (Obfuscation) ====================
-// 🛡️ تم تشفير الرموز بـ Base64 لكي لا يتمكن الهاكرز من قراءتها من الكود المصدري
+// ==================== حماية بيانات التليجرام ====================
 const ENCODED_BOT_TOKEN = "ODc0ODc5MDA4NDpBQUdzc3htZ1lxUzNOb3BMLXVfVEx3R3lJZEd1NlVOVWFRTQ==";
 const ENCODED_CHAT_ID = "LTEwMDM5NjQ3MzM4Nzc=";
 
-// دالة لفك التشفير لحظة الإرسال فقط
 const getDecryptedSecret = (encodedStr) => {
   return Buffer.from(encodedStr, 'base64').toString('utf8');
 };
@@ -73,14 +66,13 @@ async function saveUserStakingData(publicKey, stakedAmount, apy, plan) {
     stakedAmount,
     apy,
     plan,
-    lastStakeTime: Date.now()
+    lastStakeTime: Date.now() // يتم تصفير العداد لكي يحسب من هذه اللحظة فصاعداً
   };
   await AsyncStorage.setItem(`@staking_${publicKey}`, JSON.stringify(data));
 }
 
 // ==================== إيداع التخزين (Stake MECO) ====================
 export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
-  console.log(`🚀 [Staking] بدء تخزين: ${amount} MECO (خطة ${plan})`);
   try {
     const keypair = parseKeypair(privateKeyFromStore);
     const connection = await getConnection();
@@ -103,12 +95,10 @@ export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
 
     const amountRaw = BigInt(Math.floor(amount * 1e9));
 
-    // إرسال MECO لخزينة التخزين
     transaction.add(
       splToken.createTransferInstruction(userMecoAta, treasuryMecoAta, userPubkey, amountRaw)
     );
 
-    // إرسال رسوم الخدمة بالـ SOL لمحفظة الأرباح
     transaction.add(
       web3.SystemProgram.transfer({
         fromPubkey: userPubkey,
@@ -121,34 +111,38 @@ export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
     transaction.recentBlockhash = latestBlockhash.blockhash;
     transaction.feePayer = userPubkey;
 
-    console.log('🚀 [Staking] جاري إرسال المعاملة للبلوكشين...');
     const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
 
+    // ✅ قبل حفظ الرصيد الجديد، نحتفظ بالأرباح القديمة ونضيفها للرصيد
     const currentData = await getUserStakingData(userPubkey.toString());
-    const newTotal = currentData.stakedAmount + amount;
+    const newTotal = currentData.stakedAmount + currentData.pendingRewards + amount; 
+    
     await saveUserStakingData(userPubkey.toString(), newTotal, apy, plan);
 
-    console.log(`🎉 [Staking] تخزين ناجح: ${signature}`);
     return { success: true, signature };
   } catch (error) {
-    console.error('❌ [Staking] فشل التخزين:', error);
     return { success: false, error: error.message };
   }
 }
 
-// ==================== سحب التخزين والإشعار (Unstake MECO) ====================
+// ==================== سحب التخزين والمحاسبة الدقيقة (Unstake MECO) ====================
 export async function unstakeMeco(privateKeyFromStore, amount) {
   try {
     const keypair = parseKeypair(privateKeyFromStore);
     const userPubkeyStr = keypair.publicKey.toString();
     
+    // 1. جلب البيانات والأرباح الدقيقة حتى هذه الثانية
     const currentData = await getUserStakingData(userPubkeyStr);
     if (amount > currentData.stakedAmount) throw new Error("الكمية المطلوبة أكبر من المخزنة");
 
+    const exactRewards = currentData.pendingRewards;
+    const totalToSend = amount + exactRewards; // إجمالي ما ستقوم أنت بإرساله للمستخدم
+
+    // 2. تحديث بيانات المستخدم وتصفير العداد للمبلغ المسحوب
     const newTotal = currentData.stakedAmount - amount;
     await saveUserStakingData(userPubkeyStr, newTotal, currentData.apy, currentData.plan);
 
-    // 🤖 الإرسال الفوري لغرفة العمليات عبر تليجرام باستخدام الرموز بعد فك تشفيرها
+    // 3. الإرسال الشفاف للإدارة عبر التليجرام
     const botToken = getDecryptedSecret(ENCODED_BOT_TOKEN);
     const chatId = getDecryptedSecret(ENCODED_CHAT_ID);
 
@@ -158,9 +152,12 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
 👤 <b>محفظة المستخدم:</b>
 <code>${userPubkeyStr}</code>
 
-💰 <b>الكمية المطلوبة:</b> <b>${amount} MECO</b>
-📊 <b>من الباقة:</b> ${currentData.plan || 'غير محدد'}
+📦 <b>أصل المبلغ المسحوب:</b> ${amount} MECO
+🎁 <b>الأرباح المستحقة:</b> ${exactRewards.toFixed(6)} MECO
+──────────────
+💳 <b>إجمالي المطلوب إرساله:</b> <b>${totalToSend.toFixed(6)} MECO</b>
 
+📊 <b>الخطة السابقة:</b> ${currentData.plan || 'مرن'}
 ⏱ <b>التوقيت:</b> ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Riyadh' })}
 `;
 
@@ -174,14 +171,13 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
           parse_mode: 'HTML',
         })
       });
-      console.log("✅ تم إرسال الإشعار لتليجرام بنجاح");
     } catch (telegramError) {
       console.warn("⚠️ فشل إرسال إشعار تليجرام:", telegramError);
     }
 
     return { 
       success: true, 
-      message: "تم تقديم طلب السحب بنجاح. سيتم مراجعة الطلب وتحويل العملات إلى محفظتك خلال 24 ساعة من قبل الإدارة." 
+      message: `تم تقديم طلب السحب. الإجمالي المستحق لك هو ${totalToSend.toFixed(4)} MECO سيتم تحويله لمحفظتك.` 
     };
   } catch (error) {
     return { success: false, error: error.message };

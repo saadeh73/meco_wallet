@@ -250,7 +250,10 @@ export default function SendScreen() {
       await executeTransaction(amountNum, recipient, currentToken);
     } catch (error) {
       console.error('Send Error:', error);
-      Alert.alert(t('sendScreen.alerts.error'), error.message || 'Transaction failed');
+      // رسالة خطأ عامة كحماية إضافية (سيتم التعامل مع الخطأ داخل executeTransaction)
+      if (!error.handled) {
+        Alert.alert(t('sendScreen.alerts.error'), error.message || 'Transaction failed');
+      }
     } finally {
       if (isMounted.current) setState(prev => ({ ...prev, loading: false }));
     }
@@ -325,6 +328,17 @@ export default function SendScreen() {
       );
     } catch (error) {
       console.error('Exec Transaction Failed:', error);
+      
+      // تحسين رسالة الخطأ الخاصة بـ insufficient funds for rent
+      const errorString = error.toString();
+      if (errorString.includes('insufficient funds for rent') || errorString.includes('Transaction results in an account (0) with insufficient funds for rent')) {
+        Alert.alert(
+          t('sendScreen.alerts.error'),
+          'لا يمكن إرسال كامل الرصيد. يجب ترك حد أدنى (~0.001 SOL) لتغطية رسوم الشبكة الدائمة.\n\nInsufficient funds for rent. Please leave at least ~0.001 SOL in your wallet.'
+        );
+        error.handled = true;
+      }
+      
       throw error;
     }
   }, [state.networkFee, loadInitialBalance, t]);
@@ -332,7 +346,10 @@ export default function SendScreen() {
   const handleMaxAmount = useCallback(() => {
     let maxAmount = 0;
     if (state.currency === 'SOL') {
-      maxAmount = Math.max(0, currentBalance - totalFees - 0.00001);
+      // الحد الأدنى المطلوب لبقاء الحساب حيًا (Rent Exempt Minimum + هامش أمان)
+      const MIN_KEEP_ALIVE = 0.001;
+      const available = Math.max(0, currentBalance - totalFees - MIN_KEEP_ALIVE);
+      maxAmount = available > 0 ? available : 0;
     } else {
       maxAmount = currentBalance;
     }
