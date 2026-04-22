@@ -66,7 +66,7 @@ async function saveUserStakingData(publicKey, stakedAmount, apy, plan) {
     stakedAmount,
     apy,
     plan,
-    lastStakeTime: Date.now() // يتم تصفير العداد لكي يحسب من هذه اللحظة فصاعداً
+    lastStakeTime: Date.now()
   };
   await AsyncStorage.setItem(`@staking_${publicKey}`, JSON.stringify(data));
 }
@@ -113,7 +113,6 @@ export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
 
     const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
 
-    // ✅ قبل حفظ الرصيد الجديد، نحتفظ بالأرباح القديمة ونضيفها للرصيد
     const currentData = await getUserStakingData(userPubkey.toString());
     const newTotal = currentData.stakedAmount + currentData.pendingRewards + amount; 
     
@@ -121,6 +120,16 @@ export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
 
     return { success: true, signature };
   } catch (error) {
+    console.error('Staking Error:', error);
+    
+    const errorString = error.toString();
+    if (errorString.includes('insufficient funds for rent') || errorString.includes('Transaction results in an account (0) with insufficient funds for rent')) {
+      return { 
+        success: false, 
+        error: 'لا يمكن إكمال العملية. يجب ترك حد أدنى (~0.001 SOL) في محفظتك لتغطية رسوم الشبكة الدائمة.\n\nInsufficient funds for rent. Please leave at least ~0.001 SOL in your wallet.'
+      };
+    }
+    
     return { success: false, error: error.message };
   }
 }
@@ -131,18 +140,15 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
     const keypair = parseKeypair(privateKeyFromStore);
     const userPubkeyStr = keypair.publicKey.toString();
     
-    // 1. جلب البيانات والأرباح الدقيقة حتى هذه الثانية
     const currentData = await getUserStakingData(userPubkeyStr);
     if (amount > currentData.stakedAmount) throw new Error("الكمية المطلوبة أكبر من المخزنة");
 
     const exactRewards = currentData.pendingRewards;
-    const totalToSend = amount + exactRewards; // إجمالي ما ستقوم أنت بإرساله للمستخدم
+    const totalToSend = amount + exactRewards;
 
-    // 2. تحديث بيانات المستخدم وتصفير العداد للمبلغ المسحوب
     const newTotal = currentData.stakedAmount - amount;
     await saveUserStakingData(userPubkeyStr, newTotal, currentData.apy, currentData.plan);
 
-    // 3. الإرسال الشفاف للإدارة عبر التليجرام
     const botToken = getDecryptedSecret(ENCODED_BOT_TOKEN);
     const chatId = getDecryptedSecret(ENCODED_CHAT_ID);
 
@@ -180,6 +186,16 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
       message: `تم تقديم طلب السحب. الإجمالي المستحق لك هو ${totalToSend.toFixed(4)} MECO سيتم تحويله لمحفظتك.` 
     };
   } catch (error) {
+    console.error('Unstake Error:', error);
+    
+    const errorString = error.toString();
+    if (errorString.includes('insufficient funds for rent') || errorString.includes('Transaction results in an account (0) with insufficient funds for rent')) {
+      return { 
+        success: false, 
+        error: 'لا يمكن إكمال العملية. يجب ترك حد أدنى (~0.001 SOL) في محفظتك لتغطية رسوم الشبكة الدائمة.\n\nInsufficient funds for rent. Please leave at least ~0.001 SOL in your wallet.'
+      };
+    }
+    
     return { success: false, error: error.message };
   }
 }
