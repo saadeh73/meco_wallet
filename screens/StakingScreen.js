@@ -98,7 +98,9 @@ export default function StakingScreen() {
               setAmount('');
               loadData();
             } else {
-              Alert.alert(t('staking.failed'), res.error);
+              // استخدم مفتاح الترجمة إذا وجد، وإلا استخدم نص الخطأ العادي
+              const errorMsg = res.errorKey ? t(res.errorKey) : res.error;
+              Alert.alert(t('staking.failed'), errorMsg);
             }
             setLoading(false);
           }
@@ -131,7 +133,8 @@ export default function StakingScreen() {
               setAmount('');
               loadData();
             } else {
-              Alert.alert(t('staking.failed'), res.error);
+              const errorMsg = res.errorKey ? t(res.errorKey) : res.error;
+              Alert.alert(t('staking.failed'), errorMsg);
             }
             setLoading(false);
           }
@@ -140,7 +143,6 @@ export default function StakingScreen() {
     );
   };
 
-  // الحصول على اسم ومدة الخطة مترجمين
   const getPlanName = (plan) => t(`staking.${plan.nameKey}`);
   const getPlanDuration = (plan) => t(`staking.${plan.durationKey}`);
 

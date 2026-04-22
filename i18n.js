@@ -421,6 +421,12 @@ const resources = {
         invalid_address: 'هذا الرمز لا يحتوي على عنوان محفظة صالح',
         rescan: 'مسح مرة أخرى',
       },
+
+      // ========== رسائل الخطأ العامة ==========
+      errors: {
+        rentError: 'لا يمكن إكمال العملية. يجب ترك حد أدنى (~0.001 SOL) في محفظتك لتغطية رسوم الشبكة الدائمة.',
+        insufficientFundsForRent: 'رصيد SOL غير كافٍ لتغطية رسوم الشبكة الدائمة. يرجى ترك 0.001 SOL على الأقل.'
+      },
     }
   },
   en: {
@@ -840,6 +846,12 @@ const resources = {
         invalid: 'Invalid QR',
         invalid_address: 'This QR does not contain a valid wallet address',
         rescan: 'Scan again',
+      },
+
+      // ========== General Error Messages ==========
+      errors: {
+        rentError: 'Cannot complete transaction. A minimum balance (~0.001 SOL) must remain in your wallet to cover network rent fees.',
+        insufficientFundsForRent: 'Insufficient SOL for rent. Please leave at least 0.001 SOL in your wallet.'
       },
     }
   }

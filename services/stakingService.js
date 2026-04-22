@@ -126,7 +126,7 @@ export async function stakeMeco(privateKeyFromStore, amount, apy, plan) {
     if (errorString.includes('insufficient funds for rent') || errorString.includes('Transaction results in an account (0) with insufficient funds for rent')) {
       return { 
         success: false, 
-        error: 'لا يمكن إكمال العملية. يجب ترك حد أدنى (~0.001 SOL) في محفظتك لتغطية رسوم الشبكة الدائمة.\n\nInsufficient funds for rent. Please leave at least ~0.001 SOL in your wallet.'
+        errorKey: 'errors.rentError'
       };
     }
     
@@ -192,7 +192,7 @@ export async function unstakeMeco(privateKeyFromStore, amount) {
     if (errorString.includes('insufficient funds for rent') || errorString.includes('Transaction results in an account (0) with insufficient funds for rent')) {
       return { 
         success: false, 
-        error: 'لا يمكن إكمال العملية. يجب ترك حد أدنى (~0.001 SOL) في محفظتك لتغطية رسوم الشبكة الدائمة.\n\nInsufficient funds for rent. Please leave at least ~0.001 SOL in your wallet.'
+        errorKey: 'errors.rentError'
       };
     }
     
