@@ -427,6 +427,11 @@ const resources = {
         rentError: 'لا يمكن إكمال العملية. يجب ترك حد أدنى (~0.001 SOL) في محفظتك لتغطية رسوم الشبكة الدائمة.',
         insufficientFundsForRent: 'رصيد SOL غير كافٍ لتغطية رسوم الشبكة الدائمة. يرجى ترك 0.001 SOL على الأقل.'
       },
+
+      // ========== المفضلة والسوق ==========
+      watchlist: 'المفضلة',
+      watchlist_empty: 'لا توجد عملات في المفضلة',
+      no_results: 'لا توجد نتائج',
     }
   },
   en: {
@@ -853,6 +858,11 @@ const resources = {
         rentError: 'Cannot complete transaction. A minimum balance (~0.001 SOL) must remain in your wallet to cover network rent fees.',
         insufficientFundsForRent: 'Insufficient SOL for rent. Please leave at least 0.001 SOL in your wallet.'
       },
+
+      // ========== Watchlist & Market ==========
+      watchlist: 'Watchlist',
+      watchlist_empty: 'No tokens in watchlist',
+      no_results: 'No results',
     }
   }
 };

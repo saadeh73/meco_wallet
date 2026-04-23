@@ -18,13 +18,15 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CandlestickChart } from 'react-native-wagmi-charts';
-import { getJupiterMarketData } from '../services/jupiterMarketService'; // 💡 الاستدعاء الجديد للبيانات الحية
+import { getJupiterMarketData } from '../services/jupiterMarketService';
 
 const { width } = Dimensions.get('window');
 
-// خيارات الفترات الزمنية
-const TIMEFRAMES =[
+const WATCHLIST_STORAGE_KEY = '@meco_watchlist';
+
+const TIMEFRAMES = [
   { label: '1H', value: '1', days: '1' },
   { label: '24H', value: '24', days: '1' },
   { label: '1W', value: '168', days: '7' },
@@ -44,9 +46,10 @@ export default function TokenDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [chartData, setChartData] = useState([]);
-  const [selectedTimeframe, setSelectedTimeframe] = useState(TIMEFRAMES[1]); 
+  const [selectedTimeframe, setSelectedTimeframe] = useState(TIMEFRAMES[1]);
   const [tokenMetadata, setTokenMetadata] = useState(null);
-  
+  const [watchlist, setWatchlist] = useState([]);
+
   const [priceStats, setPriceStats] = useState({
     current: token?.current_price || 0,
     change24h: token?.price_change_percentage_24h || 0,
@@ -54,7 +57,7 @@ export default function TokenDetailsScreen() {
     low24h: 0,
     open24h: 0,
     volume24h: 0,
-    marketCap: token?.market_cap || 0, // 💡 جلب القيمة السوقية للـ MECO من الشاشة السابقة
+    marketCap: token?.market_cap || 0,
     fdv: 0,
   });
 
@@ -75,28 +78,53 @@ export default function TokenDetailsScreen() {
 
   const isPositive = priceStats.change24h >= 0;
 
+  // تحميل المفضلة من AsyncStorage
+  useEffect(() => {
+    const loadWatchlist = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(WATCHLIST_STORAGE_KEY);
+        if (stored) setWatchlist(JSON.parse(stored));
+      } catch (e) {}
+    };
+    loadWatchlist();
+  }, []);
+
+  const toggleWatchlist = async () => {
+    const symbol = token.symbol;
+    let newList;
+    if (watchlist.includes(symbol)) {
+      newList = watchlist.filter(s => s !== symbol);
+    } else {
+      newList = [...watchlist, symbol];
+    }
+    setWatchlist(newList);
+    await AsyncStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(newList));
+  };
+
+  const isWatchlisted = watchlist.includes(token.symbol);
+
   const generateMockData = (startPrice, changePct) => {
-    const data =[];
+    const data = [];
     let current = startPrice > 0 ? startPrice : 1;
     const now = Date.now();
-    const volatility = current * 0.05; 
-    
+    const volatility = current * 0.05;
+
     for (let i = 0; i < 48; i++) {
       const change = (Math.random() - 0.5) * volatility;
       const open = current;
       const close = current + change;
       const high = Math.max(open, close) + Math.random() * (volatility / 2);
       const low = Math.min(open, close) - Math.random() * (volatility / 2);
-      
+
       data.push({
         timestamp: now - (48 - i) * 1800000,
         open, high, low, close,
       });
       current = close;
     }
-    
+
     if (data.length > 0) {
-       data[data.length - 1].close = startPrice;
+      data[data.length - 1].close = startPrice;
     }
     return data;
   };
@@ -104,21 +132,20 @@ export default function TokenDetailsScreen() {
   const fetchCandlestickData = async (tf, isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
-      
+
       if (token.symbol === 'MECO') {
-        // 💡 استخدام السعر الحي لتوليد شارت متوافق مع السوق
         const liveMarketData = await getJupiterMarketData();
         const liveMeco = liveMarketData.find(t => t.symbol === 'MECO');
         const currentMecoPrice = liveMeco?.current_price || priceStats.current;
-        
+
         setChartData(generateMockData(currentMecoPrice, 2.5));
-        setPriceStats(prev => ({ 
-          ...prev, 
-          current: currentMecoPrice, 
-          volume24h: 125000, 
-          marketCap: liveMeco?.market_cap || (currentMecoPrice * 1000000000) // 💡 القيمة السوقية الحقيقية الحية
+        setPriceStats(prev => ({
+          ...prev,
+          current: currentMecoPrice,
+          volume24h: 125000,
+          marketCap: liveMeco?.market_cap || (currentMecoPrice * 1000000000)
         }));
-        
+
         if (!isRefresh) setLoading(false);
         return;
       }
@@ -139,9 +166,9 @@ export default function TokenDetailsScreen() {
           low: item[3],
           close: item[4],
         }));
-        
+
         setChartData(formattedData);
-        
+
         if (formattedData.length > 0) {
           const first = formattedData[0];
           setPriceStats(prev => ({
@@ -166,11 +193,16 @@ export default function TokenDetailsScreen() {
   const fetchMarketStats = async () => {
     try {
       if (token.symbol === 'MECO') {
+        // استخدام نص وصفي موحد من الترجمة
         setTokenMetadata({
-          description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments within the MonyCoin ecosystem.',
-          extensions: { website: 'https://monycoin.github.io/meco-token/', twitter: 'MoniCoinMECO', telegram: 'https://t.me/monycoin1' }
+          description: t('meco_description', 'MECO is a digital currency built on the Solana network...'),
+          extensions: {
+            website: 'https://monycoin.github.io/meco-token/',
+            twitter: 'MoniCoinMECO',
+            telegram: 'https://t.me/monycoin1'
+          }
         });
-        return; // لقد تم تحديث بيانات السوق لـ MECO في fetchCandlestickData
+        return;
       }
 
       const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.mint}`);
@@ -178,7 +210,7 @@ export default function TokenDetailsScreen() {
 
       if (data && data.pairs && data.pairs.length > 0) {
         const bestPair = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
-        
+
         setPriceStats(prev => ({
           ...prev,
           current: parseFloat(bestPair.priceUsd || prev.current),
@@ -188,7 +220,7 @@ export default function TokenDetailsScreen() {
         }));
 
         setTokenMetadata({
-          description: `Token contract deployed on Solana network. Primary liquidity pool is on ${bestPair.dexId.toUpperCase()}.`,
+          description: t('token_details.contract_description', 'Token contract deployed on Solana network.'),
           extensions: bestPair.info?.socials?.reduce((acc, curr) => {
             if (curr.type === 'twitter') acc.twitter = curr.url.split('twitter.com/')[1];
             if (curr.type === 'telegram') acc.telegram = curr.url;
@@ -213,7 +245,7 @@ export default function TokenDetailsScreen() {
     setRefreshing(true);
     await Promise.all([
       fetchMarketStats(),
-      fetchCandlestickData(selectedTimeframe, true) 
+      fetchCandlestickData(selectedTimeframe, true)
     ]);
     setRefreshing(false);
   }, [selectedTimeframe, token?.mint]);
@@ -221,7 +253,7 @@ export default function TokenDetailsScreen() {
   const copyMintAddress = () => {
     if (token.mint) {
       Clipboard.setStringAsync(token.mint);
-      Alert.alert(t('success', 'نجاح'), t('copied_to_clipboard', 'تم النسخ'));
+      Alert.alert(t('success', 'Success'), t('copied', 'Copied'));
     }
   };
 
@@ -246,31 +278,38 @@ export default function TokenDetailsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView 
-        contentContainerStyle={styles.content} 
+      <ScrollView
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            tintColor={primaryColor} 
-            colors={[primaryColor]} 
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={primaryColor}
+            colors={[primaryColor]}
           />
         }
       >
-        
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          
+
           <View style={styles.headerTitle}>
             <Text style={[styles.symbol, { color: colors.text }]}>{token.symbol}</Text>
             <Text style={[styles.name, { color: colors.textSecondary }]}>{token.name}</Text>
           </View>
-          
+
           <View style={styles.headerActions}>
+            {/* زر المفضلة */}
+            <TouchableOpacity onPress={toggleWatchlist} style={styles.actionButton}>
+              <Ionicons
+                name={isWatchlisted ? 'star' : 'star-outline'}
+                size={22}
+                color={isWatchlisted ? '#F59E0B' : colors.textSecondary}
+              />
+            </TouchableOpacity>
             <TouchableOpacity onPress={copyMintAddress} style={styles.actionButton}>
               <Ionicons name="copy-outline" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -295,21 +334,21 @@ export default function TokenDetailsScreen() {
 
         {/* أزرار الإجراءات السريعة */}
         <View style={styles.quickActionsContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.quickActionButton, { backgroundColor: primaryColor }]}
             onPress={() => navigation.navigate('Send', { preselectedToken: token.symbol })}
           >
             <Ionicons name="paper-plane" size={20} color="#FFF" />
-            <Text style={styles.quickActionText}>{t('send', 'إرسال')}</Text>
+            <Text style={styles.quickActionText}>{t('send', 'Send')}</Text>
           </TouchableOpacity>
 
           {token.swapAvailable !== false && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.quickActionButton, { backgroundColor: primaryColor }]}
               onPress={() => navigation.navigate('Swap', { fromToken: token.symbol })}
             >
               <Ionicons name="swap-horizontal" size={20} color="#FFF" />
-              <Text style={styles.quickActionText}>{t('swap_title', 'مبادلة')}</Text>
+              <Text style={styles.quickActionText}>{t('swap_title', 'Swap')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -321,7 +360,7 @@ export default function TokenDetailsScreen() {
               key={tf.label}
               style={[
                 styles.timeframeButton,
-                { 
+                {
                   backgroundColor: selectedTimeframe.label === tf.label ? primaryColor : colors.card,
                   borderColor: colors.border
                 }
@@ -360,7 +399,7 @@ export default function TokenDetailsScreen() {
         ) : (
           <View style={[styles.chartContainer, { backgroundColor: colors.card }]}>
             <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>
-              لا توجد بيانات كافية للرسم البياني
+              {t('token_details.no_chart_data', 'No chart data available')}
             </Text>
           </View>
         )}
@@ -370,13 +409,17 @@ export default function TokenDetailsScreen() {
           <View style={[styles.statsContainer, { backgroundColor: colors.card }]}>
             <View style={styles.statRow}>
               <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Open</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {t('token_details.open', 'Open')}
+                </Text>
                 <Text style={[styles.statValue, { color: colors.text }]}>
                   ${priceStats.open24h?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>High</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {t('token_details.high', 'High')}
+                </Text>
                 <Text style={[styles.statValue, { color: colors.success }]}>
                   ${priceStats.high24h?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
@@ -384,13 +427,17 @@ export default function TokenDetailsScreen() {
             </View>
             <View style={styles.statRow}>
               <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Close</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {t('token_details.close', 'Close')}
+                </Text>
                 <Text style={[styles.statValue, { color: colors.text }]}>
                   ${priceStats.current?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Low</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                  {t('token_details.low', 'Low')}
+                </Text>
                 <Text style={[styles.statValue, { color: colors.error }]}>
                   ${priceStats.low24h?.toLocaleString('en-US', {maximumFractionDigits: 4})}
                 </Text>
@@ -399,12 +446,12 @@ export default function TokenDetailsScreen() {
           </View>
         )}
 
-        {/* معلومات السوق (السيولة وحجم التداول والقيمة السوقية) */}
+        {/* معلومات السوق */}
         <View style={[styles.marketStatsCard, { backgroundColor: colors.card }]}>
           <View style={styles.marketStatRow}>
             <View style={styles.marketStatItem}>
               <Text style={[styles.marketStatLabel, { color: colors.textSecondary }]}>
-                {t('market_cap', 'القيمة السوقية')}
+                {t('market_cap', 'Market Cap')}
               </Text>
               <Text style={[styles.marketStatValue, { color: colors.text }]}>
                 {formatLargeNumber(priceStats.marketCap)}
@@ -412,7 +459,7 @@ export default function TokenDetailsScreen() {
             </View>
             <View style={styles.marketStatItem}>
               <Text style={[styles.marketStatLabel, { color: colors.textSecondary }]}>
-                {t('volume_24h', 'حجم التداول (24h)')}
+                {t('volume_24h', '24h Volume')}
               </Text>
               <Text style={[styles.marketStatValue, { color: colors.text }]}>
                 {formatLargeNumber(priceStats.volume24h)}
@@ -424,10 +471,10 @@ export default function TokenDetailsScreen() {
         {/* وصف العملة */}
         <View style={[styles.descriptionCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.descriptionTitle, { color: colors.text }]}>
-            {t('about_token', 'عن العملة')}
+            {t('about_token', 'About')}
           </Text>
           <Text style={[styles.descriptionText, { color: colors.textSecondary }]}>
-            {tokenMetadata?.description || token.description || t('no_description', 'لا يوجد وصف متاح لهذه العملة.')}
+            {tokenMetadata?.description || token.description || t('no_description', 'No description available.')}
           </Text>
         </View>
 
@@ -435,53 +482,60 @@ export default function TokenDetailsScreen() {
         {tokenMetadata?.extensions && Object.keys(tokenMetadata.extensions).length > 0 && (
           <View style={[styles.linksCard, { backgroundColor: colors.card }]}>
             <Text style={[styles.linksTitle, { color: colors.text }]}>
-              {t('official_links', 'الروابط الرسمية')}
+              {t('official_links', 'Official Links')}
             </Text>
-            
+
             <View style={styles.linksContainer}>
               {tokenMetadata.extensions.website && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.linkButton, { borderColor: colors.border }]}
                   onPress={() => openLink(tokenMetadata.extensions.website)}
                 >
                   <Ionicons name="globe-outline" size={20} color={primaryColor} />
-                  <Text style={[styles.linkText, { color: colors.text }]}>Website</Text>
+                  <Text style={[styles.linkText, { color: colors.text }]}>
+                    {t('website', 'Website')}
+                  </Text>
                 </TouchableOpacity>
               )}
-              
+
               {tokenMetadata.extensions.twitter && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.linkButton, { borderColor: colors.border }]}
                   onPress={() => openLink(`https://twitter.com/${tokenMetadata.extensions.twitter}`)}
                 >
                   <Ionicons name="logo-twitter" size={20} color="#1DA1F2" />
-                  <Text style={[styles.linkText, { color: colors.text }]}>Twitter</Text>
+                  <Text style={[styles.linkText, { color: colors.text }]}>
+                    {t('twitter', 'Twitter')}
+                  </Text>
                 </TouchableOpacity>
               )}
-              
+
               {tokenMetadata.extensions.telegram && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.linkButton, { borderColor: colors.border }]}
                   onPress={() => openLink(tokenMetadata.extensions.telegram)}
                 >
                   <Ionicons name="paper-plane" size={20} color="#26A5E4" />
-                  <Text style={[styles.linkText, { color: colors.text }]}>Telegram</Text>
+                  <Text style={[styles.linkText, { color: colors.text }]}>
+                    {t('telegram', 'Telegram')}
+                  </Text>
                 </TouchableOpacity>
               )}
-              
+
               {token.mint && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.linkButton, { borderColor: colors.border }]}
                   onPress={openExplorer}
                 >
                   <Ionicons name="scan-outline" size={20} color={colors.textSecondary} />
-                  <Text style={[styles.linkText, { color: colors.text }]}>Solscan</Text>
+                  <Text style={[styles.linkText, { color: colors.text }]}>
+                    {t('explorer', 'Explorer')}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
         )}
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -495,13 +549,13 @@ const styles = StyleSheet.create({
   headerTitle: { alignItems: 'center' },
   symbol: { fontSize: 18, fontWeight: 'bold' },
   name: { fontSize: 12, marginTop: 2 },
-  headerActions: { flexDirection: 'row', gap: 16 },
+  headerActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   actionButton: { padding: 8 },
   priceContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   price: { fontSize: 32, fontWeight: 'bold' },
   changeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
   change: { fontSize: 14, fontWeight: '600' },
-  
+
   quickActionsContainer: {
     flexDirection: 'row',
     gap: 12,
