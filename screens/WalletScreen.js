@@ -12,7 +12,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { getSolBalance, getTokenAccounts, getTokenMarketPrice } from '../services/heliusService';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
-import { web3wallet } from '../services/walletConnectService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -54,8 +53,6 @@ export default function WalletScreen() {
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const [editingAccountIndex, setEditingAccountIndex] = useState(null);
 
-  const [activeSessions, setActiveSessions] = useState([]);
-  const [wcModalVisible, setWcModalVisible] = useState(false);
   const [accountsModalVisible, setAccountsModalVisible] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
 
@@ -81,29 +78,6 @@ export default function WalletScreen() {
       setWalletAddress(active.publicKey);
     }
   }, [accounts, activeAccountIndex]);
-
-  useFocusEffect(
-    useCallback(() => {
-      try {
-        if (web3wallet) setActiveSessions(Object.values(web3wallet.getActiveSessions()));
-      } catch (error) {}
-    }, [])
-  );
-
-  const disconnectSession = async (topic) => {
-    try {
-      if (web3wallet) {
-        await web3wallet.disconnectSession({
-          topic,
-          reason: { code: 6000, message: 'User disconnected via meco wallet' }
-        });
-        Alert.alert(t('success'), t('web3.disconnect_success', 'تم قطع الاتصال بنجاح.'));
-      }
-    } catch (error) {} finally {
-      if (web3wallet) setActiveSessions(Object.values(web3wallet.getActiveSessions()));
-      setWcModalVisible(false);
-    }
-  };
 
   const loadWalletData = useCallback(async (publicKey) => {
     try {
@@ -149,7 +123,7 @@ export default function WalletScreen() {
       setLoadingInitial(false);
       setIsSwitchingAccount(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     if (walletPublicKey) loadWalletData(walletPublicKey);
@@ -202,7 +176,6 @@ export default function WalletScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadWalletData(walletPublicKey);
-    try { if (web3wallet) setActiveSessions(Object.values(web3wallet.getActiveSessions())); } catch (e) { }
     setRefreshing(false);
   };
 
@@ -263,7 +236,6 @@ export default function WalletScreen() {
     );
   };
 
-  // ====== دوال التمرير للعملات (Assets) ======
   const renderRightActions = (asset) => (
     <TouchableOpacity style={[styles.rightAction, { backgroundColor: primaryColor }]} onPress={() => navigation.navigate('Send', { preselectedToken: asset.symbol })}>
       <Ionicons name="paper-plane-outline" size={24} color="#FFF" />
@@ -305,9 +277,6 @@ export default function WalletScreen() {
     </Swipeable>
   );
 
-  // ====== دوال التمرير للحسابات (الأزرار مصححة لتعمل بالمنطق الصحيح) ======
-  
-  // 1. يظهر عند السحب لليمين (👉) => أزرار التعديل والحذف على يسار البطاقة
   const renderAccountLeftActions = (item) => {
     const isActive = item.index === activeAccountIndex;
     return (
@@ -342,7 +311,6 @@ export default function WalletScreen() {
     );
   };
 
-  // 2. يظهر عند السحب لليسار (👈) => زر النسخ على يمين البطاقة
   const renderAccountRightActions = (item) => (
     <View style={styles.accountActionContainer}>
       <TouchableOpacity
@@ -421,10 +389,6 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.headerIcons}>
-              <TouchableOpacity onPress={() => activeSessions.length > 0 ? setWcModalVisible(true) : navigation.navigate('QRScanner')} style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}>
-                <Ionicons name={activeSessions.length > 0 ? "planet" : "planet-outline"} size={22} color={activeSessions.length > 0 ? '#4CAF50' : primaryColor} />
-                {activeSessions.length > 0 && <View style={[styles.activeBadge, { borderColor: colors.card }]} />}
-              </TouchableOpacity>
               <TouchableOpacity onPress={() => copyAddress()} style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}>
                 <Ionicons name="copy-outline" size={20} color={primaryColor} />
               </TouchableOpacity>
@@ -519,54 +483,6 @@ export default function WalletScreen() {
             </View>
           </View>
         </Modal>
-
-        <Modal visible={wcModalVisible} transparent animationType="slide" onRequestClose={() => setWcModalVisible(false)}>
-          <View style={styles.modalOverlayBottom}>
-            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                <Ionicons name="planet" size={24} color="#4CAF50" style={{ marginRight: 8 }} />
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('web3.connected_apps', 'التطبيقات المتصلة')}</Text>
-              </View>
-              {activeSessions.length > 0 ? (
-                activeSessions.map((session, index) => (
-                  <View key={index} style={[styles.sessionCard, { borderColor: colors.border, backgroundColor: colors.background }]}>
-                    <View style={styles.sessionInfo}>
-                      <Image source={{ uri: session.peer.metadata.icons[0] }} style={styles.sessionIcon} defaultSource={null} />
-                      <View>
-                        <Text style={[styles.sessionName, { color: colors.text }]}>{session.peer.metadata.name}</Text>
-                        <Text style={[styles.sessionUrl, { color: colors.textSecondary }]}>{session.peer.metadata.url}</Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.disconnectBtn, { backgroundColor: '#FF3B3015' }]}
-                      onPress={() => disconnectSession(session.topic)}
-                    >
-                      <Text style={{ color: '#FF3B30', fontWeight: 'bold', fontSize: 12 }}>{t('web3.disconnect', 'قطع الاتصال')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              ) : (
-                <View style={{ alignItems: 'center', paddingVertical: 10 }}>
-                  <Ionicons name="link-outline" size={40} color={colors.textSecondary} style={{ marginBottom: 10 }} />
-                  <Text style={{ color: colors.textSecondary, textAlign: 'center', marginBottom: 20 }}>
-                    {t('web3.no_active_sessions', 'لا توجد اتصالات نشطة')}
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.modalBtn, { backgroundColor: primaryColor, width: '100%', borderColor: primaryColor }]}
-                    onPress={() => { setWcModalVisible(false); navigation.navigate('QRScanner'); }}
-                  >
-                    <Text style={{ color: '#FFF', fontWeight: 'bold', textAlign: 'center' }}>
-                      {t('web3.connect_new_dapp', 'ربط تطبيق جديد')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              <TouchableOpacity style={[styles.closeModalBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]} onPress={() => setWcModalVisible(false)}>
-                <Text style={{ color: colors.text, fontWeight: 'bold' }}>{t('close', 'إغلاق')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -590,7 +506,6 @@ const styles = StyleSheet.create({
   accountsButton: { marginLeft: 8, padding: 4 },
   headerIcons: { flexDirection: 'row', gap: 10 },
   iconBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  activeBadge: { position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#4CAF50', borderWidth: 2 },
   balanceContainer: { alignItems: 'center', marginBottom: 24 },
   balanceLabel: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   balanceAmount: { fontSize: 36, fontWeight: '800' },
@@ -675,12 +590,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  sessionCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderWidth: 1, borderRadius: 16, marginBottom: 16 },
-  sessionInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
-  sessionIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF' },
-  sessionName: { fontSize: 14, fontWeight: 'bold' },
-  sessionUrl: { fontSize: 10 },
-  disconnectBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
   closeModalBtn: { width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
   addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
   addAccountText: { fontSize: 16, fontWeight: '600' },

@@ -82,20 +82,22 @@ const EARNING_OPPORTUNITIES = [
     url: 'https://raydium.io/liquidity/',
     category: 'liquidity-providing',
     featured: true,
+    requiresVpn: true,
   },
   {
-    id: 'orca-sol-usdc',
+    id: 'orca-meco-usdt',
     protocol: 'Orca',
     protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',
-    asset: 'SOL-USDC',
-    assetIcon: 'https://orca.so/favicon.ico',
+    asset: 'MECO-USDT',
+    assetIcon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png',
     apy: 12.0,
     minDeposit: 50,
-    description: 'توفير سيولة مركزة لزوج SOL-USDC على Orca. عوائد عالية مع تحكم أفضل في نطاق السعر.',
-    descriptionEn: 'Provide concentrated liquidity for SOL-USDC pair on Orca. High yields with better price range control.',
-    url: 'https://www.orca.so/pools',
+    description: 'توفير سيولة لزوج MECO-USDT على Orca. عوائد عالية مع تحكم أفضل في نطاق السعر.',
+    descriptionEn: 'Provide liquidity for MECO-USDT pair on Orca. High yields with better price range control.',
+    url: 'https://www.orca.so/pools/EEPP9R7nHgMX1hC4s9NgLGXsyXYm7BzXuicwdRtjLCLC',
     category: 'liquidity-providing',
-    featured: false,
+    featured: true,
+    requiresVpn: true,
   },
 ];
 
@@ -289,6 +291,18 @@ export default function AppPortalScreen() {
         <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>
           {description}
         </Text>
+        
+        {/* VPN Warning for Raydium & Orca */}
+        {item.requiresVpn && (
+          <View style={styles.vpnWarning}>
+            <Ionicons name="warning-outline" size={14} color={colors.warning} />
+            <Text style={[styles.vpnWarningText, { color: colors.warning }]}>
+              {isArabic 
+                ? 'قد يتطلب هذا الموقع استخدام VPN للوصول إليه'
+                : 'This site may require a VPN to access'}
+            </Text>
+          </View>
+        )}
         
         <View style={styles.cardFooter}>
           <View style={styles.minDeposit}>
@@ -600,6 +614,17 @@ const styles = StyleSheet.create({
   apyBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   apyText: { fontSize: 14, fontWeight: '700' },
   description: { fontSize: 13, marginBottom: 12, lineHeight: 18 },
+  vpnWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  vpnWarningText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   minDeposit: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   minDepositText: { fontSize: 12 },

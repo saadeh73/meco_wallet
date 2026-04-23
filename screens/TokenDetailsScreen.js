@@ -19,6 +19,7 @@ import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { CandlestickChart } from 'react-native-wagmi-charts';
+import { getJupiterMarketData } from '../services/jupiterMarketService'; // 💡 الاستدعاء الجديد للبيانات الحية
 
 const { width } = Dimensions.get('window');
 
@@ -41,10 +42,10 @@ export default function TokenDetailsScreen() {
   const { token } = route.params || {};
 
   const [loading, setLoading] = useState(true);
-  const[refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [chartData, setChartData] = useState([]);
-  const[selectedTimeframe, setSelectedTimeframe] = useState(TIMEFRAMES[1]); 
-  const[tokenMetadata, setTokenMetadata] = useState(null);
+  const [selectedTimeframe, setSelectedTimeframe] = useState(TIMEFRAMES[1]); 
+  const [tokenMetadata, setTokenMetadata] = useState(null);
   
   const [priceStats, setPriceStats] = useState({
     current: token?.current_price || 0,
@@ -53,7 +54,7 @@ export default function TokenDetailsScreen() {
     low24h: 0,
     open24h: 0,
     volume24h: 0,
-    marketCap: 0,
+    marketCap: token?.market_cap || 0, // 💡 جلب القيمة السوقية للـ MECO من الشاشة السابقة
     fdv: 0,
   });
 
@@ -105,8 +106,19 @@ export default function TokenDetailsScreen() {
       if (!isRefresh) setLoading(true);
       
       if (token.symbol === 'MECO') {
-        setChartData(generateMockData(0.00613, 2.5));
-        setPriceStats(prev => ({ ...prev, volume24h: 125000, marketCap: 6130000 }));
+        // 💡 استخدام السعر الحي لتوليد شارت متوافق مع السوق
+        const liveMarketData = await getJupiterMarketData();
+        const liveMeco = liveMarketData.find(t => t.symbol === 'MECO');
+        const currentMecoPrice = liveMeco?.current_price || priceStats.current;
+        
+        setChartData(generateMockData(currentMecoPrice, 2.5));
+        setPriceStats(prev => ({ 
+          ...prev, 
+          current: currentMecoPrice, 
+          volume24h: 125000, 
+          marketCap: liveMeco?.market_cap || (currentMecoPrice * 1000000000) // 💡 القيمة السوقية الحقيقية الحية
+        }));
+        
         if (!isRefresh) setLoading(false);
         return;
       }
@@ -158,7 +170,7 @@ export default function TokenDetailsScreen() {
           description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments within the MonyCoin ecosystem.',
           extensions: { website: 'https://monycoin.github.io/meco-token/', twitter: 'MoniCoinMECO', telegram: 'https://t.me/monycoin1' }
         });
-        return;
+        return; // لقد تم تحديث بيانات السوق لـ MECO في fetchCandlestickData
       }
 
       const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token.mint}`);
@@ -281,7 +293,7 @@ export default function TokenDetailsScreen() {
           </View>
         </View>
 
-        {/* ✅ أزرار الإجراءات السريعة (تصميم موحد ومترجم) */}
+        {/* أزرار الإجراءات السريعة */}
         <View style={styles.quickActionsContainer}>
           <TouchableOpacity 
             style={[styles.quickActionButton, { backgroundColor: primaryColor }]}
@@ -387,7 +399,7 @@ export default function TokenDetailsScreen() {
           </View>
         )}
 
-        {/* معلومات السوق (السيولة وحجم التداول) */}
+        {/* معلومات السوق (السيولة وحجم التداول والقيمة السوقية) */}
         <View style={[styles.marketStatsCard, { backgroundColor: colors.card }]}>
           <View style={styles.marketStatRow}>
             <View style={styles.marketStatItem}>
@@ -490,7 +502,6 @@ const styles = StyleSheet.create({
   changeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
   change: { fontSize: 14, fontWeight: '600' },
   
-  // ✅ ستايل الأزرار الموحدة (UI Harmony)
   quickActionsContainer: {
     flexDirection: 'row',
     gap: 12,
