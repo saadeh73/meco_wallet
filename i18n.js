@@ -122,14 +122,17 @@ const resources = {
       edit_wallet_name: 'تعديل اسم المحفظة',
       enter_wallet_name: 'أدخل اسم المحفظة',
       market_all_coins: 'جميع العملات',
-      loading_market_data: 'جاري تحميل بيانات السوق...',
+      loading_market_data: 'جارٍ تحميل بيانات السوق...',
 
-      // ========== MarketScreen ==========
-      market_title: "سوق العملات",
+      // ========== MarketScreen (محدث) ==========
+      market_title: "السوق",
       market_subtitle: "أسعار حقيقية • تحديث مباشر",
       market_track_prices: "تتبع الأسعار والعملات",
       market_solana_tokens: "رموز سولانا",
       market_top_gainers: "الأعلى ارتفاعاً",
+      market_losers: 'الأعلى انخفاضاً',
+      market_volume: 'حجم التداول',
+      market_cap: 'القيمة السوقية',
       current_prices: "الأسعار الحالية",
       error_loading: "خطأ في تحميل البيانات",
       try_again: "حاول مرة أخرى",
@@ -138,7 +141,7 @@ const resources = {
       all_tokens: "جميع العملات",
       solana_tokens: "سولانا",
       stablecoins: "مستقرة",
-      gainers: "الأعلى ربحاً",
+      gainers: "الرابحين",
       tokens_count: "{{count}} عملة",
       important_note: "ملاحظة هامة",
       prices_auto_updated: "الأسعار يتم تحديثها تلقائياً من مصادر موثوقة",
@@ -146,18 +149,21 @@ const resources = {
       market_unavailable: "غير متاح",
       market_balance: "رصيد",
 
-      // ========== TokenDetailsScreen ==========
+      // ========== TokenDetailsScreen (جديد) ==========
       token_details: 'تفاصيل العملة',
-      market_cap: 'القيمة السوقية',
+      current_price: 'السعر الحالي',
       volume_24h: 'حجم التداول (24h)',
+      volume_24h_label: 'حجم التداول 24س',
       about_token: 'عن العملة',
       official_links: 'الروابط الرسمية',
       no_description: 'لا يوجد وصف متاح لهذه العملة',
+      no_chart_data: 'لا توجد بيانات',
       copied_to_clipboard: 'تم نسخ العنوان إلى الحافظة',
       price_change_24h: 'التغير (24 ساعة)',
       statistics: 'الإحصائيات',
       rank: 'الترتيب',
       high_24h: 'أعلى سعر (24 ساعة)',
+      chart_timeframe: 'الرسمة البيانية',
       chart_coming_soon: 'الرسم البياني قريباً',
       contract_address: 'عنوان العقد',
       copy_contract: 'نسخ العنوان',
@@ -166,6 +172,38 @@ const resources = {
       telegram: 'تلغرام',
       explorer: 'المستكشف',
       meco_description: 'MECO هي عملة رقمية مبنية على شبكة سولانا، مصممة للمدفوعات الصغيرة السريعة والآمنة ومنخفضة التكلفة.',
+
+      // ========== Market Stats (جديد) ==========
+      sort_by: 'ترتيب حسب',
+      price: 'السعر',
+      change: 'التغيير',
+      volume: 'الحجم',
+      market_cap_label: 'القيمة السوقية',
+      btc_dominance: 'هيمنة BTC',
+      market_change: 'تغير السوق',
+      circulating_supply: 'العرض المتداول',
+      max_supply: 'الحد الأقصى',
+      ath: 'أعلى سعر',
+      atl: 'أقل سعر',
+      ohlc_stats: 'بيانات OHLC',
+
+      // ========== Portfolio (جديد) ==========
+      portfolio: 'محفظتي',
+      portfolio_value: 'قيمة المحفظة',
+      your_holdings: 'أصولك',
+
+      // ========== Time Periods (جديد) ==========
+      time_1h: '1 ساعة',
+      time_24h: '24 ساعة',
+      time_7d: '7 أيام',
+      time_30d: '30 يوم',
+      time_1y: 'سنة',
+
+      // ========== Watchlist (جديد) ==========
+      add_to_watchlist: 'إضافة للمفضلة',
+      remove_from_watchlist: 'إزالة من المفضلة',
+      added_to_watchlist: 'تمت الإضافة للمفضلة',
+      removed_from_watchlist: 'تمت الإزالة من المفضلة',
 
       // ========== SettingsScreen ==========
       settings: 'الإعدادات',
@@ -214,7 +252,6 @@ const resources = {
       authenticate_to_view: 'يرجى المصادقة لعرض هذه المعلومات الحساسة',
       phrase_copied: 'تم نسخ العبارة السرية',
       warning_phrase: '⚠️ لا تشارك هذه العبارة مع أي شخص. يمكن لأي شخص يملكها الوصول إلى أموالك.',
-      copy: 'نسخ',
       change_language: "تغيير اللغة",
       toggle_theme: "تبديل النمط",
       biometric: "المصادقة الحيوية",
@@ -270,8 +307,8 @@ const resources = {
           invalidAddress: "عنوان المستلم غير صالح",
           selfTransfer: "لا يمكن الإرسال لنفس المحفظة",
           amountTooSmall: "المبلغ صغير جداً للإرسال",
-          insufficientBalance: "رصيدك غير كافي. الرصيد الحالي:",
-          insufficientSolForFees: "رصيد SOL غير كافي للرسوم. تحتاج {{needed}} SOL، رصيدك: {{balance}} SOL",
+          insufficientBalance: "رصيدك غير كافٍ. الرصيد الحالي:",
+          insufficientSolForFees: "رصيد SOL غير كافٍ للرسوم. تحتاج {{needed}} SOL، رصيدك: {{balance}} SOL",
           minimumAmount: "الحد الأدنى للإرسال هو {{amount}} {{currency}}",
           success: "✅ تم الإرسال بنجاح",
           sent: "تم إرسال",
@@ -432,6 +469,7 @@ const resources = {
       watchlist: 'المفضلة',
       watchlist_empty: 'لا توجد عملات في المفضلة',
       no_results: 'لا توجد نتائج',
+      market_stats: 'إحصائيات السوق',
     }
   },
   en: {
@@ -555,12 +593,15 @@ const resources = {
       market_all_coins: 'All Coins',
       loading_market_data: 'Loading market data...',
 
-      // ========== MarketScreen ==========
+      // ========== MarketScreen (Updated) ==========
       market_title: "Market",
       market_subtitle: "Real prices • Live updates",
       market_track_prices: "Track prices and tokens",
       market_solana_tokens: "Solana Tokens",
       market_top_gainers: "Top Gainers",
+      market_losers: 'Top Losers',
+      market_volume: 'Volume',
+      market_cap: 'Market Cap',
       current_prices: "Current Prices",
       error_loading: "Error loading data",
       try_again: "Try Again",
@@ -577,18 +618,21 @@ const resources = {
       market_unavailable: "Unavailable",
       market_balance: "Balance",
 
-      // ========== TokenDetailsScreen ==========
+      // ========== TokenDetailsScreen (New) ==========
       token_details: 'Token Details',
-      market_cap: 'Market Cap',
+      current_price: 'Current Price',
       volume_24h: 'Volume (24h)',
+      volume_24h_label: '24h Volume',
       about_token: 'About',
       official_links: 'Official Links',
       no_description: 'No description available',
+      no_chart_data: 'No chart data',
       copied_to_clipboard: 'Address copied to clipboard',
       price_change_24h: '24h Change',
       statistics: 'Statistics',
       rank: 'Rank',
       high_24h: '24h High',
+      chart_timeframe: 'Chart Timeframe',
       chart_coming_soon: 'Chart coming soon',
       contract_address: 'Contract Address',
       copy_contract: 'Copy Address',
@@ -597,6 +641,38 @@ const resources = {
       telegram: 'Telegram',
       explorer: 'Explorer',
       meco_description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments.',
+
+      // ========== Market Stats (New) ==========
+      sort_by: 'Sort by',
+      price: 'Price',
+      change: 'Change',
+      volume: 'Volume',
+      market_cap_label: 'Market Cap',
+      btc_dominance: 'BTC Dom',
+      market_change: 'Market Change',
+      circulating_supply: 'Circulating Supply',
+      max_supply: 'Max Supply',
+      ath: 'All-Time High',
+      atl: 'All-Time Low',
+      ohlc_stats: 'OHLC Data',
+
+      // ========== Portfolio (New) ==========
+      portfolio: 'Portfolio',
+      portfolio_value: 'Portfolio Value',
+      your_holdings: 'Your Holdings',
+
+      // ========== Time Periods (New) ==========
+      time_1h: '1H',
+      time_24h: '24H',
+      time_7d: '7D',
+      time_30d: '30D',
+      time_1y: '1Y',
+
+      // ========== Watchlist (New) ==========
+      add_to_watchlist: 'Add to Watchlist',
+      remove_from_watchlist: 'Remove from Watchlist',
+      added_to_watchlist: 'Added to watchlist',
+      removed_from_watchlist: 'Removed from watchlist',
 
       // ========== SettingsScreen ==========
       settings: 'Settings',
@@ -645,7 +721,6 @@ const resources = {
       authenticate_to_view: 'Please authenticate to view this sensitive information',
       phrase_copied: 'Recovery phrase copied',
       warning_phrase: '⚠️ Do not share this phrase with anyone. Anyone with it can access your funds.',
-      copy: 'Copy',
       change_language: "Change Language",
       toggle_theme: "Toggle Theme",
       biometric: "Biometric",
@@ -863,6 +938,7 @@ const resources = {
       watchlist: 'Watchlist',
       watchlist_empty: 'No tokens in watchlist',
       no_results: 'No results',
+      market_stats: 'Market Stats',
     }
   }
 };

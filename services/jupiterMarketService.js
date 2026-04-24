@@ -62,7 +62,7 @@ export async function getJupiterMarketData() {
     }
 
     // ✅ جلب سعر MECO بشكل منفصل وتطبيق القيمة السوقية
-    let mecoPrice = 0.00613; // السعر الاحتياطي
+    let mecoPrice = 0.002013; // السعر الاحتياطي
     let mecoChange = 2.5;
     const MECO_TOTAL_SUPPLY = 1000000000; // 1 مليار عملة
     
