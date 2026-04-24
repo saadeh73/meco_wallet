@@ -192,15 +192,32 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
     const cached = CACHE.prices.get(tokenSymbol);
     if (cached) return cached;
 
+    // 🌟 التعديل الجراحي: إضافة جلب سعر MECO من DexScreener مباشرة
+    if (tokenSymbol === 'MECO') {
+      try {
+        const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${MECO_MINT_ADDRESS}`);
+        const data = await response.json();
+        
+        if (data.pairs && data.pairs.length > 0) {
+          data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+          const mecoPrice = parseFloat(data.pairs[0].priceUsd || 0.002013);
+          CACHE.prices.set(tokenSymbol, mecoPrice);
+          return mecoPrice;
+        }
+      } catch (e) {
+        console.warn(`⚠️ MECO DexScreener fetch failed, using fallback`);
+      }
+      const fallbackPrice = 0.002013;
+      CACHE.prices.set(tokenSymbol, fallbackPrice);
+      return fallbackPrice;
+    }
+
     let mintAddress = null;
     if (tokenSymbol === 'SOL') mintAddress = 'So11111111111111111111111111111111111111112';
-    else if (tokenSymbol === 'MECO') mintAddress = MECO_MINT_ADDRESS;
     else if (tokenSymbol === 'USDT') mintAddress = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
     else if (tokenSymbol === 'USDC') mintAddress = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
     if (!mintAddress) return 0;
-
-    console.log(`🔄 Fetching price for ${tokenSymbol}...`);
 
     const endpoints = [
       {
@@ -231,12 +248,9 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
           const price = parseFloat(rawPrice);
 
           if (price && !isNaN(price) && price > 0) {
-            console.log(`💰 ${tokenSymbol} price from Jupiter: $${price}`);
             CACHE.prices.set(tokenSymbol, price);
             return price;
           }
-        } else {
-          console.warn(`⚠️ Jupiter returned ${response.status} for ${tokenSymbol}`);
         }
       } catch (e) {
         console.warn(`⚠️ Jupiter fetch failed for ${tokenSymbol}:`, e.message);
@@ -260,7 +274,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
         const price = parseFloat(data[mintAddress]?.usd);
 
         if (price && !isNaN(price) && price > 0) {
-          console.log(`💰 ${tokenSymbol} price from CoinGecko: $${price}`);
           CACHE.prices.set(tokenSymbol, price);
           return price;
         }
@@ -269,8 +282,6 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
       console.warn(`⚠️ CoinGecko fetch failed for ${tokenSymbol}:`, e.message);
     }
 
-    // ✅ تم حذف السعر الثابت لـ MECO تمامًا
-    // إذا فشلت جميع المحاولات، نُرجع 0
     return 0;
 
   } catch (error) {

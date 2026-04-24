@@ -1,22 +1,13 @@
 // screens/MarketScreen.js - Fixed with Real Balances
 // Last Updated: 2026-04-24
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  RefreshControl,
-  SafeAreaView,
-  ActivityIndicator,
-  Dimensions,
-  TextInput,
-  Modal,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Image, RefreshControl, SafeAreaView, ActivityIndicator,
+  Dimensions, TextInput, Modal,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,11 +19,11 @@ import { getJupiterMarketData, CORE_TOKENS } from '../services/jupiterMarketServ
 import { getGlobalMarketData, getTopMovers } from '../services/marketOverviewService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
 
-const { width } = Dimensions.get('window');
-const WATCHLIST_STORAGE_KEY = '@meco_watchlist';
 const SPARKLINE_WIDTH = 70;
 const SPARKLINE_HEIGHT = 35;
+const WATCHLIST_STORAGE_KEY = '@meco_watchlist';
 
+// ============ MarketOverviewCard ============
 function MarketOverviewCard({ data, isDark }) {
   const colors = {
     background: isDark ? 'rgba(108, 99, 255, 0.15)' : 'rgba(108, 99, 255, 0.08)',
@@ -48,36 +39,26 @@ function MarketOverviewCard({ data, isDark }) {
       <View style={styles.overviewRow}>
         <View style={styles.overviewItem}>
           <Text style={[styles.overviewLabel, { color: colors.secondary }]}>Market Cap</Text>
-          <Text style={[styles.overviewValue, { color: colors.text }]}>
-            {data?.totalMarketCapFormatted || '\$0'}
-          </Text>
+          <Text style={[styles.overviewValue, { color: colors.text }]}>{data?.totalMarketCapFormatted || '\$0'}</Text>
         </View>
         <View style={[styles.overviewItem, styles.overviewBorder]}>
           <Text style={[styles.overviewLabel, { color: colors.secondary }]}>24h Volume</Text>
-          <Text style={[styles.overviewValue, { color: colors.text }]}>
-            {data?.totalVolume24hFormatted || '\$0'}
-          </Text>
+          <Text style={[styles.overviewValue, { color: colors.text }]}>{data?.totalVolume24hFormatted || '\$0'}</Text>
         </View>
         <View style={styles.overviewItem}>
           <Text style={[styles.overviewLabel, { color: colors.secondary }]}>BTC Dom</Text>
-          <Text style={[styles.overviewValue, { color: colors.text }]}>
-            {data?.btcDominance?.toFixed(1) || '0'}%
-          </Text>
+          <Text style={[styles.overviewValue, { color: colors.text }]}>{data?.btcDominance?.toFixed(1) || '0'}%</Text>
         </View>
       </View>
-      <View style={[styles.marketChangeBar, {
-        backgroundColor: isPositive ? colors.success + '20' : colors.error + '20'
-      }]}>
-        <Ionicons name={isPositive ? 'trending-up' : 'trending-down'} size={16}
-          color={isPositive ? colors.success : colors.error} />
-        <Text style={[styles.marketChangeText, { color: isPositive ? colors.success : colors.error }]}>
-          {data?.marketCapChangeFormatted || '0%'} (24h)
-        </Text>
+      <View style={[styles.marketChangeBar, { backgroundColor: isPositive ? colors.success + '20' : colors.error + '20' }]}>
+        <Ionicons name={isPositive ? 'trending-up' : 'trending-down'} size={16} color={isPositive ? colors.success : colors.error} />
+        <Text style={[styles.marketChangeText, { color: isPositive ? colors.success : colors.error }]}>{data?.marketCapChangeFormatted || '0%'} (24h)</Text>
       </View>
     </View>
   );
 }
 
+// ============ PortfolioSummaryCard ============
 function PortfolioSummaryCard({ totalValue, changePercent, isDark }) {
   const { t } = useTranslation();
   const colors = {
@@ -93,27 +74,21 @@ function PortfolioSummaryCard({ totalValue, changePercent, isDark }) {
     <View style={[styles.portfolioCard, { backgroundColor: colors.background }]}>
       <View style={styles.portfolioHeader}>
         <View>
-          <Text style={[styles.portfolioLabel, { color: colors.secondary }]}>
-            {t('total_balance') || 'Total Balance'}
-          </Text>
+          <Text style={[styles.portfolioLabel, { color: colors.secondary }]}>{t('total_balance') || 'Total Balance'}</Text>
           <Text style={[styles.portfolioValue, { color: colors.text }]}>
             ${totalValue?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
           </Text>
         </View>
-        <View style={[styles.portfolioChange, {
-          backgroundColor: isPositive ? colors.success + '20' : colors.error + '20'
-        }]}>
-          <Ionicons name={isPositive ? 'arrow-up' : 'arrow-down'} size={12}
-            color={isPositive ? colors.success : colors.error} />
-          <Text style={[styles.portfolioChangeText, { color: isPositive ? colors.success : colors.error }]}>
-            {Math.abs(changePercent).toFixed(2)}%
-          </Text>
+        <View style={[styles.portfolioChange, { backgroundColor: isPositive ? colors.success + '20' : colors.error + '20' }]}>
+          <Ionicons name={isPositive ? 'arrow-up' : 'arrow-down'} size={12} color={isPositive ? colors.success : colors.error} />
+          <Text style={[styles.portfolioChangeText, { color: isPositive ? colors.success : colors.error }]}>{Math.abs(changePercent).toFixed(2)}%</Text>
         </View>
       </View>
     </View>
   );
 }
 
+// ============ TopMoversSection ============
 function TopMoversSection({ gainers, losers, isDark }) {
   const { t } = useTranslation();
   const colors = {
@@ -127,9 +102,7 @@ function TopMoversSection({ gainers, losers, isDark }) {
   const renderMoverItem = (item, isGainer) => (
     <View key={item.symbol} style={[styles.moverItem, { backgroundColor: colors.background }]}>
       <Text style={[styles.moverSymbol, { color: colors.text }]}>{item.symbol}</Text>
-      <Text style={[styles.moverChange, { color: isGainer ? colors.success : colors.error }]}>
-        {isGainer ? '+' : ''}{item.change24h?.toFixed(1)}%
-      </Text>
+      <Text style={[styles.moverChange, { color: isGainer ? colors.success : colors.error }]}>{isGainer ? '+' : ''}{item.change24h?.toFixed(1)}%</Text>
     </View>
   );
 
@@ -138,33 +111,26 @@ function TopMoversSection({ gainers, losers, isDark }) {
       <View style={styles.moverColumn}>
         <View style={styles.moverHeader}>
           <Ionicons name="flame" size={16} color={colors.success} />
-          <Text style={[styles.moverTitle, { color: colors.success }]}>
-            {t('market_top_gainers') || 'Top Gainers'}
-          </Text>
+          <Text style={[styles.moverTitle, { color: colors.success }]}>{t('market_top_gainers') || 'Top Gainers'}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.moverRow}>
-            {(gainers || []).slice(0, 3).map(item => renderMoverItem(item, true))}
-          </View>
+          <View style={styles.moverRow}>{(gainers || []).slice(0, 3).map(item => renderMoverItem(item, true))}</View>
         </ScrollView>
       </View>
       <View style={[styles.moverColumn, { marginTop: 12 }]}>
         <View style={styles.moverHeader}>
           <Ionicons name="snow" size={16} color={colors.error} />
-          <Text style={[styles.moverTitle, { color: colors.error }]}>
-            {t('market_losers') || 'Losers'}
-          </Text>
+          <Text style={[styles.moverTitle, { color: colors.error }]}>{t('market_losers') || 'Losers'}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.moverRow}>
-            {(losers || []).slice(0, 3).map(item => renderMoverItem(item, false))}
-          </View>
+          <View style={styles.moverRow}>{(losers || []).slice(0, 3).map(item => renderMoverItem(item, false))}</View>
         </ScrollView>
       </View>
     </View>
   );
 }
 
+// ============ TokenListItem ============
 function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColor }) {
   const colors = {
     background: isDark ? '#1A1A2E' : '#FFFFFF',
@@ -173,7 +139,6 @@ function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColo
     success: '#10B981',
     error: '#EF4444',
   };
-
   const isPositive = (token.price_change_percentage_24h || 0) >= 0;
   const changeColor = isPositive ? colors.success : colors.error;
 
@@ -199,8 +164,7 @@ function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColo
     }).join(' ');
     return (
       <Svg width={SPARKLINE_WIDTH} height={SPARKLINE_HEIGHT}>
-        <Polyline points={points} fill="none" stroke={changeColor}
-          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <Polyline points={points} fill="none" stroke={changeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     );
   };
@@ -213,52 +177,39 @@ function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColo
   };
 
   return (
-    <TouchableOpacity
-      style={[styles.tokenCard, { backgroundColor: colors.background }]}
-      onPress={() => onPress(token)}
-      onLongPress={() => onLongPress(token)}
-      activeOpacity={0.7}
-    >
+    <TouchableOpacity style={[styles.tokenCard, { backgroundColor: colors.background }]} onPress={() => onPress(token)} onLongPress={() => onLongPress(token)} activeOpacity={0.7}>
       <View style={styles.tokenLeft}>
         <Text style={[styles.tokenRank, { color: colors.secondary }]}>{index + 1}</Text>
         <View style={[styles.tokenIcon, { backgroundColor: primaryColor + '20' }]}>
-          {token.image ? (
-            <Image source={{ uri: token.image }} style={styles.tokenIconImage} />
-          ) : (
-            <Text style={[styles.tokenIconText, { color: primaryColor }]}>
-              {token.symbol?.charAt(0)}
-            </Text>
-          )}
+          {token.image ? <Image source={{ uri: token.image }} style={styles.tokenIconImage} /> : <Text style={[styles.tokenIconText, { color: primaryColor }]}>{token.symbol?.charAt(0)}</Text>}
         </View>
         <View style={styles.tokenInfo}>
           <Text style={[styles.tokenSymbol, { color: colors.text }]}>{token.symbol}</Text>
-          <Text style={[styles.tokenName, { color: colors.secondary }]} numberOfLines={1}>
-            {token.name}
-          </Text>
+          <Text style={[styles.tokenName, { color: colors.secondary }]} numberOfLines={1}>{token.name}</Text>
         </View>
       </View>
       <View style={styles.tokenCenter}>{renderSparkline()}</View>
       <View style={styles.tokenRight}>
-        <Text style={[styles.tokenPrice, { color: colors.text }]}>
-          {formatPrice(token.current_price)}
-        </Text>
+        <Text style={[styles.tokenPrice, { color: colors.text }]}>{formatPrice(token.current_price)}</Text>
         <View style={[styles.tokenChangeBadge, { backgroundColor: changeColor + '15' }]}>
           <Ionicons name={isPositive ? 'arrow-up' : 'arrow-down'} size={10} color={changeColor} />
-          <Text style={[styles.tokenChangeText, { color: changeColor }]}>
-            {Math.abs(token.price_change_percentage_24h || 0).toFixed(2)}%
-          </Text>
+          <Text style={[styles.tokenChangeText, { color: changeColor }]}>{Math.abs(token.price_change_percentage_24h || 0).toFixed(2)}%</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
 
+// ============ MAIN SCREEN ============
 export default function MarketScreen() {
   const navigation = useNavigation();
   const { t } = useTranslation();
   const theme = useAppStore(s => s.theme);
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
+
+  // ✅ استخدام walletPublicKey من الـ store (يتم تحديثه عند تبديل الحساب)
+  const walletPublicKey = useAppStore(s => s.walletPublicKey);
 
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -293,7 +244,7 @@ export default function MarketScreen() {
     loadWatchlist();
   }, []);
 
-  // ✅ دالة جلب بيانات السوق مع الرصيد الحقيقي
+  // ✅ جلب بيانات السوق مع الرصيد الحقيقي
   const fetchAllMarketData = async () => {
     try {
       const [tokenData, overviewData, moversData] = await Promise.all([
@@ -306,33 +257,17 @@ export default function MarketScreen() {
       setMarketOverview(overviewData);
       setTopMovers(moversData);
 
-      // ✅ جلب الرصيد الحقيقي من المحفظة
-      const walletPublicKey = await SecureStore.getItemAsync('wallet_public_key');
-
+      // ✅ استخدام walletPublicKey من الـ store (يتغير تلقائياً عند تبديل الحساب)
       if (walletPublicKey) {
-        // جلب أرصدة المفاتيح الأساسية
         const solBalance = await getSolBalance(true, walletPublicKey);
         const solPrice = tokenData.find(t => t.symbol === 'SOL')?.current_price || 145;
 
-        const mecoBalance = await getTokenBalance(
-          '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
-          true,
-          walletPublicKey
-        );
-        const mecoPrice = tokenData.find(t => t.symbol === 'MECO')?.current_price || 0.00613;
+        const mecoBalance = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, walletPublicKey);
+        const mecoPrice = tokenData.find(t => t.symbol === 'MECO')?.current_price || 0.002013;
 
-        const usdcBalance = await getTokenBalance(
-          'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-          true,
-          walletPublicKey
-        );
+        const usdcBalance = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, walletPublicKey);
 
-        // حساب القيمة الإجمالية
-        const totalValue =
-          (solBalance * solPrice) +
-          (mecoBalance * mecoPrice) +
-          (usdcBalance * 1);
-
+        const totalValue = (solBalance * solPrice) + (mecoBalance * mecoPrice) + (usdcBalance * 1);
         setPortfolioValue(totalValue);
         setPortfolioChange(overviewData?.marketCapChange24h || 0);
       } else {
@@ -343,13 +278,14 @@ export default function MarketScreen() {
       console.error('Market fetch error:', error);
       setTokens(CORE_TOKENS.map((t, i) => ({
         ...t,
-        current_price: t.symbol === 'MECO' ? 0.00613 : (t.symbol === 'SOL' ? 145.50 : 1),
+        current_price: t.symbol === 'MECO' ? 0.002013 : (t.symbol === 'SOL' ? 145.50 : 1),
         price_change_percentage_24h: (Math.random() - 0.5) * 10,
         rank: i + 1,
       })));
     }
   };
 
+  // ✅ إعادة الجلب عند تغيير الحساب
   useEffect(() => {
     let isMounted = true;
     const init = async () => {
@@ -359,7 +295,14 @@ export default function MarketScreen() {
     init();
     const intervalId = setInterval(fetchAllMarketData, 30000);
     return () => { isMounted = false; clearInterval(intervalId); };
-  }, []);
+  }, [walletPublicKey]);
+
+  // ✅ إعادة جلب الرصيد عند العودة للشاشة
+  useFocusEffect(
+    useCallback(() => {
+      fetchAllMarketData();
+    }, [walletPublicKey])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -425,9 +368,7 @@ export default function MarketScreen() {
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
         <View style={styles.loadingCenter}>
           <ActivityIndicator size="large" color={primaryColor} />
-          <Text style={[styles.loadingText, { color: colors.secondary }]}>
-            {t('loading') || 'Loading...'}
-          </Text>
+          <Text style={[styles.loadingText, { color: colors.secondary }]}>{t('loading') || 'Loading...'}</Text>
         </View>
       </SafeAreaView>
     );
@@ -437,79 +378,60 @@ export default function MarketScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <View style={styles.header}>
         <View>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>
-            {t('market_title') || 'Market'}
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>
-            {t('market_subtitle') || 'Real prices • Live updates'}
-          </Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{t('market_title') || 'Market'}</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{t('market_subtitle') || 'Real prices • Live updates'}</Text>
         </View>
-        <TouchableOpacity style={[styles.searchButton, { backgroundColor: colors.card }]}
-          onPress={() => setSearchModalVisible(true)}>
+        <TouchableOpacity style={[styles.searchButton, { backgroundColor: colors.card }]} onPress={() => setSearchModalVisible(true)}>
           <Ionicons name="search" size={20} color={colors.secondary} />
         </TouchableOpacity>
       </View>
+
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh}
-          colors={[primaryColor]} tintColor={primaryColor} />} showsVerticalScrollIndicator={false}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[primaryColor]} tintColor={primaryColor} />} showsVerticalScrollIndicator={false}>
+        
         <MarketOverviewCard data={marketOverview} isDark={isDark} />
         <PortfolioSummaryCard totalValue={portfolioValue} changePercent={portfolioChange} isDark={isDark} />
         <TopMoversSection gainers={topMovers.gainers} losers={topMovers.losers} isDark={isDark} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}
-          contentContainerStyle={styles.tabsContent}>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContent}>
           {tabs.map(tab => (
-            <TouchableOpacity key={tab.id} style={[styles.tab, activeTab === tab.id && { backgroundColor: primaryColor }]}
-              onPress={() => setActiveTab(tab.id)}>
-              <Text style={[styles.tabText, { color: activeTab === tab.id ? '#FFFFFF' : colors.secondary }]}>
-                {tab.label}
-              </Text>
+            <TouchableOpacity key={tab.id} style={[styles.tab, activeTab === tab.id && { backgroundColor: primaryColor }]} onPress={() => setActiveTab(tab.id)}>
+              <Text style={[styles.tabText, { color: activeTab === tab.id ? '#FFFFFF' : colors.secondary }]}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
+
         <View style={styles.sortContainer}>
           {sortOptions.map(option => (
-            <TouchableOpacity key={option.id}
-              style={[styles.sortButton, sortBy === option.id && { backgroundColor: primaryColor + '20' }]}
-              onPress={() => setSortBy(option.id)}>
-              <Text style={[styles.sortButtonText, { color: sortBy === option.id ? primaryColor : colors.secondary }]}>
-                {option.label}
-              </Text>
+            <TouchableOpacity key={option.id} style={[styles.sortButton, sortBy === option.id && { backgroundColor: primaryColor + '20' }]} onPress={() => setSortBy(option.id)}>
+              <Text style={[styles.sortButtonText, { color: sortBy === option.id ? primaryColor : colors.secondary }]}>{option.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
+
         <View style={styles.tokenList}>
           {filteredTokens.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="search" size={48} color={colors.secondary} />
-              <Text style={[styles.emptyText, { color: colors.secondary }]}>
-                {activeTab === 'watchlist' ? (t('watchlist_empty') || 'No tokens') : (t('no_results') || 'No results')}
-              </Text>
+              <Text style={[styles.emptyText, { color: colors.secondary }]}>{activeTab === 'watchlist' ? (t('watchlist_empty') || 'No tokens') : (t('no_results') || 'No results')}</Text>
             </View>
           ) : filteredTokens.map((token, index) => (
-            <TokenListItem key={token.mint || token.id} token={token} index={index}
-              onPress={handleTokenPress} onLongPress={handleAddToWatchlist}
-              isDark={isDark} primaryColor={primaryColor} />
+            <TokenListItem key={token.mint || token.id} token={token} index={index} onPress={handleTokenPress} onLongPress={handleAddToWatchlist} isDark={isDark} primaryColor={primaryColor} />
           ))}
         </View>
       </ScrollView>
-      <Modal visible={searchModalVisible} animationType="slide" transparent={true}
-        onRequestClose={() => setSearchModalVisible(false)}>
+
+      <Modal visible={searchModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSearchModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {t('market_search') || 'Search'}
-              </Text>
-              <TouchableOpacity onPress={() => setSearchModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('market_search') || 'Search'}</Text>
+              <TouchableOpacity onPress={() => setSearchModalVisible(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
             </View>
             <TextInput style={[styles.modalInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-              placeholder={t('market_search_placeholder') || 'Search...'}
-              placeholderTextColor={colors.secondary} value={searchQuery}
+              placeholder={t('market_search_placeholder') || 'Search...'} placeholderTextColor={colors.secondary} value={searchQuery}
               onChangeText={setSearchQuery} autoFocus={true} />
-            <TouchableOpacity style={[styles.modalButton, { backgroundColor: primaryColor }]}
-              onPress={() => setSearchModalVisible(false)}>
+            <TouchableOpacity style={[styles.modalButton, { backgroundColor: primaryColor }]} onPress={() => setSearchModalVisible(false)}>
               <Text style={styles.modalButtonText}>{t('ok') || 'OK'}</Text>
             </TouchableOpacity>
           </View>
@@ -519,6 +441,7 @@ export default function MarketScreen() {
   );
 }
 
+// ============ STYLES ============
 const styles = StyleSheet.create({
   loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, fontSize: 14 },
