@@ -473,11 +473,6 @@ export default function SendScreen() {
             </View>
           </View>
 
-          <View style={[styles.simpleFeeRow, { backgroundColor: colors.card }]}>
-            <Text style={[styles.simpleFeeText, { color: colors.textSecondary }]}>{t('sendScreen.fees.networkFee')}</Text>
-            <Text style={[styles.simpleFeeAmount, { color: colors.text }]}>≈ {totalFees.toFixed(5)} SOL</Text>
-          </View>
-
           <TouchableOpacity
             style={[styles.sendButton, { backgroundColor: primaryColor, opacity: state.loading ? 0.7 : 1 }]}
             onPress={handleSend}
@@ -537,9 +532,6 @@ const styles = StyleSheet.create({
   amountHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   maxButton: { fontSize: 14, fontWeight: '600' },
   currencyLabel: { fontSize: 16, fontWeight: '500', marginLeft: 8 },
-  simpleFeeRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, borderRadius: 12, marginBottom: 24 },
-  simpleFeeText: { fontSize: 14 },
-  simpleFeeAmount: { fontSize: 14, fontWeight: '600' },
   sendButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 18, borderRadius: 16, gap: 8 },
   sendButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
