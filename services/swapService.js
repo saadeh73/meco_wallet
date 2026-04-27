@@ -29,11 +29,11 @@ export const TOKEN_MINTS = {
   TNSR: 'TNSRxcUxoT9xBG3de7PiJyTDYu7kskLqcpddZ3uFaGE'
 };
 
-export const TOKEN_DECIMALS = { 
-  SOL: 9, MECO: 9, USDT: 6, USDC: 6, 
-  JUP: 6, RAY: 6, BONK: 5, WIF: 6, 
-  PYTH: 6, JTO: 9, RNDR: 8, HNT: 8, 
-  ORCA: 6, MNDE: 9, BOME: 6, TNSR: 9 
+export const TOKEN_DECIMALS = {
+  SOL: 9, MECO: 9, USDT: 6, USDC: 6,
+  JUP: 6, RAY: 6, BONK: 5, WIF: 6,
+  PYTH: 6, JTO: 9, RNDR: 8, HNT: 8,
+  ORCA: 6, MNDE: 9, BOME: 6, TNSR: 9
 };
 
 // ✅ عنوان خزينة المشروع ورسم الخدمة
@@ -46,8 +46,7 @@ const JUPITER_SWAP_API = 'https://quote-api.jup.ag/v6/swap';
 const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
 const JUPITER_LITE_SWAP_API = 'https://lite-api.jup.ag/swap/v1/swap';
 
-// ✅ مفتاح Jupiter API مباشرة
-const JUPITER_API_KEY = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
+const JUPITER_API_KEY = process.env.EXPO_PUBLIC_JUPITER_API_KEY;
 
 // ✅ الترويسات
 const BROWSER_HEADERS = {
@@ -175,21 +174,21 @@ export async function buildSwapTransaction(quote, userPublicKey) {
 // --- تنفيذ التبادل (مع تحصيل رسوم التطبيق بذكاء) ---
 export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100, maxRetries = 3, publicKey, privateKey) {
   console.log(`🚀 [Swap] بدء التبادل: ${amount} ${inputSymbol} -> ${outputSymbol}`);
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔄 [Swap] المحاولة ${attempt} من ${maxRetries}...`);
-      
+
       let keypair;
       if (privateKey) {
         keypair = getKeypairFromPrivateKey(privateKey);
       } else {
         keypair = await getKeypair();
       }
-      
+
       const userPublicKey = publicKey || keypair.publicKey.toString();
       const connection = await getConnection();
-      
+
       // ✅ 1. التأكد من الأرصدة (بما في ذلك رسوم الخدمة 0.0005)
       const balanceCheck = await checkBalance(inputSymbol, amount, userPublicKey);
       if (!balanceCheck.hasBalance) {
@@ -218,20 +217,20 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
 
       // ✅ 4. توقيع المعاملتين في نفس اللحظة
       feeTx.sign(keypair);
-      
+
       const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
       const swapTx = web3.VersionedTransaction.deserialize(swapTransactionBuf);
       swapTx.sign([keypair]);
 
       console.log(`📡 [Swap] جاري إرسال معاملة الرسوم والمبادلة للشبكة...`);
-      
+
       // ✅ 5. إرسال المعاملتين للشبكة (إرسال رسوم الخدمة أولاً ثم المبادلة فوراً)
       const feeSignature = await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true });
       console.log(`✅ [Fee] تم إرسال الرسوم: ${feeSignature}`);
 
       const serializedSwapTx = swapTx.serialize();
       const uint8ArraySwapTx = new Uint8Array(serializedSwapTx.buffer, serializedSwapTx.byteOffset, serializedSwapTx.byteLength);
-      
+
       let swapSignature;
       try {
         swapSignature = await connection.sendRawTransaction(uint8ArraySwapTx, {
@@ -253,7 +252,7 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
       // 6. تأكيد معاملة المبادلة
       let confirmation;
       let confirmAttempt = 0;
-      
+
       while (confirmAttempt < 3) {
         try {
           confirmation = await connection.confirmTransaction({
@@ -261,7 +260,7 @@ export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps
             blockhash: latestBlockhash.blockhash,
             lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
           }, 'confirmed');
-          
+
           if (!confirmation.value.err) break;
           else throw new Error(`رفضت الشبكة المعاملة`);
         } catch (confirmError) {
@@ -311,31 +310,31 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
     if (!pubKeyStr) {
       return { hasBalance: false, balance: 0, required: amount };
     }
-    
+
     // جلب رصيد الـ SOL دائماً لأننا نحتاجه للرسوم
     const solBalance = await getSolBalance(true, pubKeyStr);
-    
+
     // 1. إذا كان يتبادل SOL، يجب أن يمتلك: الكمية المطلوبة + رسوم الخدمة + رسوم الشبكة
     if (tokenSymbol === 'SOL') {
       const requiredSol = amount + SERVICE_FEE_SOL + 0.00001;
       return { hasBalance: solBalance >= requiredSol, balance: solBalance, required: requiredSol };
-    } 
-    
+    }
+
     // 2. إذا كان يتبادل Token، يجب أن يمتلك الكمية من الـ Token + رسوم الخدمة بالـ SOL
     else {
       const mint = TOKEN_MINTS[tokenSymbol];
       if (!mint) return { hasBalance: false, balance: 0, required: amount };
-      
+
       const tokenBalance = await getTokenBalance(mint, true, pubKeyStr);
-      
+
       // التأكد من وجود رصيد كافٍ من العملة، ووجود SOL كافٍ لدفع العمولة
       const hasEnoughToken = tokenBalance >= amount;
       const hasEnoughSolForFee = solBalance >= (SERVICE_FEE_SOL + 0.00001);
-      
-      return { 
-        hasBalance: hasEnoughToken && hasEnoughSolForFee, 
-        balance: tokenBalance, 
-        required: amount 
+
+      return {
+        hasBalance: hasEnoughToken && hasEnoughSolForFee,
+        balance: tokenBalance,
+        required: amount
       };
     }
   } catch (error) {
@@ -344,17 +343,45 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
   }
 }
 
+// ✅ دالة getSwapRate مُحدَّثة - تستخدم أسعار Jupiter الحقيقية
 export async function getSwapRate(inputSymbol, outputSymbol, amount) {
   try {
-    const marketData = await getJupiterMarketData();
-    const inputTokenData = marketData.find(t => t.symbol === inputSymbol);
-    const outputTokenData = marketData.find(t => t.symbol === outputSymbol);
-    if (!inputTokenData || !outputTokenData) throw new Error('بيانات التسعير غير متوفرة');
-    const inputPriceUsd = inputTokenData.current_price;
-    const outputPriceUsd = outputTokenData.current_price;
-    if (inputPriceUsd === 0 || outputPriceUsd === 0) throw new Error('لا يوجد سيولة');
-    const totalUsdValue = amount * inputPriceUsd;
-    const outputAmountAfterSlippage = (totalUsdValue / outputPriceUsd) * 0.99;
-    return { rate: outputPriceUsd / inputPriceUsd, outputAmount: outputAmountAfterSlippage, priceImpact: 1.0 };
-  } catch (error) { throw error; }
+    const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
+    const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
+    
+    // تحويل المبلغ إلى أصغر وحدة
+    const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
+    
+    // استخدام Jupiter Quote API الحقيقي
+    const quote = await getSwapQuote(
+      TOKEN_MINTS[inputSymbol],
+      TOKEN_MINTS[outputSymbol],
+      amountInSmallestUnit,
+      100 // 1% slippage
+    );
+    
+    // استخراج المبلغ الفعلي من العرض
+    const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
+    const inputAmountReal = parseInt(quote.inAmount) / Math.pow(10, inputDecimals);
+    
+    // حساب السعر الفعلي
+    const rate = outputAmount / inputAmountReal;
+    
+    // حساب Price Impact من البيانات الحقيقية
+    const priceImpact = quote.routePlan?.[0]?.priceImpactPct || 0;
+    
+    return {
+      rate,
+      outputAmount,
+      priceImpact,
+      // بيانات إضافية مفيدة
+      marketInfos: quote.routePlan?.map(route => ({
+        percent: route.portionBps ? route.portionBps / 100 : 100,
+        label: route.swapInfo?.label || 'Direct'
+      }))
+    };
+  } catch (error) {
+    console.error('[getSwapRate] خطأ:', error.message);
+    throw error;
+  }
 }

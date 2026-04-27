@@ -198,11 +198,27 @@ export default function SwapScreen({ route }) {
     );
   };
 
+  // ✅ الكود المُحدث - swapTokens
   const swapTokens = () => {
-    setFromToken(toToken);
-    setToToken(fromToken);
-    setFromAmount(toAmount);
-    setToAmount(fromAmount);
+    // التحقق من نفس العملة
+    if (fromToken.mintAddress === toToken.mintAddress) {
+      Alert.alert(t('error'), t('swap_same_token', 'لا يمكن التبديل بين نفس العملة'));
+      return;
+    }
+    
+    // حفظ القيم القديمة
+    const tempFrom = fromToken;
+    const tempTo = toToken;
+    
+    // مسح المبالغ أولاً
+    setFromAmount('');
+    setToAmount('');
+    setRate(null);
+    setPriceImpact(0);
+    
+    // تبديل العملات
+    setFromToken(tempTo);
+    setToToken(tempFrom);
   };
 
   const useMaxBalance = () => {
