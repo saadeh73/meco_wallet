@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import { getSolBalance, getTokenAccounts, getTokenMarketPrice } from '../services/heliusService';
+import { getSolBalance, getTokenAccounts, getTokenMarketPrice, clearBalanceCache } from '../services/heliusService';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 const { width, height } = Dimensions.get('window');
@@ -48,9 +48,9 @@ export default function WalletScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [tempWalletName, setTempWalletName] = useState('');
-  const [loadingInitial, setLoadingInitial] = useState(true);
-
-  const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+  
+  // 🌟 فصل حالات التحميل لعدم تجميد الشاشة
+  const [isSwitchingAccount, setIsSwitchingAccount] = useState(true);
   const [editingAccountIndex, setEditingAccountIndex] = useState(null);
 
   const [accountsModalVisible, setAccountsModalVisible] = useState(false);
@@ -64,6 +64,7 @@ export default function WalletScreen() {
   const swipeableRefs = useRef({});
   const accountSwipeableRefs = useRef({});
 
+  // أنيميشن الدخول
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -71,6 +72,7 @@ export default function WalletScreen() {
     ]).start();
   }, []);
 
+  // 🌟 التحديث الفوري للواجهة (UI) بمجرد تغيير الحساب من الـ Store
   useEffect(() => {
     if (accounts.length > 0 && activeAccountIndex < accounts.length) {
       const active = accounts[activeAccountIndex];
@@ -79,19 +81,25 @@ export default function WalletScreen() {
     }
   }, [accounts, activeAccountIndex]);
 
+  // 🌟 دالة جلب بيانات المحفظة تعمل في الخلفية دون تجميد
   const loadWalletData = useCallback(async (publicKey) => {
+    if (!publicKey) {
+      setIsSwitchingAccount(false);
+      return;
+    }
+
+    setIsSwitchingAccount(true);
+    const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
+
     try {
-      if (!publicKey) {
-        setLoadingInitial(false);
-        setIsSwitchingAccount(false);
-        return;
-      }
+      // تفريغ الكاش لنضمن أرصدة جديدة دائماً
+      clearBalanceCache();
 
-      setIsSwitchingAccount(true);
-      const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
-
-      const solBal = await getSolBalance(true, addr) || 0;
-      const tokenAccounts = await getTokenAccounts(addr) || [];
+      // جلب متزامن لكن غير معطل للواجهة
+      const [solBal, tokenAccounts] = await Promise.all([
+        getSolBalance(true, addr).catch(() => 0),
+        getTokenAccounts(addr).catch(() => [])
+      ]);
 
       let calculatedTotalUSD = 0;
       const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
@@ -104,10 +112,12 @@ export default function WalletScreen() {
         }
 
         let price = 0;
-        try {
-          if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
-        } catch (e) {}
-
+        if (amount > 0) { // توفير وقت الطلبات
+          try {
+            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
+          } catch (e) {}
+        }
+        
         const valueUSD = amount * price;
         calculatedTotalUSD += valueUSD;
         return { ...asset, amount, price, valueUSD };
@@ -119,17 +129,19 @@ export default function WalletScreen() {
       setAssets(filteredAssets);
       setTotalBalanceUSD(calculatedTotalUSD);
     } catch (error) {
+      console.warn("Error loading wallet data:", error);
     } finally {
-      setLoadingInitial(false);
       setIsSwitchingAccount(false);
     }
   }, []);
 
   useEffect(() => {
-    if (walletPublicKey) loadWalletData(walletPublicKey);
+    if (walletPublicKey) {
+      loadWalletData(walletPublicKey);
+    }
   }, [walletPublicKey, loadWalletData]);
 
-  // ✅ التعديل الجراحي: دالة حساب الأرصدة "المدرّعة" التي لن تعلق أبداً (Timeout protection)
+  // دالة جلب الأرصدة المصغرة في القائمة
   const fetchAccountUsdBalances = useCallback(async () => {
     if (loadingAccountBalances || !accounts || accounts.length === 0) return;
     setLoadingAccountBalances(true);
@@ -154,9 +166,8 @@ export default function WalletScreen() {
 
           for (const asset of CORE_TOKENS) {
             let amount = 0;
-            if (asset.symbol === 'SOL') {
-              amount = solBal;
-            } else {
+            if (asset.symbol === 'SOL') amount = solBal;
+            else {
               const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
               if (tokenData) amount = tokenData.amount;
             }
@@ -164,27 +175,22 @@ export default function WalletScreen() {
             if (amount > 0) {
               let price = 0;
               try {
-                if (getTokenMarketPrice) {
-                  price = await withTimeout(getTokenMarketPrice(asset.symbol), 2000).catch(() => 0);
-                }
+                if (getTokenMarketPrice) price = await withTimeout(getTokenMarketPrice(asset.symbol), 2000).catch(() => 0);
               } catch (e) {}
               accUsd += (amount * price);
             }
           }
 
           balances[acc.publicKey] = accUsd;
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50)); // تقليل وقت الانتظار لسرعة أعلى
         } catch (innerError) {
           balances[acc.publicKey] = 0;
         }
       }
-
       setAccountUsdBalances(balances);
-
     } catch (globalError) {
       console.error('Fetch balances error:', globalError);
     } finally {
-      // ✅ سيتوقف الدوران دائماً 100%
       setLoadingAccountBalances(false);
     }
   }, [accounts]);
@@ -238,13 +244,21 @@ export default function WalletScreen() {
     }
   };
 
-  const handleSwitchAccount = async (index) => {
+  // 🌟 التبديل الفوري (Instant Switch)
+  const handleSwitchAccount = (index) => {
     if (index === activeAccountIndex) {
       setAccountsModalVisible(false);
       return;
     }
+    // إغلاق النافذة فوراً
     setAccountsModalVisible(false);
-    await switchAccount(index);
+    // تفريغ الأرصدة القديمة من الشاشة لحظياً لكي تظهر علامة التحميل
+    setTotalBalanceUSD(0);
+    setAssets([]);
+    // تبديل الحساب في الـ Store دون إيقاف الشاشة
+    setTimeout(() => {
+      switchAccount(index);
+    }, 50);
   };
 
   const handleDeleteAccount = (account) => {
@@ -418,7 +432,7 @@ export default function WalletScreen() {
           </View>
           <View style={styles.balanceContainer}>
             <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('total_balance')}</Text>
-            {loadingInitial || isSwitchingAccount ? (
+            {isSwitchingAccount ? (
               <ActivityIndicator color={primaryColor} size="large" style={{ marginTop: 10, height: 40 }} />
             ) : (
               <Text style={[styles.balanceAmount, { color: colors.text }]}>
@@ -443,7 +457,7 @@ export default function WalletScreen() {
             contentContainerStyle={{ paddingBottom: 100 }}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryColor} />}
-            ListEmptyComponent={(!loadingInitial && !isSwitchingAccount) && (
+            ListEmptyComponent={(!isSwitchingAccount) && (
               <View style={styles.emptyContainer}>
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('loading_market_data')}</Text>
               </View>
