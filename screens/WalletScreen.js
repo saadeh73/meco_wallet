@@ -329,7 +329,7 @@ export default function WalletScreen() {
   const renderAccountItem = ({ item }) => {
     const isActive = item.index === activeAccountIndex;
     const usdBalance = accountUsdBalances[item.publicKey];
-    const isLoading = loadingAccountBalances && usdBalance === undefined;
+    const isLoading = loadingAccountBalances && (usdBalance === undefined || usdBalance === null);
 
     return (
       <View style={{ marginBottom: 8 }}>
@@ -366,7 +366,7 @@ export default function WalletScreen() {
                 <ActivityIndicator size="small" color={primaryColor} />
               ) : (
                 <Text style={[styles.accountBalance, { color: colors.text }]}>
-                  ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                  ${(usdBalance !== undefined && usdBalance !== null ? usdBalance : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               )}
               {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
