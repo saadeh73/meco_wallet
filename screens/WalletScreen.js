@@ -129,21 +129,29 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
-  // ✅ الدالة الجراحية المحدثة لإيقاف الدوران اللانهائي وتسريع الأداء
+  // ✅ التعديل الجراحي: دالة حساب الأرصدة "المدرّعة" التي لن تعلق أبداً (Timeout protection)
   const fetchAccountUsdBalances = useCallback(async () => {
     if (loadingAccountBalances || !accounts || accounts.length === 0) return;
     setLoadingAccountBalances(true);
 
+    const withTimeout = (promise, ms = 3000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))
+      ]);
+    };
+
     try {
-      const balances = {};
+      const balances = { ...accountUsdBalances };
+
       for (const acc of accounts) {
         try {
           const addr = acc.publicKey;
-          const solBal = await getSolBalance(false, addr) || 0;
-          const tokenAccounts = await getTokenAccounts(addr) || [];
-
           let accUsd = 0;
-          
+
+          const solBal = await withTimeout(getSolBalance(false, addr)).catch(() => 0);
+          const tokenAccounts = await withTimeout(getTokenAccounts(addr)).catch(() => []);
+
           for (const asset of CORE_TOKENS) {
             let amount = 0;
             if (asset.symbol === 'SOL') {
@@ -156,22 +164,27 @@ export default function WalletScreen() {
             if (amount > 0) {
               let price = 0;
               try {
-                if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
+                if (getTokenMarketPrice) {
+                  price = await withTimeout(getTokenMarketPrice(asset.symbol), 2000).catch(() => 0);
+                }
               } catch (e) {}
               accUsd += (amount * price);
             }
           }
 
           balances[acc.publicKey] = accUsd;
-          await new Promise(resolve => setTimeout(resolve, 150));
+          await new Promise(resolve => setTimeout(resolve, 100));
         } catch (innerError) {
           balances[acc.publicKey] = 0;
         }
       }
+
       setAccountUsdBalances(balances);
+
     } catch (globalError) {
       console.error('Fetch balances error:', globalError);
     } finally {
+      // ✅ سيتوقف الدوران دائماً 100%
       setLoadingAccountBalances(false);
     }
   }, [accounts]);
