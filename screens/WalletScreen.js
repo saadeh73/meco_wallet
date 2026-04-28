@@ -63,18 +63,12 @@ export default function WalletScreen() {
   const slideAnim = useState(new Animated.Value(30))[0];
   const swipeableRefs = useRef({});
   const accountSwipeableRefs = useRef({});
-  const isMountedRef = useRef(true);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, friction: 6, useNativeDriver: true }),
     ]).start();
-  }, []);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
   }, []);
 
   useEffect(() => {
@@ -88,30 +82,66 @@ export default function WalletScreen() {
   const loadWalletData = useCallback(async (publicKey) => {
     try {
       if (!publicKey) {
-        if (isMountedRef.current) {
-          setLoadingInitial(false);
-          setIsSwitchingAccount(false);
-        }
+        setLoadingInitial(false);
+        setIsSwitchingAccount(false);
         return;
       }
 
-      if (isMountedRef.current) {
-        setIsSwitchingAccount(true);
-      }
-      
+      setIsSwitchingAccount(true);
       const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
 
-      // ✅ استدعاء مباشر للرصيد
       const solBal = await getSolBalance(true, addr) || 0;
       const tokenAccounts = await getTokenAccounts(addr) || [];
 
-      if (!isMountedRef.current) return;
-
       let calculatedTotalUSD = 0;
-      const assetsData = [];
+      const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
+        let amount = 0;
+        if (asset.symbol === 'SOL') {
+          amount = solBal;
+        } else {
+          const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
+          if (tokenData) amount = tokenData.amount;
+        }
 
-      for (const asset of CORE_TOKENS) {
+        let price = 0;
         try {
+          if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
+        } catch (e) {}
+
+        const valueUSD = amount * price;
+        calculatedTotalUSD += valueUSD;
+        return { ...asset, amount, price, valueUSD };
+      }));
+
+      const filteredAssets = allAssetsPromise.filter(asset => asset.symbol === 'SOL' || asset.symbol === 'MECO' || asset.amount > 0);
+      filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
+
+      setAssets(filteredAssets);
+      setTotalBalanceUSD(calculatedTotalUSD);
+    } catch (error) {
+    } finally {
+      setLoadingInitial(false);
+      setIsSwitchingAccount(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (walletPublicKey) loadWalletData(walletPublicKey);
+  }, [walletPublicKey, loadWalletData]);
+
+  const fetchAccountUsdBalances = useCallback(async () => {
+    if (loadingAccountBalances) return;
+    setLoadingAccountBalances(true);
+
+    const balances = {};
+    for (const acc of accounts) {
+      try {
+        const addr = acc.publicKey;
+        const solBal = await getSolBalance(false, addr) || 0;
+        const tokenAccounts = await getTokenAccounts(addr) || [];
+
+        let accUsd = 0;
+        await Promise.all(CORE_TOKENS.map(async (asset) => {
           let amount = 0;
           if (asset.symbol === 'SOL') {
             amount = solBal;
@@ -122,97 +152,17 @@ export default function WalletScreen() {
 
           let price = 0;
           try {
-            if (getTokenMarketPrice) {
-              price = await getTokenMarketPrice(asset.symbol) || 0;
-            }
-          } catch (e) {
-            // تجاهل خطأ السعر
-          }
-
-          const valueUSD = amount * price;
-          calculatedTotalUSD += valueUSD;
-          assetsData.push({ ...asset, amount, price, valueUSD });
-
-          await new Promise(resolve => setTimeout(resolve, 20));
-        } catch (e) {
-          assetsData.push({ ...asset, amount: 0, price: 0, valueUSD: 0 });
-        }
-        
-        if (!isMountedRef.current) return;
-      }
-
-      if (!isMountedRef.current) return;
-
-      const filteredAssets = assetsData.filter(asset => asset.symbol === 'SOL' || asset.symbol === 'MECO' || asset.amount > 0);
-      filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
-
-      if (isMountedRef.current) {
-        setAssets(filteredAssets);
-        setTotalBalanceUSD(calculatedTotalUSD);
-      }
-    } catch (error) {
-      console.warn('[Wallet] خطأ:', error.message);
-      if (isMountedRef.current) {
-        setAssets([]);
-        setTotalBalanceUSD(0);
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoadingInitial(false);
-        setIsSwitchingAccount(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (walletPublicKey) {
-      loadWalletData(walletPublicKey);
-    } else {
-      setLoadingInitial(false);
-      setIsSwitchingAccount(false);
-    }
-  }, [walletPublicKey, loadWalletData]);
-
-  const fetchAccountUsdBalances = useCallback(async () => {
-    if (loadingAccountBalances) return;
-    setLoadingAccountBalances(true);
-    const balances = {};
-
-    for (const acc of accounts) {
-      try {
-        const addr = acc.publicKey;
-        const solBal = await getSolBalance(false, addr) || 0;
-        const tokenAccounts = await getTokenAccounts(addr) || [];
-
-        let accUsd = 0;
-        for (const asset of CORE_TOKENS) {
-          try {
-            let amount = 0;
-            if (asset.symbol === 'SOL') {
-              amount = solBal;
-            } else {
-              const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
-              if (tokenData) amount = tokenData.amount;
-            }
-
-            let price = 0;
-            try {
-              if (getTokenMarketPrice) {
-                price = await getTokenMarketPrice(asset.symbol) || 0;
-              }
-            } catch (e) {}
-            
-            accUsd += amount * price;
+            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
           } catch (e) {}
-        }
+          accUsd += amount * price;
+        }));
 
         balances[acc.publicKey] = accUsd;
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (e) {
         balances[acc.publicKey] = 0;
       }
     }
-    
     setAccountUsdBalances(balances);
     setLoadingAccountBalances(false);
   }, [accounts, loadingAccountBalances]);
@@ -379,7 +329,7 @@ export default function WalletScreen() {
   const renderAccountItem = ({ item }) => {
     const isActive = item.index === activeAccountIndex;
     const usdBalance = accountUsdBalances[item.publicKey];
-    const isLoading = loadingAccountBalances && (usdBalance === undefined || usdBalance === null);
+    const isLoading = loadingAccountBalances && usdBalance === undefined;
 
     return (
       <View style={{ marginBottom: 8 }}>
@@ -416,7 +366,7 @@ export default function WalletScreen() {
                 <ActivityIndicator size="small" color={primaryColor} />
               ) : (
                 <Text style={[styles.accountBalance, { color: colors.text }]}>
-                  ${(usdBalance !== undefined && usdBalance !== null ? usdBalance : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                 </Text>
               )}
               {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
@@ -492,6 +442,7 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* نافذة الحسابات */}
         <Modal visible={accountsModalVisible} transparent animationType="slide" onRequestClose={() => setAccountsModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>
@@ -564,6 +515,7 @@ const styles = StyleSheet.create({
   actionBtnLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   listContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  
   leftAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 20, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, marginBottom: 12 },
   rightAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, borderTopRightRadius: 16, borderBottomRightRadius: 16, marginBottom: 12 },
   assetItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 12 },
@@ -574,29 +526,72 @@ const styles = StyleSheet.create({
   assetRight: { alignItems: 'flex-end' },
   assetBalance: { fontSize: 16, fontWeight: '600' },
   assetValue: { fontSize: 12 },
+  
   emptyContainer: { padding: 40, alignItems: 'center' },
   emptyText: { marginTop: 10, fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalOverlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 20 },
   modalContent: { width: '100%', padding: 24, borderRadius: 24, marginBottom: 20 },
-  accountsModalContent: { width: '100%', maxHeight: height * 0.8, padding: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24, flex: 1 },
+  accountsModalContent: {
+    width: '100%',
+    maxHeight: height * 0.8,
+    padding: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    flex: 1,
+  },
   accountsModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20 },
   modalButtons: { flexDirection: 'row', gap: 12 },
   modalBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
   actionText: { color: '#FFF', fontSize: 14, fontWeight: '600', marginTop: 4 },
-  accountItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16 },
-  accountActionContainer: { flexDirection: 'row', height: '100%' },
-  accountActionBtn: { justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
-  accountInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
-  accountAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  
+  accountItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+  accountActionContainer: {
+    flexDirection: 'row',
+    height: '100%',
+  },
+  accountActionBtn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+  },
+  accountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 14,
+  },
+  accountAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   accountAvatarText: { fontSize: 18, fontWeight: '700' },
   accountName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   accountAddress: { fontSize: 12 },
-  accountBalanceContainer: { flexDirection: 'row', alignItems: 'center' },
-  accountBalance: { fontSize: 16, fontWeight: '600' },
+  accountBalanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  accountBalance: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
   closeModalBtn: { width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
   addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
   addAccountText: { fontSize: 16, fontWeight: '600' },
 });
+
