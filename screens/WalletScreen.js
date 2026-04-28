@@ -129,43 +129,52 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
+  // ✅ الدالة الجراحية المحدثة لإيقاف الدوران اللانهائي وتسريع الأداء
   const fetchAccountUsdBalances = useCallback(async () => {
-    if (loadingAccountBalances) return;
+    if (loadingAccountBalances || !accounts || accounts.length === 0) return;
     setLoadingAccountBalances(true);
 
-    const balances = {};
-    for (const acc of accounts) {
-      try {
-        const addr = acc.publicKey;
-        const solBal = await getSolBalance(false, addr) || 0;
-        const tokenAccounts = await getTokenAccounts(addr) || [];
+    try {
+      const balances = {};
+      for (const acc of accounts) {
+        try {
+          const addr = acc.publicKey;
+          const solBal = await getSolBalance(false, addr) || 0;
+          const tokenAccounts = await getTokenAccounts(addr) || [];
 
-        let accUsd = 0;
-        await Promise.all(CORE_TOKENS.map(async (asset) => {
-          let amount = 0;
-          if (asset.symbol === 'SOL') {
-            amount = solBal;
-          } else {
-            const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
-            if (tokenData) amount = tokenData.amount;
+          let accUsd = 0;
+          
+          for (const asset of CORE_TOKENS) {
+            let amount = 0;
+            if (asset.symbol === 'SOL') {
+              amount = solBal;
+            } else {
+              const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
+              if (tokenData) amount = tokenData.amount;
+            }
+
+            if (amount > 0) {
+              let price = 0;
+              try {
+                if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
+              } catch (e) {}
+              accUsd += (amount * price);
+            }
           }
 
-          let price = 0;
-          try {
-            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
-          } catch (e) {}
-          accUsd += amount * price;
-        }));
-
-        balances[acc.publicKey] = accUsd;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (e) {
-        balances[acc.publicKey] = 0;
+          balances[acc.publicKey] = accUsd;
+          await new Promise(resolve => setTimeout(resolve, 150));
+        } catch (innerError) {
+          balances[acc.publicKey] = 0;
+        }
       }
+      setAccountUsdBalances(balances);
+    } catch (globalError) {
+      console.error('Fetch balances error:', globalError);
+    } finally {
+      setLoadingAccountBalances(false);
     }
-    setAccountUsdBalances(balances);
-    setLoadingAccountBalances(false);
-  }, [accounts, loadingAccountBalances]);
+  }, [accounts]);
 
   useEffect(() => {
     if (accountsModalVisible && accounts.length > 0) {
