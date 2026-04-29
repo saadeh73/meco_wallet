@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  SafeAreaView, ScrollView, Alert, ActivityIndicator, Image
+  SafeAreaView, ScrollView, Alert, ActivityIndicator, Linking
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { checkBalance } from '../services/swapService';
 import { stakeMeco, unstakeMeco, getUserStakingData } from '../services/stakingService';
 
@@ -17,7 +18,7 @@ const STAKING_PLANS = [
   { id: '60d', nameKey: 'plan_60d', apy: 40, durationKey: 'plan_60d_duration' },
 ];
 
-const VIP_THRESHOLD = 10000;
+const STAKING_TREASURY_ADDRESS = '8aqoFLJeTUF6zsRGibMUZPkT7KAWjCm8wVS2BduDsnCH';
 
 export default function StakingScreen() {
   const navigation = useNavigation();
@@ -35,9 +36,9 @@ export default function StakingScreen() {
     text: isDark ? '#FFFFFF' : '#1A1A2E',
     textSecondary: isDark ? '#A0A0B0' : '#6B7280',
     border: isDark ? '#2A2A3E' : '#E5E7EB',
-    gold: '#FFD700',
     error: '#EF4444',
     success: '#10B981',
+    info: '#3B82F6',
   };
 
   const [activeTab, setActiveTab] = useState('stake');
@@ -98,7 +99,6 @@ export default function StakingScreen() {
               setAmount('');
               loadData();
             } else {
-              // استخدم مفتاح الترجمة إذا وجد، وإلا استخدم نص الخطأ العادي
               const errorMsg = res.errorKey ? t(res.errorKey) : res.error;
               Alert.alert(t('staking.failed'), errorMsg);
             }
@@ -146,9 +146,20 @@ export default function StakingScreen() {
   const getPlanName = (plan) => t(`staking.${plan.nameKey}`);
   const getPlanDuration = (plan) => t(`staking.${plan.durationKey}`);
 
+  const copyTreasuryAddress = () => {
+    Clipboard.setStringAsync(STAKING_TREASURY_ADDRESS);
+    Alert.alert(t('success', 'Success'), t('copied_to_clipboard', 'Copied successfully'));
+  };
+
+  const openTreasuryExplorer = () => {
+    Linking.openURL(`https://solscan.io/account/${STAKING_TREASURY_ADDRESS}`);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -157,14 +168,28 @@ export default function StakingScreen() {
           <View style={{ width: 24 }} />
         </View>
 
-        {/* VIP Banner */}
-        <View style={[styles.vipBanner, { backgroundColor: colors.gold + '20', borderColor: colors.gold }]}>
-          <Ionicons name="diamond" size={28} color={colors.gold} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.vipTitle, { color: colors.gold }]}>{t('staking.vip_title')}</Text>
-            <Text style={[styles.vipText, { color: colors.text }]}>
-              {t('staking.vip_description', { amount: VIP_THRESHOLD.toLocaleString() })}
+        {/* 🤝 Transparency Banner */}
+        <View style={[styles.transparencyBanner, { backgroundColor: primaryColor + '15', borderColor: primaryColor }]}>
+          <View style={styles.transparencyHeader}>
+            <Ionicons name="shield-checkmark" size={24} color={primaryColor} />
+            <Text style={[styles.transparencyTitle, { color: primaryColor }]}>{t('staking.vip_title')}</Text>
+          </View>
+          <Text style={[styles.transparencyText, { color: colors.text }]}>
+            {t('staking.vip_description')}
+          </Text>
+          
+          <View style={[styles.treasuryAddressContainer, { backgroundColor: colors.card }]}>
+            <Text style={[styles.treasuryAddressText, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="middle">
+              {STAKING_TREASURY_ADDRESS}
             </Text>
+            <View style={styles.treasuryActions}>
+              <TouchableOpacity onPress={copyTreasuryAddress} style={styles.iconBtn}>
+                <Ionicons name="copy-outline" size={18} color={primaryColor} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={openTreasuryExplorer} style={styles.iconBtn}>
+                <Ionicons name="open-outline" size={18} color={primaryColor} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -182,17 +207,14 @@ export default function StakingScreen() {
         </View>
 
         {/* Rewards */}
-        <View style={[styles.rewardsCard, { backgroundColor: primaryColor + '15', borderColor: primaryColor }]}>
-          <Ionicons name="gift" size={24} color={primaryColor} />
+        <View style={[styles.rewardsCard, { backgroundColor: colors.success + '15', borderColor: colors.success }]}>
+          <Ionicons name="gift" size={24} color={colors.success} />
           <View style={{ marginLeft: 12, flex: 1 }}>
             <Text style={[styles.rewardsLabel, { color: colors.textSecondary }]}>{t('staking.accumulated_rewards')}</Text>
-            <Text style={[styles.rewardsValue, { color: primaryColor }]}>
+            <Text style={[styles.rewardsValue, { color: colors.success }]}>
               {t('staking.rewards_value', { rewards: stakingData.pendingRewards.toFixed(6) })}
             </Text>
           </View>
-          <TouchableOpacity style={[styles.harvestBtn, { backgroundColor: primaryColor }]}>
-            <Text style={styles.harvestText}>{t('staking.harvest')}</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Tabs */}
@@ -297,9 +319,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   backBtn: { padding: 5 },
   title: { fontSize: 24, fontWeight: 'bold' },
-  vipBanner: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
-  vipTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
-  vipText: { fontSize: 13, lineHeight: 20 },
+  transparencyBanner: { padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 20 },
+  transparencyHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
+  transparencyTitle: { fontSize: 16, fontWeight: 'bold' },
+  transparencyText: { fontSize: 13, lineHeight: 22, marginBottom: 12 },
+  treasuryAddressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  treasuryAddressText: { flex: 1, fontSize: 12, marginRight: 10 },
+  treasuryActions: { flexDirection: 'row', gap: 10 },
+  iconBtn: { padding: 4 },
   statsCard: { flexDirection: 'row', borderRadius: 16, padding: 20, marginBottom: 16 },
   statBox: { flex: 1, alignItems: 'center' },
   statDivider: { width: 1, backgroundColor: '#333', marginHorizontal: 10 },
@@ -308,8 +335,6 @@ const styles = StyleSheet.create({
   rewardsCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 24 },
   rewardsLabel: { fontSize: 12, marginBottom: 4 },
   rewardsValue: { fontSize: 18, fontWeight: 'bold' },
-  harvestBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  harvestText: { color: '#FFF', fontWeight: 'bold' },
   tabContainer: { flexDirection: 'row', borderRadius: 16, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
   tabText: { fontSize: 16, fontWeight: 'bold' },
