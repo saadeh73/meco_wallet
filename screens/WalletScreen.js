@@ -23,12 +23,6 @@ export default function WalletScreen() {
   const isDark = theme === 'dark';
 
   const accounts = useAppStore(state => state.accounts);
-  
-  // 🌟 استدعاء الأرشيف ودواله من الـ Store
-  const archivedAccounts = useAppStore(state => state.archivedAccounts);
-  const restoreAccount = useAppStore(state => state.restoreAccount);
-  const permanentlyDeleteAccount = useAppStore(state => state.permanentlyDeleteAccount);
-
   const activeAccountIndex = useAppStore(state => state.activeAccountIndex);
   const switchAccount = useAppStore(state => state.switchAccount);
   const addAccount = useAppStore(state => state.addAccount);
@@ -61,9 +55,6 @@ export default function WalletScreen() {
 
   const [accountsModalVisible, setAccountsModalVisible] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
-  
-  // 🌟 نافذة الأرشيف
-  const [archiveModalVisible, setArchiveModalVisible] = useState(false);
 
   const [accountUsdBalances, setAccountUsdBalances] = useState({});
   const [loadingAccountBalances, setLoadingAccountBalances] = useState(false);
@@ -88,7 +79,6 @@ export default function WalletScreen() {
     }
   }, [accounts, activeAccountIndex]);
 
-  // منطق جلب الأرصدة الأصلي السليم كما طلبته تماماً
   const loadWalletData = useCallback(async (publicKey) => {
     try {
       if (!publicKey) {
@@ -192,7 +182,7 @@ export default function WalletScreen() {
   const copyAddress = async (addressToCopy = walletAddress) => {
     if (addressToCopy) {
       await Clipboard.setStringAsync(addressToCopy);
-      Alert.alert(t('common.success', 'نجاح'), t('common.copied_to_clipboard', 'تم نسخ العنوان بنجاح'));
+      Alert.alert(t('success'), t('wallet_address_copied', 'تم نسخ العنوان بنجاح'));
     }
   };
 
@@ -217,10 +207,10 @@ export default function WalletScreen() {
   const handleAddAccount = async () => {
     setAddingAccount(true);
     try {
-      const newAccount = await addAccount(t('new_account', { count: accounts.length + 1 }));
-      Alert.alert(t('common.success', 'نجاح'), t('account_added', { name: newAccount.name }));
+      const newAccount = await addAccount(`الحساب ${accounts.length + 1}`);
+      Alert.alert(t('success'), t('account_added', { name: newAccount.name }));
     } catch (error) {
-      Alert.alert(t('common.error', 'خطأ'), t('account_add_failed', 'فشل إضافة الحساب'));
+      Alert.alert(t('error'), t('account_add_failed'));
     } finally {
       setAddingAccount(false);
     }
@@ -237,35 +227,11 @@ export default function WalletScreen() {
 
   const handleDeleteAccount = (account) => {
     Alert.alert(
-      t('delete_account', 'حذف الحساب'),
+      t('delete_account'),
       t('delete_account_confirmation', { name: account.name }),
       [
-        { text: t('common.cancel', 'إلغاء'), style: 'cancel' },
-        { text: t('common.delete', 'حذف'), style: 'destructive', onPress: async () => await deleteAccount(account.index) }
-      ]
-    );
-  };
-
-  // 🌟 دوال الأرشيف
-  const handleRestoreAccount = async (archiveId) => {
-    setArchiveModalVisible(false);
-    setLoadingInitial(true);
-    const result = await restoreAccount(archiveId);
-    setLoadingInitial(false);
-    if (result.success) {
-      Alert.alert(t('common.success', 'نجاح'), t('account_restored', 'تم استرجاع المحفظة بنجاح!'));
-    } else {
-      Alert.alert(t('common.error', 'خطأ'), t('restore_failed', 'فشل الاسترجاع.'));
-    }
-  };
-
-  const handlePermanentDelete = (archiveId) => {
-    Alert.alert(
-      t('warning', 'تحذير نهائي'),
-      t('permanent_delete_warning', 'سيتم تدمير المحفظة نهائياً من الذاكرة ولن يمكن استرجاعها أبداً. تأكيد؟'),
-      [
-        { text: t('common.cancel', 'إلغاء'), style: 'cancel' },
-        { text: t('destroy', 'تدمير'), style: 'destructive', onPress: async () => await permanentlyDeleteAccount(archiveId) }
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('delete'), style: 'destructive', onPress: async () => await deleteAccount(account.index) }
       ]
     );
   };
@@ -326,7 +292,7 @@ export default function WalletScreen() {
           }}
         >
           <Ionicons name="pencil-outline" size={22} color="#FFF" />
-          <Text style={styles.actionText}>{t('common.edit', 'تعديل')}</Text>
+          <Text style={styles.actionText}>{t('edit', 'تعديل')}</Text>
         </TouchableOpacity>
 
         {!isActive && (
@@ -338,7 +304,7 @@ export default function WalletScreen() {
             }}
           >
             <Ionicons name="trash-outline" size={22} color="#FFF" />
-            <Text style={styles.actionText}>{t('common.delete', 'حذف')}</Text>
+            <Text style={styles.actionText}>{t('delete', 'حذف')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -355,7 +321,7 @@ export default function WalletScreen() {
         }}
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
-        <Text style={styles.actionText}>{t('common.copy', 'نسخ')}</Text>
+        <Text style={styles.actionText}>{t('copy', 'نسخ')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -400,7 +366,7 @@ export default function WalletScreen() {
                 <ActivityIndicator size="small" color={primaryColor} />
               ) : (
                 <Text style={[styles.accountBalance, { color: colors.text }]}>
-                  ${(usdBalance !== undefined && usdBalance !== null ? usdBalance : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                 </Text>
               )}
               {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
@@ -410,26 +376,6 @@ export default function WalletScreen() {
       </View>
     );
   };
-
-  // 🌟 بطاقة الحساب المحذوف في الأرشيف
-  const renderArchivedItem = ({ item }) => (
-    <View style={[styles.archivedItem, { backgroundColor: colors.background, borderColor: colors.border }]}>
-      <View style={styles.archivedInfo}>
-        <Text style={[styles.archivedName, { color: colors.textSecondary }]}>{item.name} {t('deleted_tag', '(محذوفة)')}</Text>
-        <Text style={[styles.archivedAddress, { color: colors.textSecondary }]}>
-          {item.publicKey.slice(0, 6)}...{item.publicKey.slice(-4)}
-        </Text>
-      </View>
-      <View style={styles.archivedActions}>
-        <TouchableOpacity style={styles.archiveActionBtn} onPress={() => handleRestoreAccount(item.archiveId)}>
-          <Ionicons name="refresh-circle" size={28} color={colors.success} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.archiveActionBtn} onPress={() => handlePermanentDelete(item.archiveId)}>
-          <Ionicons name="trash" size={26} color={colors.error} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -462,7 +408,7 @@ export default function WalletScreen() {
             <ActionButton icon="arrow-up" label={t('send')} onPress={() => navigation.navigate('Send')} colors={colors} primary={primaryColor} />
             <ActionButton icon="arrow-down" label={t('receive')} onPress={() => navigation.navigate('Receive')} colors={colors} primary={primaryColor} />
             <ActionButton icon="swap-horizontal" label={t('swap_title')} onPress={() => navigation.navigate('Swap')} colors={colors} primary={primaryColor} />
-            <ActionButton icon="leaf" label={t('staking.stake_tab', 'تخزين')} onPress={() => navigation.navigate('Staking')} colors={colors} primary={primaryColor} />
+            <ActionButton icon="leaf" label={t('staking.stake_tab')} onPress={() => navigation.navigate('Staking')} colors={colors} primary={primaryColor} />
           </View>
         </Animated.View>
 
@@ -477,7 +423,7 @@ export default function WalletScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryColor} />}
             ListEmptyComponent={(!loadingInitial && !isSwitchingAccount) && (
               <View style={styles.emptyContainer}>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('loading_market_data', 'جاري التحميل...')}</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('loading_market_data')}</Text>
               </View>
             )}
           />
@@ -486,11 +432,11 @@ export default function WalletScreen() {
         <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => { setModalVisible(false); setEditingAccountIndex(null); }}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('common.edit', 'تعديل الاسم')}</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('edit_wallet_name')}</Text>
               <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]} value={tempWalletName} onChangeText={setTempWalletName} autoFocus />
               <View style={styles.modalButtons}>
-                <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => { setModalVisible(false); setEditingAccountIndex(null); }}><Text style={{ color: colors.text }}>{t('common.cancel', 'إلغاء')}</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: primaryColor, borderColor: primaryColor }]} onPress={saveWalletName}><Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('common.save', 'حفظ')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => { setModalVisible(false); setEditingAccountIndex(null); }}><Text style={{ color: colors.text }}>{t('cancel')}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: primaryColor, borderColor: primaryColor }]} onPress={saveWalletName}><Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('save')}</Text></TouchableOpacity>
               </View>
             </View>
           </KeyboardAvoidingView>
@@ -521,41 +467,22 @@ export default function WalletScreen() {
                 />
               </GestureHandlerRootView>
 
-              <View style={styles.accountsFooter}>
-                <TouchableOpacity style={[styles.addAccountButton, { borderColor: primaryColor, flex: 1 }]} onPress={handleAddAccount} disabled={addingAccount}>
-                  {addingAccount ? <ActivityIndicator size="small" color={primaryColor} /> : <><Ionicons name="add-circle-outline" size={22} color={primaryColor} /><Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account', 'إضافة حساب')}</Text></>}
-                </TouchableOpacity>
-                {/* 🌟 زر الأرشيف بجوار زر الإضافة */}
-                <TouchableOpacity style={[styles.archiveSettingsBtn, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => { setAccountsModalVisible(false); setTimeout(() => setArchiveModalVisible(true), 300); }}>
-                  <Ionicons name="settings" size={24} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[styles.addAccountButton, { borderColor: primaryColor, marginTop: 8, marginBottom: Platform.OS === 'ios' ? 10 : 0 }]}
+                onPress={handleAddAccount}
+                disabled={addingAccount}
+              >
+                {addingAccount ?
+                  <ActivityIndicator size="small" color={primaryColor} /> :
+                  <>
+                    <Ionicons name="add-circle-outline" size={22} color={primaryColor} />
+                    <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account', 'إضافة حساب')}</Text>
+                  </>
+                }
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
-
-        {/* 🌟 نافذة الأرشيف (سلة المهملات) */}
-        <Modal visible={archiveModalVisible} transparent animationType="slide" onRequestClose={() => setArchiveModalVisible(false)}>
-          <View style={styles.modalOverlayBottom}>
-            <View style={[styles.accountsModalContent, { backgroundColor: colors.card, minHeight: height * 0.5 }]}>
-              <View style={styles.accountsModalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('archived_accounts', 'المحافظ المحذوفة')}</Text>
-                <TouchableOpacity onPress={() => setArchiveModalVisible(false)}>
-                  <Ionicons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
-              {(!archivedAccounts || archivedAccounts.length === 0) ? (
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="trash-outline" size={50} color={colors.border} />
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('empty_trash', 'سلة المهملات فارغة')}</Text>
-                </View>
-              ) : (
-                <FlatList data={archivedAccounts} renderItem={renderArchivedItem} keyExtractor={(item) => item.archiveId} contentContainerStyle={{ paddingBottom: 20, marginTop: 10 }} />
-              )}
-            </View>
-          </View>
-        </Modal>
-
       </View>
     </GestureHandlerRootView>
   );
@@ -600,7 +527,7 @@ const styles = StyleSheet.create({
   assetBalance: { fontSize: 16, fontWeight: '600' },
   assetValue: { fontSize: 12 },
   
-  emptyContainer: { padding: 40, alignItems: 'center', justifyContent: 'center' },
+  emptyContainer: { padding: 40, alignItems: 'center' },
   emptyText: { marginTop: 10, fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalOverlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 20 },
@@ -663,15 +590,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // 🌟 ستايلات إضافية للمكونات الجديدة
-  accountsFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: Platform.OS === 'ios' ? 10 : 0, gap: 10 },
-  addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
+  closeModalBtn: { width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+  addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
   addAccountText: { fontSize: 16, fontWeight: '600' },
-  archiveSettingsBtn: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  archivedItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
-  archivedInfo: { flex: 1 },
-  archivedName: { fontSize: 14, fontWeight: 'bold', textDecorationLine: 'line-through' },
-  archivedAddress: { fontSize: 12, marginTop: 4 },
-  archivedActions: { flexDirection: 'row', gap: 12 },
-  archiveActionBtn: { padding: 4 }
 });
