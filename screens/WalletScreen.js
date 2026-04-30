@@ -58,9 +58,6 @@ export default function WalletScreen() {
 
   const [accountUsdBalances, setAccountUsdBalances] = useState({});
   const [loadingAccountBalances, setLoadingAccountBalances] = useState(false);
-  
-  // ★★★ الإصلاح: مرجع لتتبع الطلب الجاري ★★★
-  const fetchingRef = useRef(false);
 
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(30))[0];
@@ -132,53 +129,44 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
-  // ★★★ الإصلاح النهائي لجلب الأرصدة ★★★
+  // ★★★ الدالة الجديدة كلياً ★★★
   const fetchAccountUsdBalances = useCallback(async () => {
-    if (fetchingRef.current) return; // منع السباقات ولكن ليس منع الجلب الدائم
-    fetchingRef.current = true;
-    
     setLoadingAccountBalances(true);
-    // إفراغ الأرصدة القديمة لإظهار مؤشر التحميل
-    setAccountUsdBalances({});
-
     const balances = {};
+    
     for (const acc of accounts) {
       try {
         const addr = acc.publicKey;
-        // الجلب من الشبكة مباشرة لضمان الدقة
-        const solBal = await getSolBalance(true, addr) || 0;
-        const tokenAccounts = await getTokenAccounts(addr) || [];
-
-        let accUsd = 0;
-        // استخدام Promise.all بدلاً من forEach للحفاظ على السرعة
-        const tokenPromises = CORE_TOKENS.map(async (asset) => {
-          let amount = 0;
-          if (asset.symbol === 'SOL') {
-            amount = solBal;
-          } else {
-            const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
-            if (tokenData) amount = tokenData.amount;
-          }
-
-          let price = 0;
-          try {
-            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
-          } catch (e) {}
-          return amount * price;
-        });
         
-        const values = await Promise.all(tokenPromises);
-        accUsd = values.reduce((sum, val) => sum + val, 0);
-
+        // جلب رصيد SOL مباشرة من الشبكة
+        const solBal = await getSolBalance(true, addr) || 0;
+        // جلب جميع الرموز المملوكة
+        const tokenAccounts = await getTokenAccounts(addr) || [];
+        
+        let accUsd = solBal * (await getTokenMarketPrice('SOL') || 0);
+        
+        for (const token of tokenAccounts) {
+          try {
+            let price = 0;
+            if (token.mint === '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i') {
+              price = await getTokenMarketPrice('MECO') || 0;
+            } else if (token.mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') {
+              price = await getTokenMarketPrice('USDT') || 0;
+            } else if (token.mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') {
+              price = await getTokenMarketPrice('USDC') || 0;
+            }
+            accUsd += (token.amount || 0) * price;
+          } catch (e) {}
+        }
+        
         balances[acc.publicKey] = accUsd;
-        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (e) {
         balances[acc.publicKey] = 0;
       }
     }
+    
     setAccountUsdBalances(balances);
     setLoadingAccountBalances(false);
-    fetchingRef.current = false;
   }, [accounts]);
 
   useEffect(() => {
