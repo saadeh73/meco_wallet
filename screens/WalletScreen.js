@@ -137,7 +137,8 @@ export default function WalletScreen() {
     for (const acc of accounts) {
       try {
         const addr = acc.publicKey;
-        const solBal = await getSolBalance(false, addr) || 0;
+        // التعديل الوحيد: تغيير false إلى true لجلب الأرصدة الحية لجميع الحسابات
+        const solBal = await getSolBalance(true, addr) || 0;
         const tokenAccounts = await getTokenAccounts(addr) || [];
 
         let accUsd = 0;
