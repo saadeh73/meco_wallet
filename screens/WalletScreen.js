@@ -594,4 +594,3 @@ const styles = StyleSheet.create({
   addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
   addAccountText: { fontSize: 16, fontWeight: '600' },
 });
-
