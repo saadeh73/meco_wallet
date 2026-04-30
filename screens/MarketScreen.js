@@ -1,5 +1,5 @@
 // screens/MarketScreen.js - Fixed with Real Balances
-// Last Updated: 2026-04-24
+// Last Updated: 2026-04-28
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
@@ -208,7 +208,6 @@ export default function MarketScreen() {
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
 
-  // ✅ استخدام walletPublicKey من الـ store (يتم تحديثه عند تبديل الحساب)
   const walletPublicKey = useAppStore(s => s.walletPublicKey);
 
   const [tokens, setTokens] = useState([]);
@@ -244,7 +243,6 @@ export default function MarketScreen() {
     loadWatchlist();
   }, []);
 
-  // ✅ جلب بيانات السوق مع الرصيد الحقيقي
   const fetchAllMarketData = async () => {
     try {
       const [tokenData, overviewData, moversData] = await Promise.all([
@@ -257,7 +255,6 @@ export default function MarketScreen() {
       setMarketOverview(overviewData);
       setTopMovers(moversData);
 
-      // ✅ استخدام walletPublicKey من الـ store (يتغير تلقائياً عند تبديل الحساب)
       if (walletPublicKey) {
         const solBalance = await getSolBalance(true, walletPublicKey);
         const solPrice = tokenData.find(t => t.symbol === 'SOL')?.current_price || 145;
@@ -285,7 +282,6 @@ export default function MarketScreen() {
     }
   };
 
-  // ✅ إعادة الجلب عند تغيير الحساب
   useEffect(() => {
     let isMounted = true;
     const init = async () => {
@@ -297,7 +293,6 @@ export default function MarketScreen() {
     return () => { isMounted = false; clearInterval(intervalId); };
   }, [walletPublicKey]);
 
-  // ✅ إعادة جلب الرصيد عند العودة للشاشة
   useFocusEffect(
     useCallback(() => {
       fetchAllMarketData();
@@ -334,7 +329,6 @@ export default function MarketScreen() {
         if (!t.symbol?.toLowerCase().includes(query) && !t.name?.toLowerCase().includes(query)) return false;
       }
       if (activeTab === 'watchlist') return watchlist.includes(t.symbol);
-      else if (activeTab === 'solana') return t.swapAvailable;
       else if (activeTab === 'gainers') return (t.price_change_percentage_24h || 0) > 0;
       else if (activeTab === 'losers') return (t.price_change_percentage_24h || 0) < 0;
       return true;
@@ -349,10 +343,10 @@ export default function MarketScreen() {
     return filtered;
   }, [tokens, searchQuery, activeTab, watchlist, sortBy]);
 
+  // ✅ 4 تبويبات فقط - بدون Solana
   const tabs = [
     { id: 'all', label: t('all_tokens') || 'All' },
     { id: 'watchlist', label: t('watchlist') || 'Watchlist' },
-    { id: 'solana', label: t('solana_tokens') || 'Solana' },
     { id: 'gainers', label: t('gainers') || 'Gainers' },
     { id: 'losers', label: t('market_losers') || 'Losers' },
   ];

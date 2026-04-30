@@ -83,6 +83,16 @@ const resources = {
       edit: 'تعديل',
       copy: 'نسخ',
 
+      // ====== مفاتيح سلة المحذوفات والحسابات المؤرشفة (جديد - شاشة wallet) ======
+      archived_accounts: "المحافظ المحذوفة",
+      empty_trash: "سلة المهملات فارغة",
+      deleted_tag: "(محذوفة)",
+      account_restored: "تم استرجاع المحفظة بنجاح!",
+      restore_failed: "فشل الاسترجاع.",
+      permanent_delete_warning: "سيتم تدمير المحفظة نهائياً من الذاكرة ولن يمكن استرجاعها أبداً. تأكيد؟",
+      warning: "تحذير نهائي",
+      destroy: "تدمير",
+
       // ========== Web3 (WalletConnect) ==========
       web3: {
         disconnect_success: 'تم قطع الاتصال بنجاح.',
@@ -432,6 +442,7 @@ const resources = {
       paste: 'لصق',
       import_wallet_instructions: 'أدخل عبارة الاسترداد المكونة من 12 كلمة بالترتيب الصحيح',
       import: 'استيراد',
+      accounts_discovered: "تم استرجاع {{count}} حسابات تحتوي على أموال! 🎉", // <-- جديد لشاشة الاستيراد
       backup_wallet_subtitle: 'احفظ عبارة الاسترداد بعيداً',
       backup_warning: 'لا تشارك هذه الكلمات مع أي أحد. يمكن لأي شخص يملك هذه الكلمات الوصول إلى أموالك.',
       backup_instructions: 'اكتب هذه الكلمات على ورقة واحتفظ بها في مكان آمن. تجنب التقاط صور أو تخزين رقمي.',
@@ -551,6 +562,16 @@ const resources = {
       swipe_hint: 'Tap the icon to copy address',
       edit: 'Edit',
       copy: 'Copy',
+
+      // ====== Trash & Archived Accounts Keys (New - Wallet screen) ======
+      archived_accounts: "Archived Accounts",
+      empty_trash: "Trash is empty",
+      deleted_tag: "(Deleted)",
+      account_restored: "Account restored successfully!",
+      restore_failed: "Restore failed.",
+      permanent_delete_warning: "This account will be permanently destroyed from memory and cannot be recovered. Confirm?",
+      warning: "Final Warning",
+      destroy: "Destroy",
 
       // ========== Web3 (WalletConnect) keys ==========
       web3: {
@@ -901,6 +922,7 @@ const resources = {
       paste: 'Paste',
       import_wallet_instructions: 'Enter your 12-word recovery phrase in the correct order',
       import: 'Import',
+      accounts_discovered: "Retrieved {{count}} accounts with funds! 🎉", // <-- New for Import screen
       backup_wallet_subtitle: 'Save your recovery phrase safely',
       backup_warning: 'Do not share these words with anyone. Anyone with these words can access your funds.',
       backup_instructions: 'Write these words on paper and keep them in a safe place. Avoid taking pictures or digital storage.',

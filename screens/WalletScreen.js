@@ -23,11 +23,15 @@ export default function WalletScreen() {
   const isDark = theme === 'dark';
 
   const accounts = useAppStore(state => state.accounts);
+  const archivedAccounts = useAppStore(state => state.archivedAccounts);
   const activeAccountIndex = useAppStore(state => state.activeAccountIndex);
+  
   const switchAccount = useAppStore(state => state.switchAccount);
   const addAccount = useAppStore(state => state.addAccount);
   const renameAccount = useAppStore(state => state.renameAccount);
   const deleteAccount = useAppStore(state => state.deleteAccount);
+  const restoreAccount = useAppStore(state => state.restoreAccount);
+  const permanentlyDeleteAccount = useAppStore(state => state.permanentlyDeleteAccount);
 
   const walletPublicKey = useAppStore(state => state.walletPublicKey);
 
@@ -55,6 +59,7 @@ export default function WalletScreen() {
 
   const [accountsModalVisible, setAccountsModalVisible] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
+  const [archiveModalVisible, setArchiveModalVisible] = useState(false);
 
   const [accountUsdBalances, setAccountUsdBalances] = useState({});
   const [loadingAccountBalances, setLoadingAccountBalances] = useState(false);
@@ -96,9 +101,8 @@ export default function WalletScreen() {
       let calculatedTotalUSD = 0;
       const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
         let amount = 0;
-        if (asset.symbol === 'SOL') {
-          amount = solBal;
-        } else {
+        if (asset.symbol === 'SOL') amount = solBal;
+        else {
           const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
           if (tokenData) amount = tokenData.amount;
         }
@@ -130,42 +134,57 @@ export default function WalletScreen() {
   }, [walletPublicKey, loadWalletData]);
 
   const fetchAccountUsdBalances = useCallback(async () => {
-    if (loadingAccountBalances) return;
+    if (loadingAccountBalances || !accounts || accounts.length === 0) return;
     setLoadingAccountBalances(true);
 
-    const balances = {};
-    for (const acc of accounts) {
-      try {
-        const addr = acc.publicKey;
-        const solBal = await getSolBalance(false, addr) || 0;
-        const tokenAccounts = await getTokenAccounts(addr) || [];
+    const withTimeout = (promise, ms = 3000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), ms))
+      ]);
+    };
 
-        let accUsd = 0;
-        await Promise.all(CORE_TOKENS.map(async (asset) => {
-          let amount = 0;
-          if (asset.symbol === 'SOL') {
-            amount = solBal;
-          } else {
-            const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
-            if (tokenData) amount = tokenData.amount;
+    try {
+      const balances = { ...accountUsdBalances };
+
+      for (const acc of accounts) {
+        try {
+          const addr = acc.publicKey;
+          let accUsd = 0;
+
+          const solBal = await withTimeout(getSolBalance(false, addr)).catch(() => 0);
+          const tokenAccounts = await withTimeout(getTokenAccounts(addr)).catch(() => []);
+
+          for (const asset of CORE_TOKENS) {
+            let amount = 0;
+            if (asset.symbol === 'SOL') amount = solBal;
+            else {
+              const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
+              if (tokenData) amount = tokenData.amount;
+            }
+
+            if (amount > 0) {
+              let price = 0;
+              try {
+                if (getTokenMarketPrice) price = await withTimeout(getTokenMarketPrice(asset.symbol), 2000).catch(() => 0);
+              } catch (e) {}
+              accUsd += (amount * price);
+            }
           }
 
-          let price = 0;
-          try {
-            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
-          } catch (e) {}
-          accUsd += amount * price;
-        }));
-
-        balances[acc.publicKey] = accUsd;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (e) {
-        balances[acc.publicKey] = 0;
+          balances[acc.publicKey] = accUsd;
+          await new Promise(resolve => setTimeout(resolve, 150));
+        } catch (innerError) {
+          balances[acc.publicKey] = 0;
+        }
       }
+      setAccountUsdBalances(balances);
+    } catch (globalError) {
+      console.error('Fetch balances error:', globalError);
+    } finally {
+      setLoadingAccountBalances(false);
     }
-    setAccountUsdBalances(balances);
-    setLoadingAccountBalances(false);
-  }, [accounts, loadingAccountBalances]);
+  }, [accounts]);
 
   useEffect(() => {
     if (accountsModalVisible && accounts.length > 0) {
@@ -182,7 +201,7 @@ export default function WalletScreen() {
   const copyAddress = async (addressToCopy = walletAddress) => {
     if (addressToCopy) {
       await Clipboard.setStringAsync(addressToCopy);
-      Alert.alert(t('success'), t('wallet_address_copied', 'تم نسخ العنوان بنجاح'));
+      Alert.alert(t('success'), t('wallet_address_copied'));
     }
   };
 
@@ -207,7 +226,7 @@ export default function WalletScreen() {
   const handleAddAccount = async () => {
     setAddingAccount(true);
     try {
-      const newAccount = await addAccount(`الحساب ${accounts.length + 1}`);
+      const newAccount = await addAccount(t('new_account', { count: accounts.length + 1 }));
       Alert.alert(t('success'), t('account_added', { name: newAccount.name }));
     } catch (error) {
       Alert.alert(t('error'), t('account_add_failed'));
@@ -232,6 +251,29 @@ export default function WalletScreen() {
       [
         { text: t('cancel'), style: 'cancel' },
         { text: t('delete'), style: 'destructive', onPress: async () => await deleteAccount(account.index) }
+      ]
+    );
+  };
+
+  const handleRestoreAccount = async (archiveId) => {
+    setArchiveModalVisible(false);
+    setLoadingInitial(true);
+    const result = await restoreAccount(archiveId);
+    setLoadingInitial(false);
+    if (result.success) {
+      Alert.alert(t('success'), t('account_restored'));
+    } else {
+      Alert.alert(t('error'), t('restore_failed'));
+    }
+  };
+
+  const handlePermanentDelete = (archiveId) => {
+    Alert.alert(
+      t('warning'),
+      t('permanent_delete_warning'),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('destroy'), style: 'destructive', onPress: async () => await permanentlyDeleteAccount(archiveId) }
       ]
     );
   };
@@ -292,7 +334,7 @@ export default function WalletScreen() {
           }}
         >
           <Ionicons name="pencil-outline" size={22} color="#FFF" />
-          <Text style={styles.actionText}>{t('edit', 'تعديل')}</Text>
+          <Text style={styles.actionText}>{t('edit')}</Text>
         </TouchableOpacity>
 
         {!isActive && (
@@ -304,7 +346,7 @@ export default function WalletScreen() {
             }}
           >
             <Ionicons name="trash-outline" size={22} color="#FFF" />
-            <Text style={styles.actionText}>{t('delete', 'حذف')}</Text>
+            <Text style={styles.actionText}>{t('delete')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -321,7 +363,7 @@ export default function WalletScreen() {
         }}
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
-        <Text style={styles.actionText}>{t('copy', 'نسخ')}</Text>
+        <Text style={styles.actionText}>{t('copy')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -329,26 +371,20 @@ export default function WalletScreen() {
   const renderAccountItem = ({ item }) => {
     const isActive = item.index === activeAccountIndex;
     const usdBalance = accountUsdBalances[item.publicKey];
-    const isLoading = loadingAccountBalances && usdBalance === undefined;
+    const isLoading = loadingAccountBalances && (usdBalance === undefined || usdBalance === null);
 
     return (
       <View style={{ marginBottom: 8 }}>
         <Swipeable
           ref={ref => (accountSwipeableRefs.current[item.index] = ref)}
           friction={2}
-          leftThreshold={40}
-          rightThreshold={40}
-          overshootLeft={false}
-          overshootRight={false}
+          leftThreshold={40} rightThreshold={40}
+          overshootLeft={false} overshootRight={false}
           renderLeftActions={() => renderAccountLeftActions(item)}
           renderRightActions={() => renderAccountRightActions(item)}
           onSwipeableWillOpen={() => closeOtherSwipeables(item.index, accountSwipeableRefs)}
         >
-          <TouchableOpacity
-            style={[styles.accountItem, { backgroundColor: colors.card }]}
-            activeOpacity={0.7}
-            onPress={() => handleSwitchAccount(item.index)}
-          >
+          <TouchableOpacity style={[styles.accountItem, { backgroundColor: colors.card }]} activeOpacity={0.7} onPress={() => handleSwitchAccount(item.index)}>
             <View style={styles.accountInfo}>
               <View style={[styles.accountAvatar, { backgroundColor: primaryColor + '20' }]}>
                 <Text style={[styles.accountAvatarText, { color: primaryColor }]}>{item.name.charAt(0).toUpperCase()}</Text>
@@ -360,13 +396,12 @@ export default function WalletScreen() {
                 </Text>
               </View>
             </View>
-
             <View style={styles.accountBalanceContainer}>
               {isLoading ? (
                 <ActivityIndicator size="small" color={primaryColor} />
               ) : (
                 <Text style={[styles.accountBalance, { color: colors.text }]}>
-                  ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                  ${(usdBalance !== undefined && usdBalance !== null ? usdBalance : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
               )}
               {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
@@ -376,6 +411,25 @@ export default function WalletScreen() {
       </View>
     );
   };
+
+  const renderArchivedItem = ({ item }) => (
+    <View style={[styles.archivedItem, { backgroundColor: colors.background, borderColor: colors.border }]}>
+      <View style={styles.archivedInfo}>
+        <Text style={[styles.archivedName, { color: colors.textSecondary }]}>{item.name} {t('deleted_tag')}</Text>
+        <Text style={[styles.archivedAddress, { color: colors.textSecondary }]}>
+          {item.publicKey.slice(0, 6)}...{item.publicKey.slice(-4)}
+        </Text>
+      </View>
+      <View style={styles.archivedActions}>
+        <TouchableOpacity style={styles.archiveActionBtn} onPress={() => handleRestoreAccount(item.archiveId)}>
+          <Ionicons name="refresh-circle" size={28} color={colors.success} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.archiveActionBtn} onPress={() => handlePermanentDelete(item.archiveId)}>
+          <Ionicons name="trash" size={26} color={colors.error} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -413,7 +467,7 @@ export default function WalletScreen() {
         </Animated.View>
 
         <View style={styles.listContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins', 'الأصول')}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins')}</Text>
           <FlatList
             data={assets}
             renderItem={renderAssetItem}
@@ -442,18 +496,17 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* نافذة الحسابات */}
         <Modal visible={accountsModalVisible} transparent animationType="slide" onRequestClose={() => setAccountsModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>
               <View style={styles.accountsModalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts', 'الحسابات')}</Text>
+                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts')}</Text>
                 <TouchableOpacity onPress={() => setAccountsModalVisible(false)}>
                   <Ionicons name="close" size={24} color={colors.text} />
                 </TouchableOpacity>
               </View>
               <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginBottom: 15 }}>
-                {t('swipe_hint', 'اسحب لليمين للتعديل، ولليسار لنسخ العنوان')}
+                {t('swipe_hint')}
               </Text>
 
               <GestureHandlerRootView style={{ flex: 1 }}>
@@ -467,22 +520,39 @@ export default function WalletScreen() {
                 />
               </GestureHandlerRootView>
 
-              <TouchableOpacity
-                style={[styles.addAccountButton, { borderColor: primaryColor, marginTop: 8, marginBottom: Platform.OS === 'ios' ? 10 : 0 }]}
-                onPress={handleAddAccount}
-                disabled={addingAccount}
-              >
-                {addingAccount ?
-                  <ActivityIndicator size="small" color={primaryColor} /> :
-                  <>
-                    <Ionicons name="add-circle-outline" size={22} color={primaryColor} />
-                    <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account', 'إضافة حساب')}</Text>
-                  </>
-                }
-              </TouchableOpacity>
+              <View style={styles.accountsFooter}>
+                <TouchableOpacity style={[styles.addAccountButton, { borderColor: primaryColor, flex: 1 }]} onPress={handleAddAccount} disabled={addingAccount}>
+                  {addingAccount ? <ActivityIndicator size="small" color={primaryColor} /> : <><Ionicons name="add-circle-outline" size={22} color={primaryColor} /><Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text></>}
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.archiveSettingsBtn, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={() => { setAccountsModalVisible(false); setTimeout(() => setArchiveModalVisible(true), 300); }}>
+                  <Ionicons name="settings" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
+
+        <Modal visible={archiveModalVisible} transparent animationType="slide" onRequestClose={() => setArchiveModalVisible(false)}>
+          <View style={styles.modalOverlayBottom}>
+            <View style={[styles.accountsModalContent, { backgroundColor: colors.card, minHeight: height * 0.5 }]}>
+              <View style={styles.accountsModalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('archived_accounts')}</Text>
+                <TouchableOpacity onPress={() => setArchiveModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              {(!archivedAccounts || archivedAccounts.length === 0) ? (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="trash-outline" size={50} color={colors.border} />
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('empty_trash')}</Text>
+                </View>
+              ) : (
+                <FlatList data={archivedAccounts} renderItem={renderArchivedItem} keyExtractor={(item) => item.archiveId} contentContainerStyle={{ paddingBottom: 20, marginTop: 10 }} />
+              )}
+            </View>
+          </View>
+        </Modal>
+
       </View>
     </GestureHandlerRootView>
   );
@@ -515,7 +585,6 @@ const styles = StyleSheet.create({
   actionBtnLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   listContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  
   leftAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 20, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, marginBottom: 12 },
   rightAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, borderTopRightRadius: 16, borderBottomRightRadius: 16, marginBottom: 12 },
   assetItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 12 },
@@ -526,72 +595,36 @@ const styles = StyleSheet.create({
   assetRight: { alignItems: 'flex-end' },
   assetBalance: { fontSize: 16, fontWeight: '600' },
   assetValue: { fontSize: 12 },
-  
-  emptyContainer: { padding: 40, alignItems: 'center' },
+  emptyContainer: { padding: 40, alignItems: 'center', justifyContent: 'center' },
   emptyText: { marginTop: 10, fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalOverlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 20 },
   modalContent: { width: '100%', padding: 24, borderRadius: 24, marginBottom: 20 },
-  accountsModalContent: {
-    width: '100%',
-    maxHeight: height * 0.8,
-    padding: 24,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    flex: 1,
-  },
+  accountsModalContent: { width: '100%', maxHeight: height * 0.8, padding: 24, borderTopLeftRadius: 24, borderTopRightRadius: 24, flex: 1 },
   accountsModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20 },
   modalButtons: { flexDirection: 'row', gap: 12 },
   modalBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
   actionText: { color: '#FFF', fontSize: 14, fontWeight: '600', marginTop: 4 },
-  
-  accountItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-  },
-  accountActionContainer: {
-    flexDirection: 'row',
-    height: '100%',
-  },
-  accountActionBtn: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    height: '100%',
-  },
-  accountInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 14,
-  },
-  accountAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  accountItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16 },
+  accountActionContainer: { flexDirection: 'row', height: '100%' },
+  accountActionBtn: { justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
+  accountInfo: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
+  accountAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   accountAvatarText: { fontSize: 18, fontWeight: '700' },
   accountName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   accountAddress: { fontSize: 12 },
-  accountBalanceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  accountBalance: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  
-  closeModalBtn: { width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
-  addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
+  accountBalanceContainer: { flexDirection: 'row', alignItems: 'center' },
+  accountBalance: { fontSize: 16, fontWeight: '600' },
+  accountsFooter: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: Platform.OS === 'ios' ? 10 : 0, gap: 10 },
+  addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
   addAccountText: { fontSize: 16, fontWeight: '600' },
+  archiveSettingsBtn: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  archivedItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
+  archivedInfo: { flex: 1 },
+  archivedName: { fontSize: 14, fontWeight: 'bold', textDecorationLine: 'line-through' },
+  archivedAddress: { fontSize: 12, marginTop: 4 },
+  archivedActions: { flexDirection: 'row', gap: 12 },
+  archiveActionBtn: { padding: 4 }
 });
-
