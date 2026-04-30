@@ -58,6 +58,9 @@ export default function WalletScreen() {
 
   const [accountUsdBalances, setAccountUsdBalances] = useState({});
   const [loadingAccountBalances, setLoadingAccountBalances] = useState(false);
+  
+  // ★★★ الإصلاح: مرجع لتتبع الطلب الجاري ★★★
+  const fetchingRef = useRef(false);
 
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(30))[0];
@@ -129,20 +132,26 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
+  // ★★★ الإصلاح النهائي لجلب الأرصدة ★★★
   const fetchAccountUsdBalances = useCallback(async () => {
-    if (loadingAccountBalances) return;
+    if (fetchingRef.current) return; // منع السباقات ولكن ليس منع الجلب الدائم
+    fetchingRef.current = true;
+    
     setLoadingAccountBalances(true);
+    // إفراغ الأرصدة القديمة لإظهار مؤشر التحميل
+    setAccountUsdBalances({});
 
     const balances = {};
     for (const acc of accounts) {
       try {
         const addr = acc.publicKey;
-        // التعديل الوحيد: تغيير false إلى true لجلب الأرصدة الحية لجميع الحسابات
+        // الجلب من الشبكة مباشرة لضمان الدقة
         const solBal = await getSolBalance(true, addr) || 0;
         const tokenAccounts = await getTokenAccounts(addr) || [];
 
         let accUsd = 0;
-        await Promise.all(CORE_TOKENS.map(async (asset) => {
+        // استخدام Promise.all بدلاً من forEach للحفاظ على السرعة
+        const tokenPromises = CORE_TOKENS.map(async (asset) => {
           let amount = 0;
           if (asset.symbol === 'SOL') {
             amount = solBal;
@@ -155,8 +164,11 @@ export default function WalletScreen() {
           try {
             if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
           } catch (e) {}
-          accUsd += amount * price;
-        }));
+          return amount * price;
+        });
+        
+        const values = await Promise.all(tokenPromises);
+        accUsd = values.reduce((sum, val) => sum + val, 0);
 
         balances[acc.publicKey] = accUsd;
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -166,7 +178,8 @@ export default function WalletScreen() {
     }
     setAccountUsdBalances(balances);
     setLoadingAccountBalances(false);
-  }, [accounts, loadingAccountBalances]);
+    fetchingRef.current = false;
+  }, [accounts]);
 
   useEffect(() => {
     if (accountsModalVisible && accounts.length > 0) {
