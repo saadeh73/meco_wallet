@@ -1,3 +1,5 @@
+// store.js - الإصلاح النهائي للحفاظ على المحفظة
+
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,29 +13,26 @@ import bs58 from 'bs58';
 const ACCOUNTS_STORAGE_KEY = '@meco_accounts';
 const ACTIVE_ACCOUNT_INDEX_KEY = '@meco_active_account_index';
 
+// المفاتيح القديمة للتوافقية
+const OLD_PRIVATE_KEY = 'wallet_private_key';
+const OLD_PUBLIC_KEY = 'wallet_public_key';
+const OLD_MNEMONIC = 'wallet_mnemonic';
+
 export const useAppStore = create((set, get) => ({
   // ====== إعدادات التطبيق ======
   theme: 'dark',
-  toggleTheme: () =>
-    set((state) => ({
-      theme: state.theme === 'light' ? 'dark' : 'light',
-    })),
-
+  toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
+  
   language: 'ar',
   setLanguage: async (lang) => {
     await AsyncStorage.setItem('app_language', lang);
     set({ language: lang });
   },
-
   loadLanguage: async () => {
     try {
       const savedLang = await AsyncStorage.getItem('app_language');
-      if (savedLang) {
-        set({ language: savedLang });
-      }
-    } catch (error) {
-      console.warn('Failed to load language:', error.message);
-    }
+      if (savedLang) set({ language: savedLang });
+    } catch (error) { console.warn('Failed to load language:', error.message); }
   },
 
   walletName: 'MECO Wallet',
@@ -47,22 +46,17 @@ export const useAppStore = create((set, get) => ({
   loadPrimaryColor: async () => {
     try {
       const savedColor = await AsyncStorage.getItem('app_primary_color');
-      if (savedColor) {
-        set({ primaryColor: savedColor });
-      }
-    } catch (error) {
-      console.warn('Failed to load primary color:', error.message);
-    }
+      if (savedColor) set({ primaryColor: savedColor });
+    } catch (error) { console.warn('Failed to load primary color:', error.message); }
   },
 
-  // ====== نظام الحسابات المتعددة ======
+  // ====== نظام الحسابات ======
   accounts: [],
   activeAccountIndex: 0,
   walletPublicKey: null,
   walletPrivateKey: null,
   currentWallet: null,
 
-  // تحميل الحسابات من AsyncStorage
   loadAccounts: async () => {
     try {
       const stored = await AsyncStorage.getItem(ACCOUNTS_STORAGE_KEY);
@@ -71,33 +65,29 @@ export const useAppStore = create((set, get) => ({
         set({ accounts });
         return accounts;
       }
-    } catch (e) {
-      console.warn('Failed to load accounts:', e.message);
-    }
+    } catch (e) { console.warn('Failed to load accounts:', e.message); }
     return [];
   },
 
-  // حفظ الحسابات
   saveAccounts: async (accounts) => {
     try {
       await AsyncStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
-    } catch (e) {
-      console.warn('Failed to save accounts:', e.message);
-    }
+    } catch (e) { console.warn('Failed to save accounts:', e.message); }
   },
 
-  // تحميل الحساب النشط (مع التحقق من صحة الفهرس)
+  // ★★★ الإصلاح الرئيسي ★★★
   loadActiveAccount: async () => {
     try {
       let accounts = await get().loadAccounts();
 
-      // إذا لم تكن هناك حسابات، ننشئ الحساب الأول بناءً على المفتاح القديم (التوافقية)
+      // إذا لا توجد حسابات، جرب تحميل المحفظة القديمة
       if (accounts.length === 0) {
-        const publicKey = await SecureStore.getItemAsync('wallet_public_key');
-        if (publicKey) {
-          accounts = [{ index: 0, name: 'الحساب الرئيسي', publicKey }];
+        const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+        if (oldPublicKey) {
+          accounts = [{ index: 0, name: 'الحساب الرئيسي', publicKey: oldPublicKey, isLegacy: true }];
           set({ accounts });
           await get().saveAccounts(accounts);
+          console.log('✅ [Store] تم استعادة المحفظة القديمة');
         }
       }
 
@@ -113,7 +103,6 @@ export const useAppStore = create((set, get) => ({
         await get().setActiveAccount(activeIndex);
         return true;
       }
-
       return false;
     } catch (e) {
       console.warn('Failed to load active account:', e.message);
@@ -121,7 +110,7 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  // 🌟 [الإصلاح السحري]: تعيين الحساب النشط مع الحفاظ على المحفظة الأساسية الأصلية
+  // ★★★ الإصلاح الرئيسي ★★★
   setActiveAccount: async (index) => {
     const { accounts } = get();
     if (index >= accounts.length) return false;
@@ -130,27 +119,38 @@ export const useAppStore = create((set, get) => ({
       let privateKey;
       let publicKey;
 
-      // إذا كان يطلب الحساب الأساسي (index 0)، نحاول جلب المفتاح الأصلي أولاً لمنع مسحه
+      // للحساب 0، جرب المفتاح القديم أولاً
       if (index === 0) {
-        const originalPrivateKey = await SecureStore.getItemAsync('wallet_private_key');
-        const originalPublicKey = await SecureStore.getItemAsync('wallet_public_key');
-        
-        if (originalPrivateKey && originalPublicKey) {
-          privateKey = originalPrivateKey;
-          publicKey = originalPublicKey;
+        const oldPrivateKey = await SecureStore.getItemAsync(OLD_PRIVATE_KEY);
+        const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+        if (oldPrivateKey && oldPublicKey) {
+          privateKey = oldPrivateKey;
+          publicKey = oldPublicKey;
+          console.log('✅ [Store] استخدام المفتاح القديم للحساب 0');
         }
       }
 
-      // إذا لم يكن الحساب 0، أو لم نجد المفتاح الأصلي، نقوم بتوليده من الـ Mnemonic
+      // جرب المفتاح المخزن بالحافظ الجديد
       if (!privateKey) {
-        const mnemonic = await SecureStore.getItemAsync('wallet_mnemonic');
-        if (!mnemonic) return false;
+        const storedPrivateKey = await SecureStore.getItemAsync(`wallet_private_key_${index}`);
+        const storedPublicKey = accounts[index]?.publicKey;
+        if (storedPrivateKey && storedPublicKey) {
+          privateKey = storedPrivateKey;
+          publicKey = storedPublicKey;
+        }
+      }
 
+      // توليد من Mnemonic
+      if (!privateKey) {
+        const mnemonic = await SecureStore.getItemAsync(OLD_MNEMONIC);
+        if (!mnemonic) {
+          console.error('❌ [Store] لا يوجد mnemonic');
+          return false;
+        }
         const seed = await bip39.mnemonicToSeed(mnemonic);
         const path = `m/44'/501'/${index}'/0'`;
         const derivedSeed = derivePath(path, seed.toString('hex')).key;
         const keypair = Keypair.fromSeed(derivedSeed);
-
         privateKey = bs58.encode(keypair.secretKey);
         publicKey = keypair.publicKey.toBase58();
       }
@@ -164,7 +164,6 @@ export const useAppStore = create((set, get) => ({
 
       await AsyncStorage.setItem(ACTIVE_ACCOUNT_INDEX_KEY, index.toString());
       await SecureStore.setItemAsync(`wallet_private_key_${index}`, privateKey);
-
       return true;
     } catch (e) {
       console.warn('Failed to set active account:', e.message);
@@ -172,13 +171,11 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  // إضافة حساب جديد (مع اشتقاق مفتاح فريد وحفظ الفهرس)
   addAccount: async (name) => {
     const { accounts } = get();
     const newIndex = accounts.length;
-
     try {
-      const mnemonic = await SecureStore.getItemAsync('wallet_mnemonic');
+      const mnemonic = await SecureStore.getItemAsync(OLD_MNEMONIC);
       if (!mnemonic) throw new Error('عبارة الاسترداد غير موجودة');
 
       const seed = await bip39.mnemonicToSeed(mnemonic);
@@ -189,21 +186,14 @@ export const useAppStore = create((set, get) => ({
       const publicKey = keypair.publicKey.toBase58();
       const privateKey = bs58.encode(keypair.secretKey);
 
-      const newAccount = {
-        index: newIndex,
-        name: name || `الحساب ${newIndex + 1}`,
-        publicKey,
-      };
-
+      const newAccount = { index: newIndex, name: name || `الحساب ${newIndex + 1}`, publicKey };
       await SecureStore.setItemAsync(`wallet_private_key_${newIndex}`, privateKey);
 
       const updatedAccounts = [...accounts, newAccount];
       set({ accounts: updatedAccounts });
       await get().saveAccounts(updatedAccounts);
-
       await AsyncStorage.setItem(ACTIVE_ACCOUNT_INDEX_KEY, newIndex.toString());
       await get().setActiveAccount(newIndex);
-
       return newAccount;
     } catch (e) {
       console.warn('Failed to add account:', e.message);
@@ -211,62 +201,39 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  // تبديل الحساب النشط (مع حفظ الفهرس)
   switchAccount: async (index) => {
     await AsyncStorage.setItem(ACTIVE_ACCOUNT_INDEX_KEY, index.toString());
     return await get().setActiveAccount(index);
   },
 
-  // إعادة تسمية حساب
   renameAccount: async (index, newName) => {
     const { accounts } = get();
     if (index >= accounts.length) return false;
-
-    const updatedAccounts = accounts.map((acc, i) =>
-      i === index ? { ...acc, name: newName.trim() } : acc
-    );
-
+    const updatedAccounts = accounts.map((acc, i) => i === index ? { ...acc, name: newName.trim() } : acc);
     set({ accounts: updatedAccounts });
     await get().saveAccounts(updatedAccounts);
     return true;
   },
 
-  // حذف حساب
   deleteAccount: async (index) => {
     const { accounts, activeAccountIndex } = get();
-
-    if (accounts.length <= 1) {
-      return { success: false, error: 'cannot_delete_last_account' };
-    }
-
-    if (index >= accounts.length) {
-      return { success: false, error: 'invalid_account' };
-    }
+    if (accounts.length <= 1) return { success: false, error: 'cannot_delete_last_account' };
+    if (index >= accounts.length) return { success: false, error: 'invalid_account' };
 
     try {
       await SecureStore.deleteItemAsync(`wallet_private_key_${index}`);
-
       const updatedAccounts = accounts.filter((_, i) => i !== index);
-
-      const reindexedAccounts = updatedAccounts.map((acc, i) => ({
-        ...acc,
-        index: i,
-      }));
+      const reindexedAccounts = updatedAccounts.map((acc, i) => ({ ...acc, index: i }));
 
       set({ accounts: reindexedAccounts });
       await get().saveAccounts(reindexedAccounts);
 
       let newActiveIndex = activeAccountIndex;
-
-      if (index === activeAccountIndex) {
-        newActiveIndex = index > 0 ? index - 1 : 0;
-      } else if (index < activeAccountIndex) {
-        newActiveIndex = activeAccountIndex - 1;
-      }
+      if (index === activeAccountIndex) newActiveIndex = index > 0 ? index - 1 : 0;
+      else if (index < activeAccountIndex) newActiveIndex = activeAccountIndex - 1;
 
       await AsyncStorage.setItem(ACTIVE_ACCOUNT_INDEX_KEY, newActiveIndex.toString());
       await get().setActiveAccount(newActiveIndex);
-
       return { success: true };
     } catch (e) {
       console.warn('Failed to delete account:', e.message);
@@ -274,25 +241,20 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  // تحميل المحفظة (متوافق مع القديم)
   loadWallet: async () => {
     try {
       const success = await get().loadActiveAccount();
       if (success) return true;
 
-      const publicKey = await SecureStore.getItemAsync('wallet_public_key');
-      const privateKey = await SecureStore.getItemAsync('wallet_private_key');
+      const publicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+      const privateKey = await SecureStore.getItemAsync(OLD_PRIVATE_KEY);
+      if (!publicKey || !privateKey) return false;
 
-      if (!publicKey || !privateKey) {
-        return false;
-      }
+      set({ walletPublicKey: publicKey, walletPrivateKey: privateKey, currentWallet: publicKey });
 
-      set({
-        walletPublicKey: publicKey,
-        walletPrivateKey: privateKey,
-        currentWallet: publicKey,
-      });
-
+      const accounts = [{ index: 0, name: 'الحساب الرئيسي', publicKey, isLegacy: true }];
+      set({ accounts });
+      await get().saveAccounts(accounts);
       return true;
     } catch (e) {
       console.warn('Wallet info load error:', e.message);
@@ -300,28 +262,63 @@ export const useAppStore = create((set, get) => ({
     }
   },
 
-  // تسجيل الخروج
+  // ★★★ الإصلاح الرئيسي ★★★ - هذا أهم جزء!
   logout: async () => {
-    const { activeAccountIndex } = get();
+    try {
+      // الاحتفاظ بالمفتاح العام والخاص والـ mnemonic
+      const publicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+      const privateKey = await SecureStore.getItemAsync(OLD_PRIVATE_KEY);
+      // لا تحذف mnemonic!
 
-    if (activeAccountIndex !== null) {
-      await SecureStore.deleteItemAsync(`wallet_private_key_${activeAccountIndex}`);
+      // حذف بيانات الحسابات المتعددة فقط
+      const accounts = await get().loadAccounts();
+      for (let i = 0; i < accounts.length; i++) {
+        await SecureStore.deleteItemAsync(`wallet_private_key_${i}`);
+      }
+      await AsyncStorage.removeItem(ACCOUNTS_STORAGE_KEY);
+      await AsyncStorage.removeItem(ACTIVE_ACCOUNT_INDEX_KEY);
+
+      // إعادة تعيين الحالة مع الحفاظ على المحفظة
+      set({
+        accounts: [],
+        activeAccountIndex: 0,
+        walletPublicKey: publicKey,
+        walletPrivateKey: privateKey,
+        currentWallet: publicKey,
+      });
+
+      console.log('✅ [Store] تم تسجيل الخروج مع الحفاظ على المحفظة');
+    } catch (e) {
+      console.error('❌ [Store] خطأ في تسجيل الخروج:', e.message);
     }
+  },
 
-    await SecureStore.deleteItemAsync('wallet_private_key');
-    await SecureStore.deleteItemAsync('wallet_public_key');
-    await SecureStore.deleteItemAsync('wallet_mnemonic');
-    await SecureStore.deleteItemAsync('wallet_initialized');
-
-    set({
-      accounts: [],
-      activeAccountIndex: 0,
-      walletPublicKey: null,
-      walletPrivateKey: null,
-      currentWallet: null,
-    });
-
-    await AsyncStorage.removeItem(ACCOUNTS_STORAGE_KEY);
-    await AsyncStorage.removeItem(ACTIVE_ACCOUNT_INDEX_KEY);
+  resetWallet: async () => {
+    try {
+      const accounts = await get().loadAccounts();
+      for (let i = 0; i < accounts.length; i++) {
+        await SecureStore.deleteItemAsync(`wallet_private_key_${i}`);
+      }
+      await SecureStore.deleteItemAsync(OLD_PRIVATE_KEY);
+      await SecureStore.deleteItemAsync(OLD_PUBLIC_KEY);
+      await SecureStore.deleteItemAsync(OLD_MNEMONIC);
+      await AsyncStorage.removeItem(ACCOUNTS_STORAGE_KEY);
+      await AsyncStorage.removeItem(ACTIVE_ACCOUNT_INDEX_KEY);
+      set({ accounts: [], activeAccountIndex: 0, walletPublicKey: null, walletPrivateKey: null, currentWallet: null });
+    } catch (e) { console.error('❌ [Store] خطأ:', e.message); }
   },
 }));
+
+// دوال مساعدة
+export async function hasLegacyWallet() {
+  try {
+    const publicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+    const privateKey = await SecureStore.getItemAsync(OLD_PRIVATE_KEY);
+    return !!(publicKey && privateKey);
+  } catch (e) { return false; }
+}
+
+export async function hasMnemonic() {
+  try { return !!await SecureStore.getItemAsync(OLD_MNEMONIC); }
+  catch (e) { return false; }
+}
