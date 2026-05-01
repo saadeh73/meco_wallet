@@ -15,8 +15,21 @@ import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 const { width, height } = Dimensions.get('window');
 
-// دالة لتأخير الطلبات لتجاوز حظر السيرفرات في وضع الإنتاج
+// 1. دالة الإيقاف المؤقت
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// 2. ★★★ الخوارزمية الجديدة: المحاولة المتكررة لتجاوز حظر السيرفر ★★★
+const fetchWithRetry = async (apiCall, retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await apiCall();
+      return result;
+    } catch (error) {
+      if (i === retries - 1) throw error; // إذا فشل في آخر محاولة، ارمِ الخطأ
+      await sleep(delay); // انتظر ثانية ثم أعد المحاولة
+    }
+  }
+};
 
 export default function WalletScreen() {
   const navigation = useNavigation();
@@ -91,10 +104,12 @@ export default function WalletScreen() {
       }
 
       setIsSwitchingAccount(true);
-      const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
+      // تأمين العنوان كـ String نقي لتجنب أي أخطاء في الـ API
+      const addr = String(publicKey).trim();
 
-      const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
-      const tokenAccounts = await getTokenAccounts(addr).catch(() => []) || [];
+      // ★★★ استخدام fetchWithRetry هنا لضمان عدم فشل جلب الرصيد ★★★
+      const solBal = await fetchWithRetry(() => getSolBalance(true, addr)).catch(() => 0) || 0;
+      const tokenAccounts = await fetchWithRetry(() => getTokenAccounts(addr)).catch(() => []) || [];
 
       let calculatedTotalUSD = 0;
       
@@ -110,7 +125,7 @@ export default function WalletScreen() {
         let price = 0;
         try {
           if (getTokenMarketPrice) {
-             price = await getTokenMarketPrice(asset.symbol) || 0;
+             price = await fetchWithRetry(() => getTokenMarketPrice(asset.symbol), 2, 500) || 0;
           }
         } catch (priceError) {
           console.warn(`Could not fetch price for ${asset.symbol}`);
@@ -127,6 +142,9 @@ export default function WalletScreen() {
       setAssets(filteredAssets);
       setTotalBalanceUSD(calculatedTotalUSD);
       
+      // مزامنة رصيد الحساب النشط مع قائمة الحسابات فوراً
+      setAccountUsdBalances(prev => ({ ...prev, [addr]: calculatedTotalUSD }));
+
     } catch (error) {
       console.error("Error in loadWalletData:", error); 
     } finally {
@@ -139,38 +157,37 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
-  // ★★★ الحل الجذري لمشكلة الأرصدة الصفرية في وضع الإنتاج ★★★
   const fetchAccountUsdBalances = useCallback(async () => {
     setLoadingAccountBalances(true);
-    const balances = {};
+    const balances = { ...accountUsdBalances }; // الاحتفاظ بالأرصدة السابقة لتجنب تحميلها مجدداً
     
     try {
-      // 1. جلب الأسعار مرة واحدة فقط
       const prices = {
-        SOL: await getTokenMarketPrice('SOL').catch(() => 0) || 0,
-        MECO: await getTokenMarketPrice('MECO').catch(() => 0) || 0,
-        USDT: await getTokenMarketPrice('USDT').catch(() => 0) || 0,
-        USDC: await getTokenMarketPrice('USDC').catch(() => 0) || 0,
+        SOL: await fetchWithRetry(() => getTokenMarketPrice('SOL'), 2).catch(() => 0) || 0,
+        MECO: await fetchWithRetry(() => getTokenMarketPrice('MECO'), 2).catch(() => 0) || 0,
+        USDT: await fetchWithRetry(() => getTokenMarketPrice('USDT'), 2).catch(() => 0) || 0,
+        USDC: await fetchWithRetry(() => getTokenMarketPrice('USDC'), 2).catch(() => 0) || 0,
       };
 
-      // 2. معالجة الحسابات بتسلسل زمني لتفادي جدار الحماية (Rate Limit) في الإنتاج
       for (let i = 0; i < accounts.length; i++) {
         const acc = accounts[i];
-        const addr = acc.publicKey;
+        const addr = String(acc.publicKey).trim(); // تنظيف العنوان
 
         try {
-          // [الحيلة المعمارية 1]: تخطي الحساب النشط لأنه تم جلبه بنجاح مسبقاً
+          // تخطي الحساب النشط (تم جلبه) وتخطي الحسابات التي جلبناها مسبقاً في نفس الجلسة
           if (acc.index === activeAccountIndex && totalBalanceUSD > 0) {
             balances[addr] = totalBalanceUSD;
-            setAccountUsdBalances(prev => ({ ...prev, [addr]: totalBalanceUSD }));
             continue; 
           }
+          if (balances[addr] && balances[addr] > 0) {
+            continue; // الرصيد موجود بالفعل!
+          }
 
-          // [الحيلة المعمارية 2]: تأخير مقصود 400 ملي ثانية بين كل حساب والآخر
-          if (i > 0) await sleep(400);
+          if (i > 0) await sleep(800); // إبطاء الطلبات بقوة لإرضاء سيرفرات Helius
 
-          const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
-          const tokenAccounts = await getTokenAccounts(addr).catch(() => []) || [];
+          // استخدام fetchWithRetry لضمان جلب الرصيد الحقيقي وعدم السقوط كـ 0
+          const solBal = await fetchWithRetry(() => getSolBalance(true, addr)).catch(() => 0) || 0;
+          const tokenAccounts = await fetchWithRetry(() => getTokenAccounts(addr)).catch(() => []) || [];
           
           let accUsd = solBal * prices.SOL;
           
@@ -184,13 +201,10 @@ export default function WalletScreen() {
           }
           
           balances[addr] = accUsd;
-
-          // تحديث الواجهة تدريجياً ليشعر المستخدم بالسرعة
           setAccountUsdBalances(prev => ({ ...prev, [addr]: accUsd }));
 
         } catch (accountError) {
-          balances[addr] = 0;
-          setAccountUsdBalances(prev => ({ ...prev, [addr]: 0 }));
+          balances[addr] = balances[addr] || 0; // إذا فشل، حافظ على قيمته القديمة ولا تصفرها
         }
       }
     } catch (globalError) {
@@ -199,7 +213,7 @@ export default function WalletScreen() {
       setLoadingAccountBalances(false);
     }
     
-  }, [accounts, activeAccountIndex, totalBalanceUSD]);
+  }, [accounts, activeAccountIndex, totalBalanceUSD, accountUsdBalances]);
 
   useEffect(() => {
     if (accountsModalVisible && accounts.length > 0) {
