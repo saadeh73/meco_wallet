@@ -15,14 +15,6 @@ import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 const { width, height } = Dimensions.get('window');
 
-// دالة لتنظيف الـ PublicKey من أي مسافات مخفية أو رموز غير صالحة ناتجة عن التشفير
-const sanitizeBase58 = (key) => {
-  if (!key) return '';
-  return String(key).replace(/[^1-9A-HJ-NP-Za-km-z]/g, '');
-};
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 export default function WalletScreen() {
   const navigation = useNavigation();
   const { t } = useTranslation();
@@ -83,7 +75,7 @@ export default function WalletScreen() {
     if (accounts.length > 0 && activeAccountIndex < accounts.length) {
       const active = accounts[activeAccountIndex];
       setWalletName(active.name);
-      setWalletAddress(sanitizeBase58(active.publicKey)); // عرض العنوان النظيف
+      setWalletAddress(active.publicKey);
     }
   }, [accounts, activeAccountIndex]);
 
@@ -96,18 +88,13 @@ export default function WalletScreen() {
       }
 
       setIsSwitchingAccount(true);
-      
-      // ★ السلاح السري: تنظيف العنوان قبل إرساله للسيرفر
-      const addr = sanitizeBase58(publicKey);
+      const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
 
-      const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
-      const tokenAccounts = await getTokenAccounts(addr).catch(() => []) || [];
+      const solBal = await getSolBalance(true, addr) || 0;
+      const tokenAccounts = await getTokenAccounts(addr) || [];
 
       let calculatedTotalUSD = 0;
-      const filteredAssets = [];
-      
-      // ★ إزالة Promise.all وجلب البيانات بالتتابع لعدم خنق السيرفر
-      for (const asset of CORE_TOKENS) {
+      const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
         let amount = 0;
         if (asset.symbol === 'SOL') {
           amount = solBal;
@@ -118,29 +105,20 @@ export default function WalletScreen() {
 
         let price = 0;
         try {
-          if (getTokenMarketPrice) {
-             price = await getTokenMarketPrice(asset.symbol) || 0;
-          }
-        } catch (priceError) {
-           price = 0;
-        }
+          if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
+        } catch (e) {}
 
         const valueUSD = amount * price;
         calculatedTotalUSD += valueUSD;
+        return { ...asset, amount, price, valueUSD };
+      }));
 
-        if (asset.symbol === 'SOL' || asset.symbol === 'MECO' || amount > 0) {
-          filteredAssets.push({ ...asset, amount, price, valueUSD });
-        }
-      }
-
+      const filteredAssets = allAssetsPromise.filter(asset => asset.symbol === 'SOL' || asset.symbol === 'MECO' || asset.amount > 0);
       filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
 
       setAssets(filteredAssets);
       setTotalBalanceUSD(calculatedTotalUSD);
-      setAccountUsdBalances(prev => ({ ...prev, [addr]: calculatedTotalUSD }));
-
     } catch (error) {
-      console.error("Error in loadWalletData:", error); 
     } finally {
       setLoadingInitial(false);
       setIsSwitchingAccount(false);
@@ -151,68 +129,63 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
+  // ★★★ الحل المعماري لوضع الـ Production ★★★
   const fetchAccountUsdBalances = useCallback(async () => {
+    if (loadingAccountBalances) return;
     setLoadingAccountBalances(true);
-    const balances = { ...accountUsdBalances };
+
+    const balances = {};
     
+    // 1. جلب الأسعار مسبقاً (لحماية الكود من الانهيار داخل حلقة for في الـ Release)
+    const marketPrices = {};
     try {
-      const prices = {
-        SOL: await getTokenMarketPrice('SOL').catch(() => 0) || 0,
-        MECO: await getTokenMarketPrice('MECO').catch(() => 0) || 0,
-        USDT: await getTokenMarketPrice('USDT').catch(() => 0) || 0,
-        USDC: await getTokenMarketPrice('USDC').catch(() => 0) || 0,
-      };
-
-      for (let i = 0; i < accounts.length; i++) {
-        const acc = accounts[i];
-        const addr = sanitizeBase58(acc.publicKey); // ★ تنظيف العناوين المسترجعة
-
-        try {
-          if (acc.index === activeAccountIndex && totalBalanceUSD > 0) {
-            balances[addr] = totalBalanceUSD;
-            continue; 
-          }
-          if (balances[addr] && balances[addr] > 0) {
-            continue; 
-          }
-
-          if (i > 0) await sleep(500); // إبطاء خفيف جداً لترتيب الطلبات
-
-          const solBal = await getSolBalance(true, addr).catch((e) => {
-            console.error(`SolBal error for ${addr}:`, e);
-            return 0;
-          }) || 0;
-
-          const tokenAccounts = await getTokenAccounts(addr).catch((e) => {
-             console.error(`TokenAcc error for ${addr}:`, e);
-             return [];
-          }) || [];
-          
-          let accUsd = solBal * prices.SOL;
-          
-          for (const token of tokenAccounts) {
-            let price = 0;
-            if (token.mint === '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i') price = prices.MECO;
-            else if (token.mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') price = prices.USDT;
-            else if (token.mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') price = prices.USDC;
-            
-            accUsd += (token.amount || 0) * price;
-          }
-          
-          balances[addr] = accUsd;
-          setAccountUsdBalances(prev => ({ ...prev, [addr]: accUsd }));
-
-        } catch (accountError) {
-          balances[addr] = balances[addr] || 0;
+      for (let i = 0; i < CORE_TOKENS.length; i++) {
+        const symbol = CORE_TOKENS[i].symbol;
+        if (getTokenMarketPrice) {
+          const p = await getTokenMarketPrice(symbol).catch(() => 0);
+          marketPrices[symbol] = p || 0;
+        } else {
+          marketPrices[symbol] = 0;
         }
       }
-    } catch (globalError) {
-      console.error("Global error in fetchAccountUsdBalances:", globalError);
-    } finally {
-      setLoadingAccountBalances(false);
+    } catch (e) {}
+
+    // 2. استخدام حلقة for عادية بدلاً من for...of المتداخلة التي يكسرها Hermes
+    for (let i = 0; i < accounts.length; i++) {
+      const acc = accounts[i];
+      try {
+        const addr = acc.publicKey;
+        // نجبره على جلب الرصيد الحقيقي من الشبكة (true) وليس الكاش
+        const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
+        const tokenAccounts = await getTokenAccounts(addr).catch(() => []) || [];
+
+        let accUsd = 0;
+        
+        // 3. التخلص من Promise.all داخل الحلقة لتجنب فشل الـ Context في الإنتاج
+        for (let j = 0; j < CORE_TOKENS.length; j++) {
+          const asset = CORE_TOKENS[j];
+          let amount = 0;
+          
+          if (asset.symbol === 'SOL') {
+            amount = solBal;
+          } else {
+            const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
+            if (tokenData) amount = tokenData.amount;
+          }
+
+          const price = marketPrices[asset.symbol] || 0;
+          accUsd += (amount * price);
+        }
+
+        balances[acc.publicKey] = accUsd;
+      } catch (e) {
+        balances[acc.publicKey] = 0;
+      }
     }
     
-  }, [accounts, activeAccountIndex, totalBalanceUSD, accountUsdBalances]);
+    setAccountUsdBalances(balances);
+    setLoadingAccountBalances(false);
+  }, [accounts, loadingAccountBalances]);
 
   useEffect(() => {
     if (accountsModalVisible && accounts.length > 0) {
@@ -364,7 +337,7 @@ export default function WalletScreen() {
         style={[styles.accountActionBtn, { backgroundColor: colors.success, borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
         onPress={() => {
           if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
-          copyAddress(item.publicKey); // سيتم نسخه نظيفاً
+          copyAddress(item.publicKey);
         }}
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
@@ -375,8 +348,7 @@ export default function WalletScreen() {
 
   const renderAccountItem = ({ item }) => {
     const isActive = item.index === activeAccountIndex;
-    const cleanAddr = sanitizeBase58(item.publicKey); // العنوان النظيف للبحث
-    const usdBalance = accountUsdBalances[cleanAddr];
+    const usdBalance = accountUsdBalances[item.publicKey];
     const isLoading = loadingAccountBalances && usdBalance === undefined;
 
     return (
@@ -404,7 +376,7 @@ export default function WalletScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.accountName, { color: colors.text }]}>{item.name}</Text>
                 <Text style={[styles.accountAddress, { color: colors.textSecondary }]}>
-                  {cleanAddr.slice(0, 6)}...{cleanAddr.slice(-4)}
+                  {item.publicKey.slice(0, 6)}...{item.publicKey.slice(-4)}
                 </Text>
               </View>
             </View>
