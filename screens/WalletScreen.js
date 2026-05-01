@@ -15,21 +15,13 @@ import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 const { width, height } = Dimensions.get('window');
 
-// 1. دالة الإيقاف المؤقت
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// 2. ★★★ الخوارزمية الجديدة: المحاولة المتكررة لتجاوز حظر السيرفر ★★★
-const fetchWithRetry = async (apiCall, retries = 3, delay = 1000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const result = await apiCall();
-      return result;
-    } catch (error) {
-      if (i === retries - 1) throw error; // إذا فشل في آخر محاولة، ارمِ الخطأ
-      await sleep(delay); // انتظر ثانية ثم أعد المحاولة
-    }
-  }
+// دالة لتنظيف الـ PublicKey من أي مسافات مخفية أو رموز غير صالحة ناتجة عن التشفير
+const sanitizeBase58 = (key) => {
+  if (!key) return '';
+  return String(key).replace(/[^1-9A-HJ-NP-Za-km-z]/g, '');
 };
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default function WalletScreen() {
   const navigation = useNavigation();
@@ -91,7 +83,7 @@ export default function WalletScreen() {
     if (accounts.length > 0 && activeAccountIndex < accounts.length) {
       const active = accounts[activeAccountIndex];
       setWalletName(active.name);
-      setWalletAddress(active.publicKey);
+      setWalletAddress(sanitizeBase58(active.publicKey)); // عرض العنوان النظيف
     }
   }, [accounts, activeAccountIndex]);
 
@@ -104,16 +96,18 @@ export default function WalletScreen() {
       }
 
       setIsSwitchingAccount(true);
-      // تأمين العنوان كـ String نقي لتجنب أي أخطاء في الـ API
-      const addr = String(publicKey).trim();
+      
+      // ★ السلاح السري: تنظيف العنوان قبل إرساله للسيرفر
+      const addr = sanitizeBase58(publicKey);
 
-      // ★★★ استخدام fetchWithRetry هنا لضمان عدم فشل جلب الرصيد ★★★
-      const solBal = await fetchWithRetry(() => getSolBalance(true, addr)).catch(() => 0) || 0;
-      const tokenAccounts = await fetchWithRetry(() => getTokenAccounts(addr)).catch(() => []) || [];
+      const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
+      const tokenAccounts = await getTokenAccounts(addr).catch(() => []) || [];
 
       let calculatedTotalUSD = 0;
+      const filteredAssets = [];
       
-      const allAssetsPromise = await Promise.all(CORE_TOKENS.map(async (asset) => {
+      // ★ إزالة Promise.all وجلب البيانات بالتتابع لعدم خنق السيرفر
+      for (const asset of CORE_TOKENS) {
         let amount = 0;
         if (asset.symbol === 'SOL') {
           amount = solBal;
@@ -125,24 +119,24 @@ export default function WalletScreen() {
         let price = 0;
         try {
           if (getTokenMarketPrice) {
-             price = await fetchWithRetry(() => getTokenMarketPrice(asset.symbol), 2, 500) || 0;
+             price = await getTokenMarketPrice(asset.symbol) || 0;
           }
         } catch (priceError) {
-          console.warn(`Could not fetch price for ${asset.symbol}`);
+           price = 0;
         }
 
         const valueUSD = amount * price;
         calculatedTotalUSD += valueUSD;
-        return { ...asset, amount, price, valueUSD };
-      }));
 
-      const filteredAssets = allAssetsPromise.filter(asset => asset.symbol === 'SOL' || asset.symbol === 'MECO' || asset.amount > 0);
+        if (asset.symbol === 'SOL' || asset.symbol === 'MECO' || amount > 0) {
+          filteredAssets.push({ ...asset, amount, price, valueUSD });
+        }
+      }
+
       filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
 
       setAssets(filteredAssets);
       setTotalBalanceUSD(calculatedTotalUSD);
-      
-      // مزامنة رصيد الحساب النشط مع قائمة الحسابات فوراً
       setAccountUsdBalances(prev => ({ ...prev, [addr]: calculatedTotalUSD }));
 
     } catch (error) {
@@ -159,35 +153,40 @@ export default function WalletScreen() {
 
   const fetchAccountUsdBalances = useCallback(async () => {
     setLoadingAccountBalances(true);
-    const balances = { ...accountUsdBalances }; // الاحتفاظ بالأرصدة السابقة لتجنب تحميلها مجدداً
+    const balances = { ...accountUsdBalances };
     
     try {
       const prices = {
-        SOL: await fetchWithRetry(() => getTokenMarketPrice('SOL'), 2).catch(() => 0) || 0,
-        MECO: await fetchWithRetry(() => getTokenMarketPrice('MECO'), 2).catch(() => 0) || 0,
-        USDT: await fetchWithRetry(() => getTokenMarketPrice('USDT'), 2).catch(() => 0) || 0,
-        USDC: await fetchWithRetry(() => getTokenMarketPrice('USDC'), 2).catch(() => 0) || 0,
+        SOL: await getTokenMarketPrice('SOL').catch(() => 0) || 0,
+        MECO: await getTokenMarketPrice('MECO').catch(() => 0) || 0,
+        USDT: await getTokenMarketPrice('USDT').catch(() => 0) || 0,
+        USDC: await getTokenMarketPrice('USDC').catch(() => 0) || 0,
       };
 
       for (let i = 0; i < accounts.length; i++) {
         const acc = accounts[i];
-        const addr = String(acc.publicKey).trim(); // تنظيف العنوان
+        const addr = sanitizeBase58(acc.publicKey); // ★ تنظيف العناوين المسترجعة
 
         try {
-          // تخطي الحساب النشط (تم جلبه) وتخطي الحسابات التي جلبناها مسبقاً في نفس الجلسة
           if (acc.index === activeAccountIndex && totalBalanceUSD > 0) {
             balances[addr] = totalBalanceUSD;
             continue; 
           }
           if (balances[addr] && balances[addr] > 0) {
-            continue; // الرصيد موجود بالفعل!
+            continue; 
           }
 
-          if (i > 0) await sleep(800); // إبطاء الطلبات بقوة لإرضاء سيرفرات Helius
+          if (i > 0) await sleep(500); // إبطاء خفيف جداً لترتيب الطلبات
 
-          // استخدام fetchWithRetry لضمان جلب الرصيد الحقيقي وعدم السقوط كـ 0
-          const solBal = await fetchWithRetry(() => getSolBalance(true, addr)).catch(() => 0) || 0;
-          const tokenAccounts = await fetchWithRetry(() => getTokenAccounts(addr)).catch(() => []) || [];
+          const solBal = await getSolBalance(true, addr).catch((e) => {
+            console.error(`SolBal error for ${addr}:`, e);
+            return 0;
+          }) || 0;
+
+          const tokenAccounts = await getTokenAccounts(addr).catch((e) => {
+             console.error(`TokenAcc error for ${addr}:`, e);
+             return [];
+          }) || [];
           
           let accUsd = solBal * prices.SOL;
           
@@ -204,7 +203,7 @@ export default function WalletScreen() {
           setAccountUsdBalances(prev => ({ ...prev, [addr]: accUsd }));
 
         } catch (accountError) {
-          balances[addr] = balances[addr] || 0; // إذا فشل، حافظ على قيمته القديمة ولا تصفرها
+          balances[addr] = balances[addr] || 0;
         }
       }
     } catch (globalError) {
@@ -365,7 +364,7 @@ export default function WalletScreen() {
         style={[styles.accountActionBtn, { backgroundColor: colors.success, borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
         onPress={() => {
           if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
-          copyAddress(item.publicKey);
+          copyAddress(item.publicKey); // سيتم نسخه نظيفاً
         }}
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
@@ -376,7 +375,8 @@ export default function WalletScreen() {
 
   const renderAccountItem = ({ item }) => {
     const isActive = item.index === activeAccountIndex;
-    const usdBalance = accountUsdBalances[item.publicKey];
+    const cleanAddr = sanitizeBase58(item.publicKey); // العنوان النظيف للبحث
+    const usdBalance = accountUsdBalances[cleanAddr];
     const isLoading = loadingAccountBalances && usdBalance === undefined;
 
     return (
@@ -404,7 +404,7 @@ export default function WalletScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.accountName, { color: colors.text }]}>{item.name}</Text>
                 <Text style={[styles.accountAddress, { color: colors.textSecondary }]}>
-                  {item.publicKey.slice(0, 6)}...{item.publicKey.slice(-4)}
+                  {cleanAddr.slice(0, 6)}...{cleanAddr.slice(-4)}
                 </Text>
               </View>
             </View>
