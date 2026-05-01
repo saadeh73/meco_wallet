@@ -137,7 +137,7 @@ export default function WalletScreen() {
     for (const acc of accounts) {
       try {
         const addr = acc.publicKey;
-        const solBal = await getSolBalance(false, addr) || 0;
+        const solBal = await getSolBalance(true, addr) || 0;
         const tokenAccounts = await getTokenAccounts(addr) || [];
 
         let accUsd = 0;
@@ -311,11 +311,10 @@ export default function WalletScreen() {
     );
   };
 
-  // 🔴 التعديل السري للتشخيص 🔴
   const renderAccountRightActions = (item) => (
     <View style={styles.accountActionContainer}>
       <TouchableOpacity
-        style={[styles.accountActionBtn, { backgroundColor: colors.success, width: 70 }]}
+        style={[styles.accountActionBtn, { backgroundColor: colors.success, borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
         onPress={() => {
           if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
           copyAddress(item.publicKey);
@@ -323,38 +322,6 @@ export default function WalletScreen() {
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
         <Text style={styles.actionText}>{t('copy', 'نسخ')}</Text>
-      </TouchableOpacity>
-
-      {/* زر الفحص للبحث عن المشكلة في وضع الإنتاج */}
-      <TouchableOpacity
-        style={[styles.accountActionBtn, { backgroundColor: '#FF9800', borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
-        onPress={async () => {
-          if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
-          
-          try {
-            Alert.alert("جاري الفحص...", "نطلب الرصيد من السيرفر الآن");
-            
-            const rawAddr = item.publicKey;
-            const addrType = typeof rawAddr;
-            const safeAddr = String(rawAddr).trim();
-            
-            const solBal = await getSolBalance(true, safeAddr);
-            const tokens = await getTokenAccounts(safeAddr);
-            
-            Alert.alert(
-              "نتيجة الفحص الدقيق",
-              `العنوان: ${safeAddr.slice(0, 5)}...${safeAddr.slice(-4)}\n` +
-              `نوع البيانات: ${addrType}\n` +
-              `رصيد SOL من السيرفر: ${solBal}\n` +
-              `عدد التوكنز: ${tokens ? tokens.length : 'فشل'}`
-            );
-          } catch (e) {
-            Alert.alert("خطأ كارثي", e.message || JSON.stringify(e));
-          }
-        }}
-      >
-        <Ionicons name="bug-outline" size={22} color="#FFF" />
-        <Text style={styles.actionText}>فحص</Text>
       </TouchableOpacity>
     </View>
   );
