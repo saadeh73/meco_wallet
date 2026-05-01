@@ -129,43 +129,20 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
-  // ★★★ الحل المعماري لوضع الـ Production ★★★
   const fetchAccountUsdBalances = useCallback(async () => {
     if (loadingAccountBalances) return;
     setLoadingAccountBalances(true);
 
     const balances = {};
-    
-    // 1. جلب الأسعار مسبقاً (لحماية الكود من الانهيار داخل حلقة for في الـ Release)
-    const marketPrices = {};
-    try {
-      for (let i = 0; i < CORE_TOKENS.length; i++) {
-        const symbol = CORE_TOKENS[i].symbol;
-        if (getTokenMarketPrice) {
-          const p = await getTokenMarketPrice(symbol).catch(() => 0);
-          marketPrices[symbol] = p || 0;
-        } else {
-          marketPrices[symbol] = 0;
-        }
-      }
-    } catch (e) {}
-
-    // 2. استخدام حلقة for عادية بدلاً من for...of المتداخلة التي يكسرها Hermes
-    for (let i = 0; i < accounts.length; i++) {
-      const acc = accounts[i];
+    for (const acc of accounts) {
       try {
         const addr = acc.publicKey;
-        // نجبره على جلب الرصيد الحقيقي من الشبكة (true) وليس الكاش
-        const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
-        const tokenAccounts = await getTokenAccounts(addr).catch(() => []) || [];
+        const solBal = await getSolBalance(false, addr) || 0;
+        const tokenAccounts = await getTokenAccounts(addr) || [];
 
         let accUsd = 0;
-        
-        // 3. التخلص من Promise.all داخل الحلقة لتجنب فشل الـ Context في الإنتاج
-        for (let j = 0; j < CORE_TOKENS.length; j++) {
-          const asset = CORE_TOKENS[j];
+        await Promise.all(CORE_TOKENS.map(async (asset) => {
           let amount = 0;
-          
           if (asset.symbol === 'SOL') {
             amount = solBal;
           } else {
@@ -173,16 +150,19 @@ export default function WalletScreen() {
             if (tokenData) amount = tokenData.amount;
           }
 
-          const price = marketPrices[asset.symbol] || 0;
-          accUsd += (amount * price);
-        }
+          let price = 0;
+          try {
+            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
+          } catch (e) {}
+          accUsd += amount * price;
+        }));
 
         balances[acc.publicKey] = accUsd;
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (e) {
         balances[acc.publicKey] = 0;
       }
     }
-    
     setAccountUsdBalances(balances);
     setLoadingAccountBalances(false);
   }, [accounts, loadingAccountBalances]);
@@ -331,10 +311,11 @@ export default function WalletScreen() {
     );
   };
 
+  // 🔴 التعديل السري للتشخيص 🔴
   const renderAccountRightActions = (item) => (
     <View style={styles.accountActionContainer}>
       <TouchableOpacity
-        style={[styles.accountActionBtn, { backgroundColor: colors.success, borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
+        style={[styles.accountActionBtn, { backgroundColor: colors.success, width: 70 }]}
         onPress={() => {
           if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
           copyAddress(item.publicKey);
@@ -342,6 +323,38 @@ export default function WalletScreen() {
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
         <Text style={styles.actionText}>{t('copy', 'نسخ')}</Text>
+      </TouchableOpacity>
+
+      {/* زر الفحص للبحث عن المشكلة في وضع الإنتاج */}
+      <TouchableOpacity
+        style={[styles.accountActionBtn, { backgroundColor: '#FF9800', borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
+        onPress={async () => {
+          if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
+          
+          try {
+            Alert.alert("جاري الفحص...", "نطلب الرصيد من السيرفر الآن");
+            
+            const rawAddr = item.publicKey;
+            const addrType = typeof rawAddr;
+            const safeAddr = String(rawAddr).trim();
+            
+            const solBal = await getSolBalance(true, safeAddr);
+            const tokens = await getTokenAccounts(safeAddr);
+            
+            Alert.alert(
+              "نتيجة الفحص الدقيق",
+              `العنوان: ${safeAddr.slice(0, 5)}...${safeAddr.slice(-4)}\n` +
+              `نوع البيانات: ${addrType}\n` +
+              `رصيد SOL من السيرفر: ${solBal}\n` +
+              `عدد التوكنز: ${tokens ? tokens.length : 'فشل'}`
+            );
+          } catch (e) {
+            Alert.alert("خطأ كارثي", e.message || JSON.stringify(e));
+          }
+        }}
+      >
+        <Ionicons name="bug-outline" size={22} color="#FFF" />
+        <Text style={styles.actionText}>فحص</Text>
       </TouchableOpacity>
     </View>
   );
