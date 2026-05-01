@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import { getSolBalance, getTokenAccounts, getTokenMarketPrice } from '../services/heliusService';
+import { getSolBalance, getTokenAccounts, getTokenMarketPrice, getTokenBalance } from '../services/heliusService';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 
 const { width, height } = Dimensions.get('window');
@@ -138,7 +138,18 @@ export default function WalletScreen() {
       try {
         const addr = acc.publicKey;
         const solBal = await getSolBalance(true, addr) || 0;
+        // جلب رصيد MECO مباشرة – أكثر أمانًا من getTokenAccounts
+        let mecoAmount = 0;
+        try {
+          mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr);
+        } catch(e) {}
         const tokenAccounts = await getTokenAccounts(addr) || [];
+        if (mecoAmount > 0 && !tokenAccounts.find(t => t.mint === '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i')) {
+          tokenAccounts.push({
+            mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
+            amount: mecoAmount
+          });
+        }
 
         let accUsd = 0;
         await Promise.all(CORE_TOKENS.map(async (asset) => {
