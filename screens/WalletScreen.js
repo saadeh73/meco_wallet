@@ -138,18 +138,20 @@ export default function WalletScreen() {
       try {
         const addr = acc.publicKey;
         const solBal = await getSolBalance(true, addr) || 0;
-        // جلب رصيد MECO مباشرة – أكثر أمانًا من getTokenAccounts
-        let mecoAmount = 0;
-        try {
-          mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr);
-        } catch(e) {}
-        const tokenAccounts = await getTokenAccounts(addr) || [];
-        if (mecoAmount > 0 && !tokenAccounts.find(t => t.mint === '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i')) {
-          tokenAccounts.push({
-            mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
-            amount: mecoAmount
-          });
-        }
+        
+        // ***** جلب مباشر لتجنب مشاكل RPC *****
+        let mecoAmount = 0, usdcAmount = 0, usdtAmount = 0;
+        try { mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr); } catch(e) {}
+        await new Promise(resolve => setTimeout(resolve, 300));
+        try { usdcAmount = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, addr); } catch(e) {}
+        await new Promise(resolve => setTimeout(resolve, 300));
+        try { usdtAmount = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, addr); } catch(e) {}
+        
+        // بناء قائمة توكنات وهمية للتوافق
+        const tokenAccounts = [];
+        if (mecoAmount > 0) tokenAccounts.push({ mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', amount: mecoAmount });
+        if (usdcAmount > 0) tokenAccounts.push({ mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount: usdcAmount });
+        if (usdtAmount > 0) tokenAccounts.push({ mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', amount: usdtAmount });
 
         let accUsd = 0;
         await Promise.all(CORE_TOKENS.map(async (asset) => {
@@ -184,6 +186,7 @@ export default function WalletScreen() {
     }
   }, [accountsModalVisible, accounts.length, fetchAccountUsdBalances]);
 
+  // باقي الدوال بدون تغيير (handleRefresh, copyAddress, ...)
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadWalletData(walletPublicKey);
@@ -453,7 +456,6 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* نافذة الحسابات */}
         <Modal visible={accountsModalVisible} transparent animationType="slide" onRequestClose={() => setAccountsModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>

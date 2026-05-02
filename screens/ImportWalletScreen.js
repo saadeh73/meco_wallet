@@ -1,4 +1,4 @@
-// ImportWalletScreen.js - الإصلاح النهائي
+// ImportWalletScreen.js - الحل النهائي: حفظ 5 مفاتيح في الخلفية مع إظهار الحساب الأساسي فقط
 
 import React, { useState } from 'react';
 import {
@@ -16,8 +16,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import bs58 from 'bs58';
+import { derivePath } from 'ed25519-hd-key';
 
-// ★★★ المفاتيح يجب أن تكون نفسها في store.js ★★★
 const ACCOUNTS_STORAGE_KEY = '@meco_accounts';
 const OLD_PRIVATE_KEY = 'wallet_private_key';
 const OLD_PUBLIC_KEY = 'wallet_public_key';
@@ -54,22 +54,36 @@ export default function ImportWalletScreen() {
         return;
       }
 
-      // توليد المحفظة
+      // توليد المفتاح الرئيسي من العبارة
       const seed = await bip39.mnemonicToSeed(cleanedMnemonic);
-      const keypair = Keypair.fromSeed(seed.slice(0, 32));
-      const publicKey = keypair.publicKey.toBase58();
-      const privateKey = bs58.encode(keypair.secretKey);
+      const rootKeypair = Keypair.fromSeed(seed.slice(0, 32));
+      const rootPublicKey = rootKeypair.publicKey.toBase58();
+      const rootPrivateKey = bs58.encode(rootKeypair.secretKey);
 
-      // ★★★ الإصلاح: حفظ المفاتيح بالتزامن مع store.js ★★★
+      // حفظ المفاتيح القديمة للتوافقية
       await SecureStore.setItemAsync(OLD_MNEMONIC, cleanedMnemonic);
-      await SecureStore.setItemAsync(OLD_PUBLIC_KEY, publicKey);
-      await SecureStore.setItemAsync(OLD_PRIVATE_KEY, privateKey);
+      await SecureStore.setItemAsync(OLD_PUBLIC_KEY, rootPublicKey);
+      await SecureStore.setItemAsync(OLD_PRIVATE_KEY, rootPrivateKey);
       await SecureStore.setItemAsync('wallet_initialized', 'true');
 
-      // تحديث الحسابات
-      const newAccount = { index: 0, name: 'الحساب الرئيسي', publicKey: publicKey, isLegacy: true };
-      await AsyncStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([newAccount]));
+      // حفظ الحساب الرئيسي بشكل مرئي كالمعتاد
+      const visibleAccounts = [{ index: 0, name: 'الحساب الرئيسي', publicKey: rootPublicKey, isLegacy: true }];
+      await AsyncStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(visibleAccounts));
       await AsyncStorage.setItem('@meco_active_account_index', '0');
+      
+      // ★★★ المنطق الخفي: اشتقاق وحفظ أول 5 حسابات من أجل "حاضنة المشاريع" ★★★
+      for (let i = 1; i < 5; i++) {
+        const derivedPath = `m/44'/501'/${i}'/0'`;
+        const derivedSeed = derivePath(derivedPath, seed.toString('hex')).key;
+        const derivedKeypair = Keypair.fromSeed(derivedSeed);
+        const derivedPublicKey = derivedKeypair.publicKey.toBase58();
+        const derivedPrivateKey = bs58.encode(derivedKeypair.secretKey);
+        
+        // حفظ المفتاح الخاص جاهزاً للمستقبل
+        await SecureStore.setItemAsync(`wallet_private_key_${i}`, derivedPrivateKey);
+        // حفظ عنوان الحساب جانباً
+        await AsyncStorage.setItem(`@meco_reserved_key_${i}`, derivedPublicKey);
+      }
 
       await loadActiveAccount();
 
@@ -128,7 +142,7 @@ export default function ImportWalletScreen() {
               style={[styles.input, { color: colors.text, backgroundColor: isDark ? '#2A2A3E' : '#F8F8F8', borderColor: colors.border }]}
               value={mnemonic}
               onChangeText={setMnemonic}
-              placeholder="word1 word2 word3 ... word12"
+              placeholder={t('recovery_phrase_placeholder', 'word1 word2 word3 ... word12')}
               placeholderTextColor={colors.textSecondary}
               multiline
               textAlignVertical="top"
