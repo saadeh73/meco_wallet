@@ -83,7 +83,7 @@ const resources = {
       edit: 'تعديل',
       copy: 'نسخ',
 
-      // ====== مفاتيح سلة المحذوفات والحسابات المؤرشفة (جديد - شاشة wallet) ======
+      // ====== مفاتيح سلة المحذوفات والحسابات المؤرشفة ======
       archived_accounts: "المحافظ المحذوفة",
       empty_trash: "سلة المهملات فارغة",
       deleted_tag: "(محذوفة)",
@@ -442,7 +442,7 @@ const resources = {
       paste: 'لصق',
       import_wallet_instructions: 'أدخل عبارة الاسترداد المكونة من 12 كلمة بالترتيب الصحيح',
       import: 'استيراد',
-      accounts_discovered: "تم استرجاع {{count}} حسابات تحتوي على أموال! 🎉", // <-- جديد لشاشة الاستيراد
+      accounts_discovered: "تم استرجاع {{count}} حسابات تحتوي على أموال! 🎉",
       backup_wallet_subtitle: 'احفظ عبارة الاسترداد بعيداً',
       backup_warning: 'لا تشارك هذه الكلمات مع أي أحد. يمكن لأي شخص يملك هذه الكلمات الوصول إلى أموالك.',
       backup_instructions: 'اكتب هذه الكلمات على ورقة واحتفظ بها في مكان آمن. تجنب التقاط صور أو تخزين رقمي.',
@@ -454,6 +454,33 @@ const resources = {
       biometric_prompt: 'تأكيد الدخول إلى المحفظة',
       biometric_failed: 'فشل التحقق بالبصمة',
       biometric_error: 'حدث خطأ في التحقق بالبصمة',
+
+      // ========== Import Private Key Screen ==========
+      import_private_key: {
+        title: "استيراد بمفتاح خاص",
+        warning: "لا تشارك المفتاح الخاص مع أي شخص. من يملكه يملك أموالك.",
+        warning_not_recoverable: "هذا الحساب لن يُسترجع من العبارة السرية. احفظ المفتاح الخاص.",
+        account_name_label: "اسم الحساب (اختياري)",
+        account_name_placeholder: "أدخل اسماً للحساب",
+        private_key_label: "المفتاح الخاص",
+        private_key_placeholder: "أدخل المفتاح الخاص (Private Key)",
+        paste: "لصق",
+        import_button: "استيراد الحساب",
+        enter_key_error: "الرجاء إدخال المفتاح الخاص",
+        success: "تم استيراد الحساب بنجاح",
+        failed: "فشل استيراد الحساب",
+        default_account_name: "حساب مستورد",
+      },
+
+      // ========== مفاتيح المصادقة وتصدير المفتاح (WalletScreen) ==========
+      export_key: "تصدير المفتاح",
+      passcode_prompt: "أدخل رمز الهاتف لعرض المفتاح الخاص",
+      use_phone_passcode: "استخدام رمز الهاتف",
+      auth_failed: "لم يتم التحقق من الهوية.",
+      private_key_not_found: "تعذّر استخراج المفتاح الخاص.",
+      key_warning_title: "⚠️ تحذير أمني",
+      key_warning_message: "🔑 المفتاح الخاص:\n\n{{key}}\n\n⚠️ لا تشاركه مع أي شخص. مشاركته تعني فقدان أموالك بالكامل. احفظه في مكان آمن تماماً.",
+      copy_key: "نسخ المفتاح",
 
       // ========== QRScannerScreen ==========
       qr_scanner: {
@@ -481,6 +508,19 @@ const resources = {
       watchlist_empty: 'لا توجد عملات في المفضلة',
       no_results: 'لا توجد نتائج',
       market_stats: 'إحصائيات السوق',
+
+      // ========== مفاتيح جديدة (Multi-Account, Import, Recovery) ==========
+      main_account: "الحساب الرئيسي",
+      account: "الحساب",
+      imported_account: "حساب مستورد",
+      recovery_phrase_missing: "عبارة الاسترداد غير موجودة",
+      account_already_exists: "هذا الحساب موجود بالفعل",
+      verifying_phrase: "جاري التحقق من العبارة...",
+      restoring_main_account: "جاري استعادة الحساب الأساسي...",
+      scanning_accounts: "جاري استكشاف الحسابات المفقودة",
+      finalizing_setup: "جاري إتمام الإعدادات...",
+      accounts_found: "وجدنا",
+      accounts_linked: "حساب مرتبط بهذه المحفظة."
     }
   },
   en: {
@@ -559,11 +599,11 @@ const resources = {
       account_add_failed: 'Failed to add account',
       delete_account: 'Delete Account',
       delete_account_confirmation: 'Are you sure you want to delete "{{name}}"? This cannot be undone.',
-      swipe_hint: 'Tap the icon to copy address',
+      swipe_hint: 'Swipe left to edit, right to copy address',
       edit: 'Edit',
       copy: 'Copy',
 
-      // ====== Trash & Archived Accounts Keys (New - Wallet screen) ======
+      // ====== Trash & Archived Accounts Keys ======
       archived_accounts: "Archived Accounts",
       empty_trash: "Trash is empty",
       deleted_tag: "(Deleted)",
@@ -922,7 +962,7 @@ const resources = {
       paste: 'Paste',
       import_wallet_instructions: 'Enter your 12-word recovery phrase in the correct order',
       import: 'Import',
-      accounts_discovered: "Retrieved {{count}} accounts with funds! 🎉", // <-- New for Import screen
+      accounts_discovered: "Retrieved {{count}} accounts with funds! 🎉",
       backup_wallet_subtitle: 'Save your recovery phrase safely',
       backup_warning: 'Do not share these words with anyone. Anyone with these words can access your funds.',
       backup_instructions: 'Write these words on paper and keep them in a safe place. Avoid taking pictures or digital storage.',
@@ -934,6 +974,33 @@ const resources = {
       biometric_prompt: 'Confirm access to wallet',
       biometric_failed: 'Biometric verification failed',
       biometric_error: 'Error in biometric verification',
+
+      // ========== Import Private Key Screen ==========
+      import_private_key: {
+        title: "Import via Private Key",
+        warning: "Do not share your private key with anyone. Whoever owns it owns your funds.",
+        warning_not_recoverable: "This account will NOT be recoverable from the recovery phrase. Save the private key.",
+        account_name_label: "Account Name (Optional)",
+        account_name_placeholder: "Enter an account name",
+        private_key_label: "Private Key",
+        private_key_placeholder: "Enter your private key",
+        paste: "Paste",
+        import_button: "Import Account",
+        enter_key_error: "Please enter a private key",
+        success: "Account imported successfully",
+        failed: "Failed to import account",
+        default_account_name: "Imported Account",
+      },
+
+      // ========== Authentication & Key Export Keys (WalletScreen) ==========
+      export_key: "Export Key",
+      passcode_prompt: "Enter phone passcode to view private key",
+      use_phone_passcode: "Use phone passcode",
+      auth_failed: "Authentication failed.",
+      private_key_not_found: "Private key could not be retrieved.",
+      key_warning_title: "⚠️ Security Warning",
+      key_warning_message: "🔑 Private Key:\n\n{{key}}\n\n⚠️ Do not share it with anyone. Sharing it means losing all your funds. Keep it in a very safe place.",
+      copy_key: "Copy Key",
 
       // ========== QRScannerScreen ==========
       qr_scanner: {
@@ -961,6 +1028,19 @@ const resources = {
       watchlist_empty: 'No tokens in watchlist',
       no_results: 'No results',
       market_stats: 'Market Stats',
+
+      // ========== New Keys (Multi-Account, Import, Recovery) ==========
+      main_account: "Main Account",
+      account: "Account",
+      imported_account: "Imported Account",
+      recovery_phrase_missing: "Recovery phrase is missing",
+      account_already_exists: "This account already exists",
+      verifying_phrase: "Verifying recovery phrase...",
+      restoring_main_account: "Restoring main account...",
+      scanning_accounts: "Scanning for missing accounts",
+      finalizing_setup: "Finalizing setup...",
+      accounts_found: "We found",
+      accounts_linked: "account(s) linked to this wallet."
     }
   }
 };

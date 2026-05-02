@@ -1,4 +1,4 @@
-// store.js - النسخة النهائية الموحدة للأمان والاستقرار
+// store.js - النسخة النهائية مع دعم الترجمة للاسم الافتراضي
 
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
@@ -8,6 +8,7 @@ import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { derivePath } from 'ed25519-hd-key';
 import bs58 from 'bs58';
+import i18next from 'i18next'; // إضافة مكتبة الترجمة للحصول على النص المترجم
 
 const ACCOUNTS_STORAGE_KEY = '@meco_accounts';
 const ACTIVE_ACCOUNT_INDEX_KEY = '@meco_active_account_index';
@@ -19,7 +20,7 @@ const OLD_MNEMONIC = 'wallet_mnemonic';
 export const useAppStore = create((set, get) => ({
   theme: 'dark',
   toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
-  
+
   language: 'ar',
   setLanguage: async (lang) => {
     await AsyncStorage.setItem('app_language', lang);
@@ -77,7 +78,9 @@ export const useAppStore = create((set, get) => ({
       if (accounts.length === 0) {
         const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
         if (oldPublicKey) {
-          accounts = [{ index: 0, name: 'الحساب الرئيسي', publicKey: oldPublicKey, isLegacy: true }];
+          // استخدام i18next لجلب الترجمة الصحيحة
+          const mainAccountName = i18next.t('main_account', 'الحساب الرئيسي');
+          accounts = [{ index: 0, name: mainAccountName, publicKey: oldPublicKey, isLegacy: true }];
           set({ accounts });
           await get().saveAccounts(accounts);
         }
@@ -105,24 +108,22 @@ export const useAppStore = create((set, get) => ({
     try {
       let privateKey, publicKey;
 
-      // 1. البحث في SecureStore
       const storedPrivateKey = await SecureStore.getItemAsync(`wallet_private_key_${index}`);
       if (storedPrivateKey && accounts[index]?.publicKey) {
         privateKey = storedPrivateKey;
         publicKey = accounts[index].publicKey;
       }
 
-      // 2. استخدام المفتاح القديم (للحساب 0 فقط)
       if (!privateKey && index === 0) {
         const oldPrivateKey = await SecureStore.getItemAsync(OLD_PRIVATE_KEY);
         const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
         if (oldPrivateKey && oldPublicKey) {
           privateKey = oldPrivateKey;
           publicKey = oldPublicKey;
+          await SecureStore.setItemAsync('wallet_private_key_0', oldPrivateKey);
         }
       }
 
-      // 3. الاشتقاق من العبارة إذا لم نجد شيئاً
       if (!privateKey) {
         const mnemonic = await SecureStore.getItemAsync(OLD_MNEMONIC);
         if (!mnemonic) return false;
@@ -131,8 +132,30 @@ export const useAppStore = create((set, get) => ({
         const path = `m/44'/501'/${index}'/0'`;
         const derivedSeed = derivePath(path, seed.toString('hex')).key;
         const keypair = Keypair.fromSeed(derivedSeed);
-        privateKey = bs58.encode(keypair.secretKey);
-        publicKey = keypair.publicKey.toBase58();
+        const newPublicKey = keypair.publicKey.toBase58();
+        const newPrivateKey = bs58.encode(keypair.secretKey);
+
+        if (index === 0) {
+          const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+          if (oldPublicKey && oldPublicKey !== newPublicKey) {
+            const oldKeypair = Keypair.fromSeed(seed.slice(0, 32));
+            privateKey = bs58.encode(oldKeypair.secretKey);
+            publicKey = oldKeypair.publicKey.toBase58();
+            await SecureStore.setItemAsync(OLD_PUBLIC_KEY, publicKey);
+            await SecureStore.setItemAsync(OLD_PRIVATE_KEY, privateKey);
+          } else {
+            privateKey = newPrivateKey;
+            publicKey = newPublicKey;
+            if (!oldPublicKey) {
+              await SecureStore.setItemAsync(OLD_PUBLIC_KEY, publicKey);
+              await SecureStore.setItemAsync(OLD_PRIVATE_KEY, privateKey);
+            }
+          }
+        } else {
+          privateKey = newPrivateKey;
+          publicKey = newPublicKey;
+        }
+
         await SecureStore.setItemAsync(`wallet_private_key_${index}`, privateKey);
       }
 
@@ -155,20 +178,16 @@ export const useAppStore = create((set, get) => ({
     const newIndex = accounts.length;
     try {
       const mnemonic = await SecureStore.getItemAsync(OLD_MNEMONIC);
-      if (!mnemonic) throw new Error('عبارة الاسترداد غير موجودة');
+      if (!mnemonic) throw new Error(i18next.t('recovery_phrase_missing', 'عبارة الاسترداد غير موجودة'));
 
-      // استخدم المفتاح المُخزّن مسبقاً من ImportWalletScreen إن وجد
       const preStoredPrivateKey = await SecureStore.getItemAsync(`wallet_private_key_${newIndex}`);
-
       let publicKey, privateKey;
 
       if (preStoredPrivateKey) {
-        // استخدم المفتاح المُخزّن مباشرة
         const keypair = Keypair.fromSecretKey(bs58.decode(preStoredPrivateKey));
         publicKey = keypair.publicKey.toBase58();
         privateKey = preStoredPrivateKey;
       } else {
-        // اشتقاق جديد إذا لم يكن مخزّناً
         const seed = await bip39.mnemonicToSeed(mnemonic);
         const keypair = Keypair.fromSeed(derivePath(`m/44'/501'/${newIndex}'/0'`, seed.toString('hex')).key);
         publicKey = keypair.publicKey.toBase58();
@@ -176,7 +195,9 @@ export const useAppStore = create((set, get) => ({
         await SecureStore.setItemAsync(`wallet_private_key_${newIndex}`, privateKey);
       }
 
-      const newAccount = { index: newIndex, name: name || `الحساب ${newIndex + 1}`, publicKey };
+      const defaultAccountName = `${i18next.t('account', 'الحساب')} ${newIndex + 1}`;
+      const newAccount = { index: newIndex, name: name || defaultAccountName, publicKey };
+      
       const updatedAccounts = [...accounts, newAccount];
       set({ accounts: updatedAccounts });
       await get().saveAccounts(updatedAccounts);
@@ -185,6 +206,100 @@ export const useAppStore = create((set, get) => ({
       return newAccount;
     } catch (e) {
       throw e;
+    }
+  },
+
+  restoreDiscoveredAccounts: async (discoveredAccounts) => {
+    try {
+      set({ accounts: discoveredAccounts, activeAccountIndex: 0 });
+      await AsyncStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(discoveredAccounts));
+      await AsyncStorage.setItem(ACTIVE_ACCOUNT_INDEX_KEY, '0');
+      if (discoveredAccounts.length > 0) {
+        await get().setActiveAccount(0);
+      }
+    } catch (e) {
+      console.error('Error restoring accounts:', e);
+    }
+  },
+
+  addAccountFromPrivateKey: async (name, privateKeyString) => {
+    const { accounts } = get();
+    const newIndex = accounts.length;
+    try {
+      let secretKey;
+      if (privateKeyString.startsWith('[')) {
+        secretKey = new Uint8Array(JSON.parse(privateKeyString));
+      } else {
+        secretKey = bs58.decode(privateKeyString);
+      }
+
+      const keypair = Keypair.fromSecretKey(secretKey);
+      const publicKey = keypair.publicKey.toBase58();
+      const privateKey = bs58.encode(secretKey);
+
+      const exists = accounts.find(acc => acc.publicKey === publicKey);
+      if (exists) {
+        throw new Error(i18next.t('account_already_exists', 'هذا الحساب موجود بالفعل'));
+      }
+
+      const defaultImportedName = `${i18next.t('imported_account', 'حساب مستورد')} ${newIndex + 1}`;
+      const newAccount = { index: newIndex, name: name || defaultImportedName, publicKey };
+
+      await SecureStore.setItemAsync(`wallet_private_key_${newIndex}`, privateKey);
+
+      const updatedAccounts = [...accounts, newAccount];
+      set({ accounts: updatedAccounts });
+      await get().saveAccounts(updatedAccounts);
+
+      await AsyncStorage.setItem(ACTIVE_ACCOUNT_INDEX_KEY, newIndex.toString());
+      await get().setActiveAccount(newIndex);
+
+      return newAccount;
+    } catch (e) {
+      throw e;
+    }
+  },
+
+  getPrivateKeyForAccount: async (index) => {
+    try {
+      const storedPrivateKey = await SecureStore.getItemAsync(`wallet_private_key_${index}`);
+      if (storedPrivateKey) {
+        return storedPrivateKey;
+      }
+
+      if (index === 0) {
+        const oldPrivateKey = await SecureStore.getItemAsync(OLD_PRIVATE_KEY);
+        if (oldPrivateKey) {
+          await SecureStore.setItemAsync(`wallet_private_key_0`, oldPrivateKey);
+          return oldPrivateKey;
+        }
+      }
+
+      const mnemonic = await SecureStore.getItemAsync(OLD_MNEMONIC);
+      if (mnemonic) {
+        const seed = await bip39.mnemonicToSeed(mnemonic);
+        if (index === 0) {
+          const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
+          const newKeypair = Keypair.fromSeed(derivePath(`m/44'/501'/0'/0'`, seed.toString('hex')).key);
+          if (oldPublicKey && oldPublicKey !== newKeypair.publicKey.toBase58()) {
+            const oldKeypair = Keypair.fromSeed(seed.slice(0, 32));
+            const privateKey = bs58.encode(oldKeypair.secretKey);
+            await SecureStore.setItemAsync('wallet_private_key_0', privateKey);
+            return privateKey;
+          }
+        }
+        const path = `m/44'/501'/${index}'/0'`;
+        const derivedSeed = derivePath(path, seed.toString('hex')).key;
+        const keypair = Keypair.fromSeed(derivedSeed);
+        const privateKey = bs58.encode(keypair.secretKey);
+        await SecureStore.setItemAsync(`wallet_private_key_${index}`, privateKey);
+        return privateKey;
+      }
+
+      return null;
+    } catch (e) {
+      console.error('❌ [getPrivateKeyForAccount] Error:', e);
+      return null;
     }
   },
 
@@ -210,7 +325,6 @@ export const useAppStore = create((set, get) => ({
     if (index >= accounts.length) return { success: false, error: 'invalid_account' };
 
     try {
-      // حذف المفتاح الخاص
       await SecureStore.deleteItemAsync(`wallet_private_key_${index}`);
 
       const updatedAccounts = accounts.filter((_, i) => i !== index);
@@ -244,7 +358,8 @@ export const useAppStore = create((set, get) => ({
       if (!publicKey || !privateKey) return false;
 
       set({ walletPublicKey: publicKey, walletPrivateKey: privateKey, currentWallet: publicKey });
-      const accounts = [{ index: 0, name: 'الحساب الرئيسي', publicKey, isLegacy: true }];
+      const mainAccountName = i18next.t('main_account', 'الحساب الرئيسي');
+      const accounts = [{ index: 0, name: mainAccountName, publicKey, isLegacy: true }];
       set({ accounts });
       await get().saveAccounts(accounts);
       return true;
@@ -254,15 +369,27 @@ export const useAppStore = create((set, get) => ({
   },
 
   logout: async () => {
-    try {
-      set({
-        accounts: [],
-        activeAccountIndex: 0,
-        walletPublicKey: null,
-        walletPrivateKey: null,
-        currentWallet: null,
-      });
-    } catch (e) {}
+    const { activeAccountIndex } = get();
+
+    if (activeAccountIndex !== null) {
+      await SecureStore.deleteItemAsync(`wallet_private_key_${activeAccountIndex}`);
+    }
+
+    await SecureStore.deleteItemAsync('wallet_private_key');
+    await SecureStore.deleteItemAsync('wallet_public_key');
+    await SecureStore.deleteItemAsync('wallet_mnemonic');
+    await SecureStore.deleteItemAsync('wallet_initialized');
+
+    set({
+      accounts: [],
+      activeAccountIndex: 0,
+      walletPublicKey: null,
+      walletPrivateKey: null,
+      currentWallet: null,
+    });
+
+    await AsyncStorage.removeItem(ACCOUNTS_STORAGE_KEY);
+    await AsyncStorage.removeItem(ACTIVE_ACCOUNT_INDEX_KEY);
   },
 
   resetWallet: async () => {
@@ -276,13 +403,7 @@ export const useAppStore = create((set, get) => ({
       await SecureStore.deleteItemAsync(OLD_MNEMONIC);
       await AsyncStorage.removeItem(ACCOUNTS_STORAGE_KEY);
       await AsyncStorage.removeItem(ACTIVE_ACCOUNT_INDEX_KEY);
-      set({
-        accounts: [],
-        activeAccountIndex: 0,
-        walletPublicKey: null,
-        walletPrivateKey: null,
-        currentWallet: null,
-      });
+      set({ accounts: [], activeAccountIndex: 0, walletPublicKey: null, walletPrivateKey: null, currentWallet: null });
     } catch (e) {}
   },
 }));

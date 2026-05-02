@@ -5,13 +5,14 @@ import {
   FlatList, Image, ActivityIndicator, Platform, KeyboardAvoidingView
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { getSolBalance, getTokenAccounts, getTokenMarketPrice, getTokenBalance } from '../services/heliusService';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 const { width, height } = Dimensions.get('window');
 
@@ -139,7 +140,6 @@ export default function WalletScreen() {
         const addr = acc.publicKey;
         const solBal = await getSolBalance(true, addr) || 0;
         
-        // ***** جلب مباشر لتجنب مشاكل RPC *****
         let mecoAmount = 0, usdcAmount = 0, usdtAmount = 0;
         try { mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr); } catch(e) {}
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -147,7 +147,6 @@ export default function WalletScreen() {
         await new Promise(resolve => setTimeout(resolve, 300));
         try { usdtAmount = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, addr); } catch(e) {}
         
-        // بناء قائمة توكنات وهمية للتوافق
         const tokenAccounts = [];
         if (mecoAmount > 0) tokenAccounts.push({ mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', amount: mecoAmount });
         if (usdcAmount > 0) tokenAccounts.push({ mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount: usdcAmount });
@@ -186,7 +185,6 @@ export default function WalletScreen() {
     }
   }, [accountsModalVisible, accounts.length, fetchAccountUsdBalances]);
 
-  // باقي الدوال بدون تغيير (handleRefresh, copyAddress, ...)
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadWalletData(walletPublicKey);
@@ -196,7 +194,7 @@ export default function WalletScreen() {
   const copyAddress = async (addressToCopy = walletAddress) => {
     if (addressToCopy) {
       await Clipboard.setStringAsync(addressToCopy);
-      Alert.alert(t('success'), t('wallet_address_copied', 'تم نسخ العنوان بنجاح'));
+      Alert.alert(t('success'), t('wallet_address_copied'));
     }
   };
 
@@ -221,7 +219,7 @@ export default function WalletScreen() {
   const handleAddAccount = async () => {
     setAddingAccount(true);
     try {
-      const newAccount = await addAccount(`الحساب ${accounts.length + 1}`);
+      const newAccount = await addAccount(`${t('account')} ${accounts.length + 1}`);
       Alert.alert(t('success'), t('account_added', { name: newAccount.name }));
     } catch (error) {
       Alert.alert(t('error'), t('account_add_failed'));
@@ -249,6 +247,48 @@ export default function WalletScreen() {
       ]
     );
   };
+
+  // ========== المصادقة برمز الهاتف وتصدير المفتاح الخاص (نصوص مترجمة) ==========
+  const authenticateWithPhonePasscode = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: t('passcode_prompt'),
+        disableDeviceFallback: false,
+        fallbackLabel: t('use_phone_passcode'),
+      });
+      return result.success;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const handleExportPrivateKey = async (account) => {
+    const authSuccess = await authenticateWithPhonePasscode();
+    if (!authSuccess) {
+      Alert.alert(t('error'), t('auth_failed'));
+      return;
+    }
+
+    try {
+      const privateKey = await useAppStore.getState().getPrivateKeyForAccount(account.index);
+      if (!privateKey) {
+        Alert.alert(t('error'), t('private_key_not_found'));
+        return;
+      }
+
+      Alert.alert(
+        t('key_warning_title'),
+        t('key_warning_message', { key: privateKey }),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('copy_key'), onPress: () => { Clipboard.setStringAsync(privateKey); Alert.alert(t('success'), t('copied')); } },
+        ]
+      );
+    } catch (error) {
+      Alert.alert(t('error'), t('unexpected_error'));
+    }
+  };
+  // ====================================================================
 
   const renderRightActions = (asset) => (
     <TouchableOpacity style={[styles.rightAction, { backgroundColor: primaryColor }]} onPress={() => navigation.navigate('Send', { preselectedToken: asset.symbol })}>
@@ -306,7 +346,18 @@ export default function WalletScreen() {
           }}
         >
           <Ionicons name="pencil-outline" size={22} color="#FFF" />
-          <Text style={styles.actionText}>{t('edit', 'تعديل')}</Text>
+          <Text style={styles.actionText}>{t('edit')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.accountActionBtn, { backgroundColor: '#FFA500' }]}
+          onPress={() => {
+            if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
+            handleExportPrivateKey(item);
+          }}
+        >
+          <Ionicons name="key-outline" size={22} color="#FFF" />
+          <Text style={styles.actionText}>{t('export_key')}</Text>
         </TouchableOpacity>
 
         {!isActive && (
@@ -318,7 +369,7 @@ export default function WalletScreen() {
             }}
           >
             <Ionicons name="trash-outline" size={22} color="#FFF" />
-            <Text style={styles.actionText}>{t('delete', 'حذف')}</Text>
+            <Text style={styles.actionText}>{t('delete')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -335,7 +386,7 @@ export default function WalletScreen() {
         }}
       >
         <Ionicons name="copy-outline" size={22} color="#FFF" />
-        <Text style={styles.actionText}>{t('copy', 'نسخ')}</Text>
+        <Text style={styles.actionText}>{t('copy')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -427,7 +478,7 @@ export default function WalletScreen() {
         </Animated.View>
 
         <View style={styles.listContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins', 'الأصول')}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins')}</Text>
           <FlatList
             data={assets}
             renderItem={renderAssetItem}
@@ -460,13 +511,13 @@ export default function WalletScreen() {
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>
               <View style={styles.accountsModalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts', 'الحسابات')}</Text>
+                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts')}</Text>
                 <TouchableOpacity onPress={() => setAccountsModalVisible(false)}>
                   <Ionicons name="close" size={24} color={colors.text} />
                 </TouchableOpacity>
               </View>
               <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginBottom: 15 }}>
-                {t('swipe_hint', 'اسحب لليمين للتعديل، ولليسار لنسخ العنوان')}
+                {t('swipe_hint')}
               </Text>
 
               <GestureHandlerRootView style={{ flex: 1 }}>
@@ -489,9 +540,22 @@ export default function WalletScreen() {
                   <ActivityIndicator size="small" color={primaryColor} /> :
                   <>
                     <Ionicons name="add-circle-outline" size={22} color={primaryColor} />
-                    <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account', 'إضافة حساب')}</Text>
+                    <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text>
                   </>
                 }
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.addAccountButton, { borderColor: primaryColor, marginTop: 4, marginBottom: Platform.OS === 'ios' ? 10 : 0 }]}
+                onPress={() => {
+                  setAccountsModalVisible(false);
+                  navigation.navigate('ImportPrivateKey');
+                }}
+              >
+                <Ionicons name="key" size={22} color={primaryColor} />
+                <Text style={[styles.addAccountText, { color: primaryColor }]}>
+                  {t('import_private_key.title')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

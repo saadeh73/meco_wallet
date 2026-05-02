@@ -20,6 +20,7 @@ import { initWalletConnect, pairWalletConnect } from './services/walletConnectSe
 import HomeScreen from './screens/HomeScreen';
 import CreateWalletScreen from './screens/CreateWalletScreen';
 import ImportWalletScreen from './screens/ImportWalletScreen';
+import ImportPrivateKeyScreen from './screens/ImportPrivateKeyScreen';
 import WalletScreen from './screens/WalletScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReceiveScreen from './screens/ReceiveScreen';
@@ -147,11 +148,9 @@ export default function AppContainer() {
   useEffect(() => {
     const init = async () => {
       try {
-        // ✅ انتظار تحميل الحساب النشط من SecureStore
         const success = await useAppStore.getState().loadActiveAccount();
         
         if (success) {
-          // نجح تحميل الحساب النشط
           const hasHardware = await LocalAuthentication.hasHardwareAsync();
           const hasBiometrics = await LocalAuthentication.isEnrolledAsync();
           if (hasHardware && hasBiometrics) {
@@ -169,7 +168,6 @@ export default function AppContainer() {
           return;
         }
 
-        // التحقق من وجود محفظة قديمة
         const initialized = await SecureStore.getItemAsync('wallet_initialized');
         if (initialized === 'true') {
           const loadWallet = useAppStore.getState().loadWallet;
@@ -215,6 +213,10 @@ export default function AppContainer() {
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CreateWallet" component={CreateWalletScreen} options={{ title: t('create_wallet') }} />
         <Stack.Screen name="ImportWallet" component={ImportWalletScreen} options={{ title: t('import_wallet') }} />
+        
+        {/* ✅ شاشة استيراد المفتاح الخاص – العنوان ديناميكي من الشاشة نفسها */}
+        <Stack.Screen name="ImportPrivateKey" component={ImportPrivateKeyScreen} options={{}} />
+        
         <Stack.Screen name="BottomTabs" component={BottomTabs} options={{ headerShown: false }} />
         <Stack.Screen name="Send" component={SendScreen} options={{ title: t('send') }} />
         <Stack.Screen name="Receive" component={ReceiveScreen} options={{ title: t('receive') }} />
