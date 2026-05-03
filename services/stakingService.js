@@ -12,7 +12,7 @@ import { default as heliusService } from './heliusService';
 // ==================== الثوابت والعناوين ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
 const FEE_COLLECTOR_ADDRESS = 'FosXqkRpbRnvtn7D1995BYv4BFNgsTfXs8WXhVXCjQqZ';
-const STAKING_TREASURY = '8aqoFLJeTUF6zsRGibMUZPkT7KAWjCm8wVS2BduDsnCH'; 
+const STAKING_TREASURY = 'HQ5zpxqkELUXythSbvdRWombZ36SXFJVvTL8hpTH6wsq'; 
 const SERVICE_FEE_SOL = 0.0005;
 
 // ==================== حماية بيانات التليجرام ====================
