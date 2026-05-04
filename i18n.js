@@ -473,7 +473,7 @@ const resources = {
       },
 
       // ========== مفاتيح المصادقة وتصدير المفتاح (WalletScreen) ==========
-      export_key: "تصدير المفتاح",
+      export: "تصدير",
       passcode_prompt: "أدخل رمز الهاتف لعرض المفتاح الخاص",
       use_phone_passcode: "استخدام رمز الهاتف",
       auth_failed: "لم يتم التحقق من الهوية.",
@@ -993,7 +993,7 @@ const resources = {
       },
 
       // ========== Authentication & Key Export Keys (WalletScreen) ==========
-      export_key: "Export Key",
+      export: "Export",
       passcode_prompt: "Enter phone passcode to view private key",
       use_phone_passcode: "Use phone passcode",
       auth_failed: "Authentication failed.",

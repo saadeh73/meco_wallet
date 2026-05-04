@@ -357,7 +357,7 @@ export default function WalletScreen() {
           }}
         >
           <Ionicons name="key-outline" size={22} color="#FFF" />
-          <Text style={styles.actionText}>{t('export_key')}</Text>
+          <Text style={styles.actionText}>{t('export')}</Text>
         </TouchableOpacity>
 
         {!isActive && (
