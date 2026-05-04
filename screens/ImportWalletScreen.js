@@ -1,4 +1,4 @@
-// ImportWalletScreen.js - خوارزمية الاستكشاف المعمارية (مع دعم كامل للغات)
+// ImportWalletScreen.js - خوارزمية الاستكشاف المعمارية (مع دعم كامل للغات + Retry)
 
 import React, { useState } from 'react';
 import {
@@ -25,10 +25,25 @@ const OLD_PRIVATE_KEY = 'wallet_private_key';
 const OLD_PUBLIC_KEY = 'wallet_public_key';
 const OLD_MNEMONIC = 'wallet_mnemonic';
 
+// دالة إعادة المحاولة (Retry)
+const fetchWithRetry = async (fn, maxRetries = 3, delayMs = 1000) => {
+  for (let retry = 0; retry < maxRetries; retry++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (retry < maxRetries - 1) {
+        await new Promise(res => setTimeout(res, delayMs));
+      } else {
+        throw e;
+      }
+    }
+  }
+};
+
 export default function ImportWalletScreen() {
   const [mnemonic, setMnemonic] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-  const [discoveryStatus, setDiscoveryStatus] = useState(''); // لعرض حالة الاستكشاف
+  const [discoveryStatus, setDiscoveryStatus] = useState('');
   const navigation = useNavigation();
   const { t } = useTranslation();
   const theme = useAppStore(state => state.theme);
@@ -95,8 +110,19 @@ export default function ImportWalletScreen() {
           // تأخير بسيط لتجنب حظر الـ API
           if (i > 1) await new Promise(res => setTimeout(res, 400));
 
-          const solBal = await getSolBalance(true, pubKey).catch(() => 0);
-          const tokens = await getTokenAccounts(pubKey).catch(() => []);
+          // استخدام Retry للـ SOL Balance
+          const solBal = await fetchWithRetry(
+            () => getSolBalance(true, pubKey),
+            3,
+            1000
+          ).catch(() => 0);
+
+          // استخدام Retry للـ Token Accounts
+          const tokens = await fetchWithRetry(
+            () => getTokenAccounts(pubKey),
+            3,
+            1000
+          ).catch(() => []);
 
           if (solBal > 0 || tokens.length > 0) {
             // وجدنا حساباً مستخدماً!
@@ -112,7 +138,7 @@ export default function ImportWalletScreen() {
           }
         } catch (e) {
           console.warn(`Error scanning account ${i}:`, e);
-          break; // إذا فشل الاتصال، نتوقف ونسترد ما وجدناه فقط
+          break;
         }
       }
 
