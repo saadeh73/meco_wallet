@@ -1,4 +1,4 @@
-// store.js - النسخة النهائية مع دعم الترجمة للاسم الافتراضي
+// store.js - النسخة المحدثة بميزة دفتر العناوين (Address Book)
 
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
@@ -8,10 +8,11 @@ import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { derivePath } from 'ed25519-hd-key';
 import bs58 from 'bs58';
-import i18next from 'i18next'; // إضافة مكتبة الترجمة للحصول على النص المترجم
+import i18next from 'i18next';
 
 const ACCOUNTS_STORAGE_KEY = '@meco_accounts';
 const ACTIVE_ACCOUNT_INDEX_KEY = '@meco_active_account_index';
+const ADDRESS_BOOK_KEY = '@meco_address_book'; // مفتاح تخزين دفتر العناوين
 
 const OLD_PRIVATE_KEY = 'wallet_private_key';
 const OLD_PUBLIC_KEY = 'wallet_public_key';
@@ -54,6 +55,53 @@ export const useAppStore = create((set, get) => ({
   walletPrivateKey: null,
   currentWallet: null,
 
+  // ★★★ ميزة دفتر العناوين (Address Book) ★★★
+  addressBook: [],
+
+  loadAddressBook: async () => {
+    try {
+      const stored = await AsyncStorage.getItem(ADDRESS_BOOK_KEY);
+      if (stored) {
+        set({ addressBook: JSON.parse(stored) });
+      }
+    } catch (e) {
+      console.warn('Failed to load address book:', e.message);
+    }
+  },
+
+  saveAddressBook: async (addressBook) => {
+    try {
+      await AsyncStorage.setItem(ADDRESS_BOOK_KEY, JSON.stringify(addressBook));
+      set({ addressBook });
+    } catch (e) {
+      console.warn('Failed to save address book:', e.message);
+    }
+  },
+
+  saveAddress: async (name, address) => {
+    const { addressBook, saveAddressBook } = get();
+    // التحقق إذا كان الرابط موجوداً مسبقاً لمنع التكرار
+    const existingIndex = addressBook.findIndex(item => item.address === address);
+    
+    let newBook = [...addressBook];
+    if (existingIndex >= 0) {
+      newBook[existingIndex].name = name; // تحديث الاسم إذا كان الرابط موجوداً
+    } else {
+      newBook.push({ name, address, id: Date.now().toString() }); // إضافة جديد
+    }
+    
+    await saveAddressBook(newBook);
+    return true;
+  },
+
+  deleteAddress: async (address) => {
+    const { addressBook, saveAddressBook } = get();
+    const newBook = addressBook.filter(item => item.address !== address);
+    await saveAddressBook(newBook);
+    return true;
+  },
+  // ★★★ نهاية قسم دفتر العناوين ★★★
+
   loadAccounts: async () => {
     try {
       const stored = await AsyncStorage.getItem(ACCOUNTS_STORAGE_KEY);
@@ -78,7 +126,6 @@ export const useAppStore = create((set, get) => ({
       if (accounts.length === 0) {
         const oldPublicKey = await SecureStore.getItemAsync(OLD_PUBLIC_KEY);
         if (oldPublicKey) {
-          // استخدام i18next لجلب الترجمة الصحيحة
           const mainAccountName = i18next.t('main_account', 'الحساب الرئيسي');
           accounts = [{ index: 0, name: mainAccountName, publicKey: oldPublicKey, isLegacy: true }];
           set({ accounts });

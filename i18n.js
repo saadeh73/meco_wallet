@@ -83,16 +83,6 @@ const resources = {
       edit: 'تعديل',
       copy: 'نسخ',
 
-      // ====== مفاتيح سلة المحذوفات والحسابات المؤرشفة ======
-      archived_accounts: "المحافظ المحذوفة",
-      empty_trash: "سلة المهملات فارغة",
-      deleted_tag: "(محذوفة)",
-      account_restored: "تم استرجاع المحفظة بنجاح!",
-      restore_failed: "فشل الاسترجاع.",
-      permanent_delete_warning: "سيتم تدمير المحفظة نهائياً من الذاكرة ولن يمكن استرجاعها أبداً. تأكيد؟",
-      warning: "تحذير نهائي",
-      destroy: "تدمير",
-
       // ========== Web3 (WalletConnect) ==========
       web3: {
         disconnect_success: 'تم قطع الاتصال بنجاح.',
@@ -520,7 +510,15 @@ const resources = {
       scanning_accounts: "جاري استكشاف الحسابات المفقودة",
       finalizing_setup: "جاري إتمام الإعدادات...",
       accounts_found: "وجدنا",
-      accounts_linked: "حساب مرتبط بهذه المحفظة."
+      accounts_linked: "حساب مرتبط بهذه المحفظة.",
+
+      // ========== Address Book ==========
+      address_book: "دفتر العناوين",
+      no_saved_addresses: "لا توجد عناوين محفوظة",
+      save_address: "حفظ العنوان",
+      enter_address_name: "أدخل اسم المحفظة (مثال: محفظة أخي)",
+      address_saved: "تم حفظ العنوان بنجاح",
+      confirm_delete_address: "هل أنت متأكد من حذف هذا العنوان من الدفتر؟"
     }
   },
   en: {
@@ -602,16 +600,6 @@ const resources = {
       swipe_hint: 'Swipe left to edit, right to copy address',
       edit: 'Edit',
       copy: 'Copy',
-
-      // ====== Trash & Archived Accounts Keys ======
-      archived_accounts: "Archived Accounts",
-      empty_trash: "Trash is empty",
-      deleted_tag: "(Deleted)",
-      account_restored: "Account restored successfully!",
-      restore_failed: "Restore failed.",
-      permanent_delete_warning: "This account will be permanently destroyed from memory and cannot be recovered. Confirm?",
-      warning: "Final Warning",
-      destroy: "Destroy",
 
       // ========== Web3 (WalletConnect) keys ==========
       web3: {
@@ -1040,7 +1028,15 @@ const resources = {
       scanning_accounts: "Scanning for missing accounts",
       finalizing_setup: "Finalizing setup...",
       accounts_found: "We found",
-      accounts_linked: "account(s) linked to this wallet."
+      accounts_linked: "account(s) linked to this wallet.",
+
+      // ========== Address Book ==========
+      address_book: "Address Book",
+      no_saved_addresses: "No saved addresses",
+      save_address: "Save Address",
+      enter_address_name: "Enter wallet name (e.g. My Brother's Wallet)",
+      address_saved: "Address saved successfully",
+      confirm_delete_address: "Are you sure you want to delete this address?"
     }
   }
 };

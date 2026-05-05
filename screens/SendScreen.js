@@ -54,6 +54,12 @@ export default function SendScreen() {
   const isDark = theme === 'dark';
   const isMounted = useRef(true);
 
+  // جلب ميزات دفتر العناوين من الـ Store
+  const addressBook = useAppStore(state => state.addressBook);
+  const loadAddressBook = useAppStore(state => state.loadAddressBook);
+  const saveAddress = useAppStore(state => state.saveAddress);
+  const deleteAddress = useAppStore(state => state.deleteAddress);
+
   const activeAccount = useAppStore(state => {
     const accounts = state.accounts;
     const activeIndex = state.activeAccountIndex;
@@ -85,16 +91,27 @@ export default function SendScreen() {
     recipientHasTokenAccount: true,
   });
 
+  // حالات (States) دفتر العناوين
+  const [addressBookModalVisible, setAddressBookModalVisible] = useState(false);
+  const [saveAddressModalVisible, setSaveAddressModalVisible] = useState(false);
+  const [newAddressName, setNewAddressName] = useState('');
+
   const [balances, setBalances] = useState({ sol: 0, tokens: {}, lastUpdated: 0 });
   const [fadeAnim] = useState(new Animated.Value(0));
   const validationTimeoutRef = useRef(null);
   const tokenFetchInProgress = useRef(false);
+
+  // التحقق مما إذا كان الرابط المكتوب محفوظاً مسبقاً
+  const isRecipientSaved = useMemo(() => {
+    return addressBook.some(item => item.address === state.recipient.trim());
+  }, [state.recipient, addressBook]);
 
   useFocusEffect(
     useCallback(() => {
       if (activeAccount?.publicKey) {
         loadInitialBalance();
         updateNetworkFee();
+        loadAddressBook(); // تحميل الدفتر عند فتح الشاشة
       }
       return () => {
         if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current);
@@ -114,9 +131,7 @@ export default function SendScreen() {
   }, [route.params?.scannedAddress, route.params?.selectedAddress]);
 
   const currentToken = useMemo(() => CORE_TOKENS.find(t => t.symbol === state.currency) || CORE_TOKENS[0], [state.currency]);
-
   const totalFees = useMemo(() => state.networkFee + SERVICE_FEE_SOL, [state.networkFee]);
-
   const currentBalance = useMemo(() => {
     return state.currency === 'SOL' ? (balances.sol || 0) : (balances.tokens[state.currency] || 0);
   }, [state.currency, balances]);
@@ -358,6 +373,34 @@ export default function SendScreen() {
     if (text) setState(prev => ({ ...prev, recipient: text.trim() }));
   }, []);
 
+  // ★★★ دوال دفتر العناوين ★★★
+  const handleSaveAddressConfirm = async () => {
+    if (!newAddressName.trim()) {
+      Alert.alert(t('error', 'خطأ'), t('enter_address_name', 'الرجاء إدخال اسم للمحفظة'));
+      return;
+    }
+    await saveAddress(newAddressName.trim(), state.recipient.trim());
+    setSaveAddressModalVisible(false);
+    setNewAddressName('');
+    Alert.alert(t('success', 'نجاح'), t('address_saved', 'تم حفظ العنوان بنجاح'));
+  };
+
+  const handleSelectSavedAddress = (address) => {
+    setState(prev => ({ ...prev, recipient: address }));
+    setAddressBookModalVisible(false);
+  };
+
+  const handleDeleteSavedAddress = (address) => {
+    Alert.alert(
+      t('delete', 'حذف'),
+      t('confirm_delete_address', 'هل أنت متأكد من حذف هذا العنوان؟'),
+      [
+        { text: t('cancel', 'إلغاء'), style: 'cancel' },
+        { text: t('delete', 'حذف'), style: 'destructive', onPress: () => deleteAddress(address) }
+      ]
+    );
+  };
+
   useEffect(() => {
     isMounted.current = true;
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
@@ -440,12 +483,27 @@ export default function SendScreen() {
                 onChangeText={(text) => setState(prev => ({ ...prev, recipient: text }))}
               />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                
+                {/* أيقونة فتح دفتر العناوين */}
+                <TouchableOpacity onPress={() => setAddressBookModalVisible(true)}>
+                  <Ionicons name="book-outline" size={20} color={primaryColor} />
+                </TouchableOpacity>
+
+                {/* أيقونة حفظ العنوان (تظهر فقط إذا كان هناك رابط غير محفوظ) */}
+                {state.recipient.length >= 32 && !isRecipientSaved && (
+                  <TouchableOpacity onPress={() => setSaveAddressModalVisible(true)}>
+                    <Ionicons name="star-outline" size={20} color={colors.warning} />
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity onPress={handlePasteAddress}>
                   <Ionicons name="clipboard-outline" size={20} color={primaryColor} />
                 </TouchableOpacity>
+                
                 <TouchableOpacity onPress={() => navigation.navigate('QRScanner')}>
                   <Ionicons name="qr-code-outline" size={22} color={primaryColor} />
                 </TouchableOpacity>
+                
                 {state.recipient !== '' && (
                   <TouchableOpacity onPress={() => setState(prev => ({ ...prev, recipient: '' }))}>
                     <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
@@ -483,6 +541,7 @@ export default function SendScreen() {
         </Animated.View>
       </ScrollView>
 
+      {/* نافذة اختيار العملة (الأصلية) */}
       <Modal visible={state.modalVisible} transparent animationType="slide" onRequestClose={() => setState(prev => ({ ...prev, modalVisible: false }))}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
@@ -503,6 +562,76 @@ export default function SendScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ★★★ نافذة دفتر العناوين (المحفوظات) ★★★ */}
+      <Modal visible={addressBookModalVisible} transparent animationType="slide" onRequestClose={() => setAddressBookModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background, minHeight: '50%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('address_book', 'دفتر العناوين')}</Text>
+              <TouchableOpacity onPress={() => setAddressBookModalVisible(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+            </View>
+            {addressBook.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 20 }}>
+                <Ionicons name="book-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 10 }} />
+                <Text style={{ color: colors.textSecondary }}>{t('no_saved_addresses', 'لا توجد عناوين محفوظة')}</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={addressBook}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity 
+                    style={[styles.addressItem, { backgroundColor: colors.card }]}
+                    onPress={() => handleSelectSavedAddress(item.address)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.addressName, { color: colors.text }]}>{item.name}</Text>
+                      <Text style={[styles.addressText, { color: colors.textSecondary }]}>
+                        {item.address.slice(0, 8)}...{item.address.slice(-8)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleDeleteSavedAddress(item.address)} style={{ padding: 8 }}>
+                      <Ionicons name="trash-outline" size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ★★★ نافذة حفظ عنوان جديد ★★★ */}
+      <Modal visible={saveAddressModalVisible} transparent animationType="fade" onRequestClose={() => setSaveAddressModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayCenter}>
+          <View style={[styles.dialogContent, { backgroundColor: colors.card }]}>
+            <Text style={[styles.dialogTitle, { color: colors.text }]}>{t('save_address', 'حفظ العنوان')}</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 15, fontSize: 12 }}>
+              {state.recipient.slice(0, 10)}...{state.recipient.slice(-10)}
+            </Text>
+            
+            <TextInput
+              style={[styles.dialogInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
+              placeholder={t('enter_address_name', 'أدخل اسم المحفظة (مثال: محفظة أخي)')}
+              placeholderTextColor={colors.textSecondary}
+              value={newAddressName}
+              onChangeText={setNewAddressName}
+              autoFocus
+            />
+
+            <View style={styles.dialogButtons}>
+              <TouchableOpacity style={[styles.dialogBtn, { borderColor: colors.border, borderWidth: 1 }]} onPress={() => setSaveAddressModalVisible(false)}>
+                <Text style={{ color: colors.text }}>{t('cancel', 'إلغاء')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.dialogBtn, { backgroundColor: primaryColor }]} onPress={handleSaveAddressConfirm}>
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('save', 'حفظ')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </KeyboardAvoidingView>
   );
 }
@@ -534,7 +663,10 @@ const styles = StyleSheet.create({
   currencyLabel: { fontSize: 16, fontWeight: '500', marginLeft: 8 },
   sendButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 18, borderRadius: 16, gap: 8 },
   sendButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  
+  // Modals Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '70%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 18, fontWeight: '600' },
@@ -544,4 +676,16 @@ const styles = StyleSheet.create({
   tokenDetails: { flex: 1, marginLeft: 12 },
   tokenItemName: { fontSize: 16, fontWeight: '500' },
   tokenBalance: { fontSize: 12, marginTop: 2 },
+
+  // Address Book Styles
+  addressItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12, marginBottom: 10 },
+  addressName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  addressText: { fontSize: 12 },
+  
+  // Dialog Styles
+  dialogContent: { width: '100%', padding: 24, borderRadius: 20 },
+  dialogTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  dialogInput: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20 },
+  dialogButtons: { flexDirection: 'row', gap: 12 },
+  dialogBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
 });
