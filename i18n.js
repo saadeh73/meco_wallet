@@ -403,6 +403,7 @@ const resources = {
       no_transaction_id: 'لا يوجد رقم معاملة',
       cannot_open_link: 'لا يمكن فتح الرابط',
       unexpected_error: 'حدث خطأ غير متوقع',
+      summary: 'ملخص',
 
       // ========== BackupScreen ==========
       backup_wallet: "نسخ احتياطي للمحفظة",
@@ -921,7 +922,8 @@ const resources = {
       no_transaction_id: 'No transaction ID',
       cannot_open_link: 'Cannot open link',
       unexpected_error: 'Unexpected error occurred',
-
+      summary: 'Summary',
+       
       // ========== BackupScreen ==========
       backup_wallet: "Backup Wallet",
       backup_phrase: "Backup Phrase",

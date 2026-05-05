@@ -1,3 +1,4 @@
+// TransactionHistoryScreen.js - شاشة سجل المعاملات المحسنة
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator,
@@ -5,6 +6,7 @@ import {
   RefreshControl, Linking, Alert, Modal, ScrollView
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useNavigation } from '@react-navigation/native';
 import { useAppStore } from '../store';
 import { getTransactionHistory } from '../services/heliusService';
 import { getTransactionLog } from '../services/transactionLogger';
@@ -14,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 
 export default function TransactionHistoryScreen() {
+  const navigation = useNavigation();
   const { t } = useTranslation();
   const theme = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
@@ -27,18 +30,21 @@ export default function TransactionHistoryScreen() {
     textSecondary: isDark ? '#A0A0B0' : '#6B7280',
     border: isDark ? '#2A2A3E' : '#E5E7EB',
     success: '#10B981',
+    successLight: '#10B98120',
     error: '#EF4444',
+    errorLight: '#EF444420',
     warning: '#F59E0B',
+    warningLight: '#F59E0B20',
     info: '#3B82F6',
+    infoLight: '#3B82F620',
   }),[isDark]);
 
-  const[transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const[refreshing, setRefreshing] = useState(false);
-  const[selectedTx, setSelectedTx] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedTx, setSelectedTx] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  
-  const[activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('all');
 
   const [stats, setStats] = useState({
     sol: { totalSent: 0, totalReceived: 0, totalFees: 0, count: 0 },
@@ -50,7 +56,7 @@ export default function TransactionHistoryScreen() {
 
   useEffect(() => {
     loadTransactions();
-  },[]);
+  }, []);
 
   const withTimeout = (promise, ms = 30000) => {
     return Promise.race([
@@ -65,14 +71,14 @@ export default function TransactionHistoryScreen() {
     try {
       setLoading(true);
 
-      let localLog =[];
+      let localLog = [];
       try {
         localLog = await withTimeout(getTransactionLog(), 8000);
       } catch (e) {
         console.log('⚠️ Failed to load local log:', e.message);
       }
 
-      let onChain =[];
+      let onChain = [];
       try {
         const chainData = await withTimeout(getTransactionHistory(20), 30000);
         if (chainData && chainData.length > 0) {
@@ -87,7 +93,7 @@ export default function TransactionHistoryScreen() {
             amount: tx.amount,
             from: tx.from,
             to: tx.to,
-            token: tx.token, 
+            token: tx.token,
             currency: tx.token || 'SOL',
           }));
         }
@@ -213,24 +219,24 @@ export default function TransactionHistoryScreen() {
         const hours = Math.floor(diff / (60 * 60 * 1000));
         return t('hours_ago', { count: hours });
       }
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
       return t('unknown_date');
     }
   }, [t]);
 
   const formatAmount = useCallback((amount, token = 'SOL') => {
-    if (!amount) return '0 ' + token;
+    if (!amount) return `0 ${token}`;
     return `${amount.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${token}`;
-  },[]);
+  }, []);
 
   const getTransactionType = useCallback((tx) => {
-    if (tx.type === 'send') return { icon: 'arrow-up', color: colors.error, label: t('sent'), sign: '-' };
-    if (tx.type === 'receive') return { icon: 'arrow-down', color: colors.success, label: t('received'), sign: '+' };
-    if (tx.type === 'swap') return { icon: 'swap-horizontal', color: colors.info, label: t('swapped'), sign: '' };
-    if (tx.type === 'presale') return { icon: 'rocket', color: colors.warning, label: t('presale'), sign: '+' };
-    return { icon: 'receipt', color: colors.textSecondary, label: t('transaction'), sign: '' };
-  },[colors, t]);
+    if (tx.type === 'send') return { icon: 'arrow-up', color: colors.error, label: t('sent'), sign: '-', bg: colors.errorLight };
+    if (tx.type === 'receive') return { icon: 'arrow-down', color: colors.success, label: t('received'), sign: '+', bg: colors.successLight };
+    if (tx.type === 'swap') return { icon: 'swap-horizontal', color: colors.info, label: t('swapped'), sign: '⟷', bg: colors.infoLight };
+    if (tx.type === 'presale') return { icon: 'rocket', color: colors.warning, label: t('presale'), sign: '+', bg: colors.warningLight };
+    return { icon: 'receipt', color: colors.textSecondary, label: t('transaction'), sign: '', bg: colors.card };
+  }, [colors, t]);
 
   const formatDateTime = useCallback((timestamp, blockTime) => {
     try {
@@ -249,116 +255,157 @@ export default function TransactionHistoryScreen() {
     }
   }, [t]);
 
-  // ==================== التعديل الوحيد المطلوب ====================
   const getStatusInfo = useCallback((tx) => {
-    // 1. فشل صريح
     if (tx.err) {
-      return { color: colors.error, label: t('failed'), bg: colors.error + '20' };
+      return { color: colors.error, label: t('failed'), bg: colors.errorLight };
     }
-    
-    // 2. نجاح: وجود blockTime دليل قاطع على إدراج المعاملة في كتلة (نجاح مؤكد)
-    //    أو وجود حالة صريحة confirmed/finalized/success
     if (tx.blockTime || tx.status === 'confirmed' || tx.status === 'finalized' || tx.status === 'success') {
-      return { color: colors.success, label: t('confirmed'), bg: colors.success + '20' };
+      return { color: colors.success, label: t('confirmed'), bg: colors.successLight };
     }
-    
-    // 3. الحالات المتبقية (معاملات محلية أو قيد الانتظار)
-    return { color: colors.warning, label: t('pending'), bg: colors.warning + '20' };
+    return { color: colors.warning, label: t('pending'), bg: colors.warningLight };
   }, [colors, t]);
-  // ===============================================================
 
+  // ==================== بطاقات الإحصائيات المحسنة ====================
   const renderStats = () => {
-    const statsToShow =[];
+    const statsToShow = [];
     if (stats.sol.count > 0 || stats.sol.totalSent > 0 || stats.sol.totalReceived > 0) {
       statsToShow.push({ currency: 'SOL', sent: stats.sol.totalSent, received: stats.sol.totalReceived, count: stats.sol.count, color: primaryColor });
     }
-    if (stats.meco.count > 0) statsToShow.push({ currency: 'MECO', sent: stats.meco.totalSent, received: stats.meco.totalReceived, count: stats.meco.count, color: colors.warning });
-    if (stats.usdt.count > 0) statsToShow.push({ currency: 'USDT', sent: stats.usdt.totalSent, received: stats.usdt.totalReceived, count: stats.usdt.count, color: colors.success });
-    if (stats.usdc.count > 0) statsToShow.push({ currency: 'USDC', sent: stats.usdc.totalSent, received: stats.usdc.totalReceived, count: stats.usdc.count, color: colors.info });
+    if (stats.meco.count > 0) {
+      statsToShow.push({ currency: 'MECO', sent: stats.meco.totalSent, received: stats.meco.totalReceived, count: stats.meco.count, color: colors.warning });
+    }
+    if (stats.usdt.count > 0) {
+      statsToShow.push({ currency: 'USDT', sent: stats.usdt.totalSent, received: stats.usdt.totalReceived, count: stats.usdt.count, color: colors.success });
+    }
+    if (stats.usdc.count > 0) {
+      statsToShow.push({ currency: 'USDC', sent: stats.usdc.totalSent, received: stats.usdc.totalReceived, count: stats.usdc.count, color: colors.info });
+    }
 
     if (statsToShow.length === 0) return null;
 
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsContainer}>
-        {statsToShow.map((item, index) => (
-          <View key={index} style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.statIconBadge, { backgroundColor: item.color + '15' }]}>
-              <Text style={[styles.statCurrency, { color: item.color }]}>{item.currency}</Text>
+      <View style={styles.statsSection}>
+        <Text style={[styles.statsTitle, { color: colors.textSecondary }]}>{t('summary', 'ملخص')}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsContainer}>
+          {statsToShow.map((item, index) => (
+            <View key={index} style={[styles.statCard, { backgroundColor: colors.card, borderColor: item.color + '30' }]}>
+              <View style={[styles.statHeader, { backgroundColor: item.color + '15' }]}>
+                <Text style={[styles.statCurrency, { color: item.color }]}>{item.currency}</Text>
+                <View style={[styles.statCountBadge, { backgroundColor: item.color }]}>
+                  <Text style={styles.statCountText}>{item.count}</Text>
+                </View>
+              </View>
+
+              <View style={styles.statDetails}>
+                <View style={styles.statRow}>
+                  <View style={[styles.statArrow, { backgroundColor: colors.errorLight }]}>
+                    <Ionicons name="arrow-up" size={12} color={colors.error} />
+                  </View>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t('sent', 'مرسل')}</Text>
+                  <Text style={[styles.statValue, { color: colors.error }]}>{item.sent.toFixed(4)}</Text>
+                </View>
+
+                <View style={styles.statRow}>
+                  <View style={[styles.statArrow, { backgroundColor: colors.successLight }]}>
+                    <Ionicons name="arrow-down" size={12} color={colors.success} />
+                  </View>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t('received', 'مستلم')}</Text>
+                  <Text style={[styles.statValue, { color: colors.success }]}>{item.received.toFixed(4)}</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.statRow}>
-              <Ionicons name="arrow-up" size={14} color={colors.error} />
-              <Text style={[styles.statValue, { color: colors.text }]}>{item.sent.toFixed(2)}</Text>
-            </View>
-            <View style={styles.statRow}>
-              <Ionicons name="arrow-down" size={14} color={colors.success} />
-              <Text style={[styles.statValue, { color: colors.text }]}>{item.received.toFixed(2)}</Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     );
   };
+  // ===============================================================
 
+  // ==================== Modal التفاصيل المحسن ====================
   const renderTransactionModal = () => (
     <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+          <View style={styles.modalHandle} />
+
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>{t('transaction_details')}</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} style={{ padding: 4, backgroundColor: colors.background, borderRadius: 12 }}>
-              <Ionicons name="close" size={24} color={colors.textSecondary} />
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              style={[styles.closeButton, { backgroundColor: colors.background }]}
+            >
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {selectedTx && (
             <>
-              <View style={styles.modalTypeContainer}>
-                <View style={[styles.modalIcon, { backgroundColor: getTransactionType(selectedTx).color + '15' }]}>
-                  <Ionicons name={getTransactionType(selectedTx).icon} size={32} color={getTransactionType(selectedTx).color} />
+              <View style={[styles.modalTypeContainer, { backgroundColor: getTransactionType(selectedTx).bg }]}>
+                <View style={[styles.modalIconLarge, { backgroundColor: colors.card }]}>
+                  <Ionicons
+                    name={getTransactionType(selectedTx).icon}
+                    size={36}
+                    color={getTransactionType(selectedTx).color}
+                  />
                 </View>
-                <Text style={[styles.modalAmount, { color: colors.text }]}>
-                  {getTransactionType(selectedTx).sign} {formatAmount(selectedTx.amount, selectedTx.currency)}
-                </Text>
-                <Text style={[styles.modalType, { color: getTransactionType(selectedTx).color }]}>
+                <Text style={[styles.modalTypeLabel, { color: getTransactionType(selectedTx).color }]}>
                   {getTransactionType(selectedTx).label}
                 </Text>
+                <Text style={[styles.modalAmountLarge, { color: colors.text }]}>
+                  {getTransactionType(selectedTx).sign} {formatAmount(selectedTx.amount, selectedTx.currency)}
+                </Text>
               </View>
 
-              <View style={styles.modalDetails}>
-                {selectedTx.signature && (
-                  <View style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('signature')}</Text>
-                    <View style={styles.detailValueContainer}>
-                      <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
-                        {selectedTx.signature.slice(0, 16)}...{selectedTx.signature.slice(-4)}
-                      </Text>
-                      <TouchableOpacity onPress={() => copyToClipboard(selectedTx.signature, t('signature_copied'))}>
-                        <Ionicons name="copy-outline" size={18} color={primaryColor} />
+              <ScrollView style={styles.modalDetailsScroll} showsVerticalScrollIndicator={false}>
+                <View style={[styles.modalDetails, { backgroundColor: colors.background }]}>
+                  {selectedTx.signature && (
+                    <View style={styles.detailRow}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('signature', 'التوقيع')}</Text>
+                      <TouchableOpacity
+                        style={styles.detailValueContainer}
+                        onPress={() => copyToClipboard(selectedTx.signature, t('signature_copied'))}
+                      >
+                        <Text style={[styles.detailValue, { color: colors.text }]} numberOfLines={1}>
+                          {selectedTx.signature.slice(0, 12)}...{selectedTx.signature.slice(-4)}
+                        </Text>
+                        <Ionicons name="copy-outline" size={16} color={primaryColor} />
                       </TouchableOpacity>
                     </View>
-                  </View>
-                )}
+                  )}
 
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('time')}</Text>
-                  <Text style={[styles.detailValue, { color: colors.text }]}>
-                    {formatDateTime(selectedTx.timestamp, selectedTx.blockTime)}
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('status')}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusInfo(selectedTx).bg }]}>
-                    <Text style={{ color: getStatusInfo(selectedTx).color, fontWeight: 'bold', fontSize: 12 }}>
-                      {getStatusInfo(selectedTx).label}
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('time', 'الوقت')}</Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatDateTime(selectedTx.timestamp, selectedTx.blockTime)}
                     </Text>
                   </View>
-                </View>
-              </View>
 
-              <TouchableOpacity style={[styles.modalButton, { backgroundColor: primaryColor }]} onPress={() => openExplorer(selectedTx.signature)}>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('status', 'الحالة')}</Text>
+                    <View style={[styles.statusBadgeLarge, { backgroundColor: getStatusInfo(selectedTx).bg }]}>
+                      <Text style={{ color: getStatusInfo(selectedTx).color, fontWeight: 'bold', fontSize: 13 }}>
+                        {getStatusInfo(selectedTx).label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {selectedTx.fee > 0 && (
+                    <View style={styles.detailRow}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{t('fee', 'الرسوم')}</Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {selectedTx.fee} SOL
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </ScrollView>
+
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: primaryColor }]}
+                onPress={() => openExplorer(selectedTx.signature)}
+              >
                 <Ionicons name="open-outline" size={20} color="#FFF" />
-                <Text style={styles.modalButtonText}>{t('view_on_solscan')}</Text>
+                <Text style={styles.modalButtonText}>{t('view_on_solscan', 'عرض على Solscan')}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -366,8 +413,10 @@ export default function TransactionHistoryScreen() {
       </View>
     </Modal>
   );
+  // ===============================================================
 
-  const renderItem = ({ item }) => {
+  // ==================== عنصر المعاملة المحسن ====================
+  const renderItem = ({ item, index }) => {
     const txType = getTransactionType(item);
     const dateText = formatDate(item.timestamp, item.blockTime);
     const statusInfo = getStatusInfo(item);
@@ -375,103 +424,178 @@ export default function TransactionHistoryScreen() {
 
     return (
       <TouchableOpacity
-        style={[styles.itemContainer, { backgroundColor: colors.card }]}
+        style={[
+          styles.itemContainer,
+          { backgroundColor: colors.card },
+          index === 0 && { marginTop: 0 }
+        ]}
         onPress={() => { setSelectedTx(item); setModalVisible(true); }}
         activeOpacity={0.7}
         disabled={isPending}
       >
-        <View style={[styles.iconContainer, { backgroundColor: txType.color + '15' }]}>
-          <Ionicons name={txType.icon} size={24} color={txType.color} />
+        <View style={[styles.itemLeftSection, { backgroundColor: txType.bg }]}>
+          <Ionicons name={txType.icon} size={22} color={txType.color} />
         </View>
 
-        <View style={styles.detailsContainer}>
-          <View style={styles.row}>
-            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+        <View style={styles.itemContent}>
+          <View style={styles.itemTopRow}>
+            <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={1}>
               {txType.label}
             </Text>
             {item.amount && (
-              <Text style={[styles.amount, { color: txType.color }]}>
+              <Text style={[styles.itemAmount, { color: txType.color }]}>
                 {txType.sign} {formatAmount(item.amount, item.currency)}
               </Text>
             )}
           </View>
 
-          <View style={styles.row}>
-            <Text style={[styles.date, { color: colors.textSecondary }]}>{dateText}</Text>
-            <View style={styles.statusContainer}>
+          <View style={styles.itemBottomRow}>
+            <View style={styles.itemDateContainer}>
+              <Ionicons name="time-outline" size={12} color={colors.textSecondary} />
+              <Text style={[styles.itemDate, { color: colors.textSecondary }]}>{dateText}</Text>
+            </View>
+
+            <View style={[styles.itemStatusBadge, { backgroundColor: statusInfo.bg }]}>
               {isPending ? (
                 <ActivityIndicator size="small" color={colors.warning} />
               ) : (
-                <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
+                <Text style={[styles.itemStatusText, { color: statusInfo.color }]}>
+                  {statusInfo.label}
+                </Text>
               )}
             </View>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.itemArrow}
+          onPress={() => { setSelectedTx(item); setModalVisible(true); }}
+        >
+          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
+  // ===============================================================
+
+  // ==================== فلاتر محسنة ====================
+  const renderFilters = () => {
+    const filters = [
+      { key: 'all', label: t('all', 'الكل'), icon: 'apps', color: primaryColor },
+      { key: 'receive', label: t('received', 'مستلم'), icon: 'arrow-down', color: colors.success },
+      { key: 'send', label: t('sent', 'مرسل'), icon: 'arrow-up', color: colors.error },
+      { key: 'swap', label: t('swapped', 'مبادل'), icon: 'swap-horizontal', color: colors.info },
+    ];
+
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filtersContainer}
+      >
+        {filters.map((filter) => {
+          const isActive = activeFilter === filter.key;
+          return (
+            <TouchableOpacity
+              key={filter.key}
+              style={[
+                styles.filterChip,
+                isActive
+                  ? { backgroundColor: filter.color }
+                  : { backgroundColor: colors.card, borderColor: colors.border }
+              ]}
+              onPress={() => setActiveFilter(filter.key)}
+            >
+              <Ionicons
+                name={filter.icon}
+                size={14}
+                color={isActive ? '#FFF' : colors.textSecondary}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[
+                styles.filterText,
+                { color: isActive ? '#FFF' : colors.textSecondary }
+              ]}>
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+  // ===============================================================
 
   const filteredTransactions = transactions.filter(tx => {
     if (activeFilter === 'all') return true;
+    if (activeFilter === 'swap') return tx.type === 'swap';
     return tx.type === activeFilter;
   });
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>{t('transaction_history_title')}</Text>
-        <TouchableOpacity onPress={onRefresh} style={[styles.refreshBtn, { backgroundColor: colors.card }]}>
-          <Ionicons name="refresh" size={22} color={primaryColor} />
+      {/* Header محسن */}
+      <View style={[styles.header, { backgroundColor: colors.card }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={[styles.backButton, { backgroundColor: colors.background }]}
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
-      </View>
 
-      {!loading && transactions.length > 0 && renderStats()}
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          {t('transaction_history_title', 'سجل المعاملات')}
+        </Text>
 
-      <View style={styles.filtersWrapper}>
-        <TouchableOpacity 
-          style={[styles.filterChip, activeFilter === 'all' ? { backgroundColor: primaryColor } : { backgroundColor: colors.card }]}
-          onPress={() => setActiveFilter('all')}
+        <TouchableOpacity
+          onPress={onRefresh}
+          style={[styles.refreshBtn, { backgroundColor: colors.background }]}
         >
-          <Text style={[styles.filterText, { color: activeFilter === 'all' ? '#FFF' : colors.textSecondary }]}>{t('all', 'الكل')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterChip, activeFilter === 'receive' ? { backgroundColor: colors.success } : { backgroundColor: colors.card }]}
-          onPress={() => setActiveFilter('receive')}
-        >
-          <Ionicons name="arrow-down" size={14} color={activeFilter === 'receive' ? '#FFF' : colors.textSecondary} style={{marginRight: 4}}/>
-          <Text style={[styles.filterText, { color: activeFilter === 'receive' ? '#FFF' : colors.textSecondary }]}>{t('received', 'مستلم')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.filterChip, activeFilter === 'send' ? { backgroundColor: colors.error } : { backgroundColor: colors.card }]}
-          onPress={() => setActiveFilter('send')}
-        >
-          <Ionicons name="arrow-up" size={14} color={activeFilter === 'send' ? '#FFF' : colors.textSecondary} style={{marginRight: 4}}/>
-          <Text style={[styles.filterText, { color: activeFilter === 'send' ? '#FFF' : colors.textSecondary }]}>{t('sent', 'مرسل')}</Text>
+          <Ionicons name="refresh" size={20} color={primaryColor} />
         </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={primaryColor} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>{t('loading_transactions')}</Text>
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+            {t('loading_transactions', 'جاري تحميل المعاملات...')}
+          </Text>
         </View>
       ) : (
         <FlatList
           data={filteredTransactions}
           keyExtractor={(item, i) => item.signature || item.transactionSignature || `tx_${i}`}
+          ListHeaderComponent={() => (
+            <>
+              {!loading && transactions.length > 0 && renderStats()}
+              {renderFilters()}
+            </>
+          )}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={[styles.emptyIcon, { backgroundColor: colors.card }]}>
-                <Ionicons name="receipt-outline" size={48} color={colors.textSecondary + '50'} />
+                <Ionicons name="receipt-outline" size={56} color={colors.textSecondary + '40'} />
               </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('no_activity_yet')}</Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>{t('transactions_will_appear_here')}</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                {t('no_activity_yet', 'لا يوجد نشاط بعد')}
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                {t('transactions_will_appear_here', 'ستظهر المعاملات هنا')}
+              </Text>
             </View>
           }
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryColor} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={primaryColor}
+              colors={[primaryColor]}
+            />
+          }
         />
       )}
 
@@ -480,50 +604,372 @@ export default function TransactionHistoryScreen() {
   );
 }
 
+// ==================== الأنماط المحسنة ====================
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
-  headerTitle: { fontSize: 28, fontWeight: '800' },
-  refreshBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 2 },
-  statsContainer: { paddingHorizontal: 16, paddingBottom: 16, gap: 12 },
-  statCard: { width: 140, padding: 16, borderRadius: 20, borderWidth: 1, elevation: 2, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5 },
-  statIconBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 12 },
-  statCurrency: { fontSize: 14, fontWeight: '800' },
-  statRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  statValue: { fontSize: 15, fontWeight: '700' },
-  filtersWrapper: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, gap: 10 },
-  filterChip: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3 },
-  filterText: { fontSize: 13, fontWeight: '600' },
-  list: { paddingHorizontal: 20, paddingBottom: 100 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, fontSize: 14, fontWeight: '500' },
-  itemContainer: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  iconContainer: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  detailsContainer: { flex: 1 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  title: { fontSize: 16, fontWeight: '700' },
-  amount: { fontSize: 16, fontWeight: '700' },
-  date: { fontSize: 13, fontWeight: '500' },
-  statusContainer: { flexDirection: 'row', alignItems: 'center' },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 40 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  modalTitle: { fontSize: 22, fontWeight: '800' },
-  modalTypeContainer: { alignItems: 'center', marginBottom: 30 },
-  modalIcon: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  modalAmount: { fontSize: 32, fontWeight: '800', marginBottom: 8 },
-  modalType: { fontSize: 16, fontWeight: '600', letterSpacing: 1 },
-  modalDetails: { backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 20, padding: 16, marginBottom: 24 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
-  detailLabel: { fontSize: 15, fontWeight: '500' },
-  detailValueContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  detailValue: { fontSize: 15, fontWeight: '600' },
-  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  modalButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 20, gap: 10, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
-  modalButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-  emptyIcon: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10 },
-  emptyTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
-  emptySubtitle: { fontSize: 15, textAlign: 'center', paddingHorizontal: 40, lineHeight: 22 }
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    flex: 1,
+    textAlign: 'center',
+  },
+  refreshBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Stats Section
+  statsSection: {
+    paddingTop: 16,
+  },
+  statsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+    paddingHorizontal: 20,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  statsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  statCard: {
+    width: 160,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+  },
+  statHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  statCurrency: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  statCountBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  statCountText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statDetails: {
+    gap: 8,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statArrow: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Filters
+  filtersContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 10,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // List
+  list: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Transaction Item
+  itemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 20,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  itemLeftSection: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  itemContent: {
+    flex: 1,
+  },
+  itemTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  itemTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 8,
+  },
+  itemAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  itemBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  itemDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  itemDate: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  itemStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  itemStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  itemArrow: {
+    padding: 8,
+  },
+
+  // Empty State
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 80,
+  },
+  emptyIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 15,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 22,
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+    maxHeight: '80%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTypeContainer: {
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 24,
+    marginBottom: 24,
+  },
+  modalIconLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modalTypeLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  modalAmountLarge: {
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  modalDetailsScroll: {
+    maxHeight: 250,
+  },
+  modalDetails: {
+    borderRadius: 20,
+    padding: 8,
+    marginBottom: 24,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  detailLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  detailValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statusBadgeLarge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  modalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+    borderRadius: 20,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modalButtonText: {
+    color: '#FFF',
+    fontSize: 17,
+    fontWeight: '700',
+  },
 });
