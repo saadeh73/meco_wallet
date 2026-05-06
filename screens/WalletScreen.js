@@ -1,3 +1,4 @@
+// WalletScreen.js - محسن (مصحح) مع تأثير النسخ البصري
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
@@ -29,7 +30,6 @@ export default function WalletScreen() {
   const addAccount = useAppStore(state => state.addAccount);
   const renameAccount = useAppStore(state => state.renameAccount);
   const deleteAccount = useAppStore(state => state.deleteAccount);
-
   const walletPublicKey = useAppStore(state => state.walletPublicKey);
 
   const colors = {
@@ -42,7 +42,7 @@ export default function WalletScreen() {
     error: '#FF3B30'
   };
 
-  const [walletName, setWalletName] = useState(t('my_wallet') || 'My Wallet');
+  const [walletName, setWalletName] = useState('');
   const [walletAddress, setWalletAddress] = useState('');
   const [totalBalanceUSD, setTotalBalanceUSD] = useState(0);
   const [assets, setAssets] = useState([]);
@@ -50,18 +50,18 @@ export default function WalletScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [tempWalletName, setTempWalletName] = useState('');
   const [loadingInitial, setLoadingInitial] = useState(true);
-
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const [editingAccountIndex, setEditingAccountIndex] = useState(null);
-
   const [accountsModalVisible, setAccountsModalVisible] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
-
   const [accountUsdBalances, setAccountUsdBalances] = useState({});
   const [loadingAccountBalances, setLoadingAccountBalances] = useState(false);
+  // ✅ حالة جديدة لتأثير النسخ البصري
+  const [copyFeedback, setCopyFeedback] = useState(false);
 
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const slideAnim = useState(new Animated.Value(30))[0];
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
   const swipeableRefs = useRef({});
   const accountSwipeableRefs = useRef({});
 
@@ -69,6 +69,7 @@ export default function WalletScreen() {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, friction: 6, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -139,14 +140,14 @@ export default function WalletScreen() {
       try {
         const addr = acc.publicKey;
         const solBal = await getSolBalance(true, addr) || 0;
-        
+
         let mecoAmount = 0, usdcAmount = 0, usdtAmount = 0;
         try { mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr); } catch(e) {}
         await new Promise(resolve => setTimeout(resolve, 300));
         try { usdcAmount = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, addr); } catch(e) {}
         await new Promise(resolve => setTimeout(resolve, 300));
         try { usdtAmount = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, addr); } catch(e) {}
-        
+
         const tokenAccounts = [];
         if (mecoAmount > 0) tokenAccounts.push({ mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', amount: mecoAmount });
         if (usdcAmount > 0) tokenAccounts.push({ mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount: usdcAmount });
@@ -191,10 +192,13 @@ export default function WalletScreen() {
     setRefreshing(false);
   };
 
+  // ✅ دالة النسخ مع تأثير بصري (وميض أخضر)
   const copyAddress = async (addressToCopy = walletAddress) => {
     if (addressToCopy) {
       await Clipboard.setStringAsync(addressToCopy);
-      Alert.alert(t('success'), t('wallet_address_copied'));
+      // تأثير بصري: وميض أخضر على الأيقونة
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 600);
     }
   };
 
@@ -248,7 +252,6 @@ export default function WalletScreen() {
     );
   };
 
-  // ========== المصادقة برمز الهاتف وتصدير المفتاح الخاص (نصوص مترجمة) ==========
   const authenticateWithPhonePasscode = async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
@@ -288,55 +291,118 @@ export default function WalletScreen() {
       Alert.alert(t('error'), t('unexpected_error'));
     }
   };
-  // ====================================================================
 
-  const renderRightActions = (asset) => (
-    <TouchableOpacity style={[styles.rightAction, { backgroundColor: primaryColor }]} onPress={() => navigation.navigate('Send', { preselectedToken: asset.symbol })}>
-      <Ionicons name="paper-plane-outline" size={24} color="#FFF" />
-      <Text style={styles.actionText}>{t('send')}</Text>
-    </TouchableOpacity>
-  );
+  const renderLeftActions = (progress, dragX, asset) => {
+    const trans = dragX.interpolate({
+      inputRange: [0, 50, 100],
+      outputRange: [-80, -40, 0],
+      extrapolate: 'clamp',
+    });
+    return (
+      <Animated.View style={[styles.leftAction, { transform: [{ translateX: trans }] }]}>
+        <TouchableOpacity
+          style={[styles.swipeActionBtn, { backgroundColor: '#6366F1' }]}
+          onPress={() => {
+            swipeableRefs.current[asset.symbol]?.close();
+            navigation.navigate('Swap', { fromToken: asset.symbol });
+          }}
+        >
+          <Ionicons name="swap-horizontal" size={24} color="#FFF" />
+          <Text style={styles.swipeActionLabel}>{t('swap_title')}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
-  const renderLeftActions = (asset) => (
-    <TouchableOpacity style={[styles.leftAction, { backgroundColor: primaryColor + 'CC' }]} onPress={() => navigation.navigate('Swap', { fromToken: asset.symbol })}>
-      <Ionicons name="swap-horizontal-outline" size={24} color="#FFF" />
-      <Text style={styles.actionText}>{t('swap_title')}</Text>
-    </TouchableOpacity>
-  );
+  const renderRightActions = (progress, dragX, asset) => {
+    const trans = dragX.interpolate({
+      inputRange: [-100, -50, 0],
+      outputRange: [0, 40, 80],
+      extrapolate: 'clamp',
+    });
+    return (
+      <Animated.View style={[styles.rightAction, { transform: [{ translateX: trans }] }]}>
+        <TouchableOpacity
+          style={[styles.swipeActionBtn, { backgroundColor: '#10B981' }]}
+          onPress={() => {
+            swipeableRefs.current[asset.symbol]?.close();
+            navigation.navigate('Send', { preselectedToken: asset.symbol });
+          }}
+        >
+          <Ionicons name="paper-plane" size={24} color="#FFF" />
+          <Text style={styles.swipeActionLabel}>{t('send')}</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
-  const renderAssetItem = ({ item }) => (
-    <Swipeable
-      ref={ref => (swipeableRefs.current[item.symbol] = ref)}
-      friction={2}
-      leftThreshold={40} rightThreshold={40}
-      renderLeftActions={() => renderLeftActions(item)}
-      renderRightActions={() => renderRightActions(item)}
-      onSwipeableWillOpen={() => closeOtherSwipeables(item.symbol, swipeableRefs)}
-    >
-      <TouchableOpacity style={[styles.assetItem, { backgroundColor: colors.card }]} activeOpacity={0.7}>
-        <View style={styles.assetLeft}>
-          <Image source={{ uri: item.image }} style={styles.assetIcon} defaultSource={null} />
-          <View>
-            <Text style={[styles.assetSymbol, { color: colors.text }]}>{item.symbol}</Text>
-            <Text style={[styles.assetName, { color: colors.textSecondary }]}>{item.name}</Text>
-          </View>
-        </View>
-        <View style={styles.assetRight}>
-          <Text style={[styles.assetBalance, { color: colors.text }]}>{item.amount > 0 ? item.amount.toFixed(4) : '0'}</Text>
-          <Text style={[styles.assetValue, { color: colors.textSecondary }]}>
-            ${item.valueUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    </Swipeable>
-  );
+  const renderAssetItem = ({ item }) => {
+    const isPositive = item.valueUSD > 0;
+    const cardColor = colors.card;
+
+    return (
+      <Animated.View
+        style={[
+          styles.assetItemWrapper,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+          },
+        ]}
+      >
+        <Swipeable
+          ref={ref => (swipeableRefs.current[item.symbol] = ref)}
+          friction={3}
+          leftThreshold={60}
+          rightThreshold={60}
+          overshootLeft={false}
+          overshootRight={false}
+          renderLeftActions={(progress, dragX) => renderLeftActions(progress, dragX, item)}
+          renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+          onSwipeableWillOpen={() => closeOtherSwipeables(item.symbol, swipeableRefs)}
+        >
+          <TouchableOpacity
+            style={[styles.assetItem, { backgroundColor: cardColor }]}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TokenDetails', { token: item })}
+          >
+            <View style={styles.assetLeft}>
+              <View style={[styles.assetIconContainer, { backgroundColor: primaryColor + '15' }]}>
+                <Image source={{ uri: item.image }} style={styles.assetIcon} />
+                {item.symbol === 'SOL' && (
+                  <View style={[styles.badgeDot, { backgroundColor: '#14F195', borderColor: cardColor }]} />
+                )}
+              </View>
+              <View style={styles.assetInfo}>
+                <Text style={[styles.assetSymbol, { color: colors.text }]}>{item.symbol}</Text>
+                <Text style={[styles.assetName, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {item.name}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.assetRight}>
+              <Text style={[styles.assetBalance, { color: colors.text }]}>
+                {item.amount > 0 ? item.amount.toFixed(item.amount > 100 ? 2 : 4) : '0'}
+              </Text>
+              <Text style={[styles.assetValue, { color: isPositive ? colors.success : colors.textSecondary }]}>
+                {item.valueUSD > 0 ? `$${item.valueUSD.toFixed(2)}` : '\$0.00'}
+              </Text>
+            </View>
+            <View style={styles.assetChevron}>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </View>
+          </TouchableOpacity>
+        </Swipeable>
+      </Animated.View>
+    );
+  };
 
   const renderAccountLeftActions = (item) => {
     const isActive = item.index === activeAccountIndex;
     return (
       <View style={styles.accountActionContainer}>
         <TouchableOpacity
-          style={[styles.accountActionBtn, { backgroundColor: primaryColor, borderTopLeftRadius: 16, borderBottomLeftRadius: isActive ? 16 : 0 }]}
+          style={[styles.accountActionBtn, { backgroundColor: '#6366F1', borderTopLeftRadius: 16, borderBottomLeftRadius: isActive ? 16 : 0 }]}
           onPress={() => {
             if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
             setEditingAccountIndex(item.index);
@@ -345,18 +411,18 @@ export default function WalletScreen() {
             setTimeout(() => setModalVisible(true), 300);
           }}
         >
-          <Ionicons name="pencil-outline" size={22} color="#FFF" />
+          <Ionicons name="pencil" size={20} color="#FFF" />
           <Text style={styles.actionText}>{t('edit')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.accountActionBtn, { backgroundColor: '#FFA500' }]}
+          style={[styles.accountActionBtn, { backgroundColor: '#F59E0B' }]}
           onPress={() => {
             if (accountSwipeableRefs.current[item.index]?.close) accountSwipeableRefs.current[item.index].close();
             handleExportPrivateKey(item);
           }}
         >
-          <Ionicons name="key-outline" size={22} color="#FFF" />
+          <Ionicons name="key" size={20} color="#FFF" />
           <Text style={styles.actionText}>{t('export')}</Text>
         </TouchableOpacity>
 
@@ -368,7 +434,7 @@ export default function WalletScreen() {
               handleDeleteAccount(item);
             }}
           >
-            <Ionicons name="trash-outline" size={22} color="#FFF" />
+            <Ionicons name="trash" size={20} color="#FFF" />
             <Text style={styles.actionText}>{t('delete')}</Text>
           </TouchableOpacity>
         )}
@@ -385,7 +451,7 @@ export default function WalletScreen() {
           copyAddress(item.publicKey);
         }}
       >
-        <Ionicons name="copy-outline" size={22} color="#FFF" />
+        <Ionicons name="copy" size={20} color="#FFF" />
         <Text style={styles.actionText}>{t('copy')}</Text>
       </TouchableOpacity>
     </View>
@@ -415,7 +481,7 @@ export default function WalletScreen() {
             onPress={() => handleSwitchAccount(item.index)}
           >
             <View style={styles.accountInfo}>
-              <View style={[styles.accountAvatar, { backgroundColor: primaryColor + '20' }]}>
+              <View style={[styles.accountAvatar, { backgroundColor: isActive ? primaryColor + '30' : primaryColor + '15' }]}>
                 <Text style={[styles.accountAvatarText, { color: primaryColor }]}>{item.name.charAt(0).toUpperCase()}</Text>
               </View>
               <View style={{ flex: 1 }}>
@@ -445,78 +511,164 @@ export default function WalletScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Animated.View style={[styles.headerSection, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+
+        {/* Header Card */}
+        <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+
+          {/* Top Bar */}
           <View style={styles.topBar}>
-            <View style={styles.walletInfo}>
-              <Text style={[styles.walletName, { color: colors.text }]}>{walletName}</Text>
-              <TouchableOpacity onPress={() => setAccountsModalVisible(true)} style={styles.accountsButton}>
-                <Ionicons name="layers-outline" size={18} color={primaryColor} />
-              </TouchableOpacity>
+            <View style={styles.walletInfoRow}>
+              <View style={[styles.walletIconWrapper, { backgroundColor: primaryColor + '20' }]}>
+                <Ionicons name="wallet" size={22} color={primaryColor} />
+              </View>
+              <View>
+                <Text style={[styles.walletName, { color: colors.text }]}>{walletName}</Text>
+                <TouchableOpacity onPress={() => setAccountsModalVisible(true)} style={styles.accountsTrigger}>
+                  <Ionicons name="layers" size={14} color={primaryColor} />
+                  <Text style={[styles.accountsCount, { color: primaryColor }]}>{accounts.length} {t('accounts')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.headerIcons}>
-              <TouchableOpacity onPress={() => copyAddress()} style={[styles.iconBtn, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}>
-                <Ionicons name="copy-outline" size={20} color={primaryColor} />
-              </TouchableOpacity>
-            </View>
+
+            {/* زر النسخ مع تأثير الوميض الأخضر */}
+            <TouchableOpacity
+              onPress={() => copyAddress()}
+              style={[styles.copyButton, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
+            >
+              <Ionicons name="link" size={18} color={copyFeedback ? '#10B981' : primaryColor} />
+            </TouchableOpacity>
           </View>
-          <View style={styles.balanceContainer}>
+
+          {/* Balance Display */}
+          <View style={styles.balanceSection}>
             <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('total_balance')}</Text>
             {loadingInitial || isSwitchingAccount ? (
-              <ActivityIndicator color={primaryColor} size="large" style={{ marginTop: 10, height: 40 }} />
+              <View style={styles.loadingBalance}>
+                <ActivityIndicator color={primaryColor} />
+              </View>
             ) : (
-              <Text style={[styles.balanceAmount, { color: colors.text }]}>
-                ${totalBalanceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
+              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <Text style={[styles.balanceAmount, { color: colors.text }]}>
+                  ${totalBalanceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
+              </Animated.View>
             )}
           </View>
-          <View style={styles.actionsRow}>
-            <ActionButton icon="arrow-up" label={t('send')} onPress={() => navigation.navigate('Send')} colors={colors} primary={primaryColor} />
-            <ActionButton icon="arrow-down" label={t('receive')} onPress={() => navigation.navigate('Receive')} colors={colors} primary={primaryColor} />
-            <ActionButton icon="swap-horizontal" label={t('swap_title')} onPress={() => navigation.navigate('Swap')} colors={colors} primary={primaryColor} />
-            <ActionButton icon="leaf" label={t('staking.stake_tab')} onPress={() => navigation.navigate('Staking')} colors={colors} primary={primaryColor} />
+
+          {/* Action Buttons */}
+          <View style={styles.actionsGrid}>
+            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Send')}>
+              <View style={[styles.actionCircle, { backgroundColor: '#10B981' + '20' }]}>
+                <Ionicons name="arrow-up" size={24} color="#10B981" />
+              </View>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>{t('send')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Receive')}>
+              <View style={[styles.actionCircle, { backgroundColor: '#6366F1' + '20' }]}>
+                <Ionicons name="arrow-down" size={24} color="#6366F1" />
+              </View>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>{t('receive')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Swap')}>
+              <View style={[styles.actionCircle, { backgroundColor: '#F59E0B' + '20' }]}>
+                <Ionicons name="swap-horizontal" size={24} color="#F59E0B" />
+              </View>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>{t('swap_title')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Staking')}>
+              <View style={[styles.actionCircle, { backgroundColor: '#EC4899' + '20' }]}>
+                <Ionicons name="trending-up" size={24} color="#EC4899" />
+              </View>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>{t('staking.stake_tab')}</Text>
+            </TouchableOpacity>
           </View>
         </Animated.View>
 
-        <View style={styles.listContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('market_all_coins')}</Text>
+        {/* Assets List */}
+        <View style={styles.assetsSection}>
+          <View style={styles.assetsHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('wallet_your_assets')}</Text>
+            <TouchableOpacity onPress={handleRefresh} style={styles.refreshBtn}>
+              <Ionicons name="refresh" size={20} color={primaryColor} />
+            </TouchableOpacity>
+          </View>
+
           <FlatList
             data={assets}
             renderItem={renderAssetItem}
             keyExtractor={item => item.symbol}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ paddingBottom: 120 }}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryColor} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={primaryColor}
+                colors={['#6C63FF']}
+              />
+            }
             ListEmptyComponent={(!loadingInitial && !isSwitchingAccount) && (
               <View style={styles.emptyContainer}>
+                <Ionicons name="wallet-outline" size={48} color={colors.textSecondary} />
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('loading_market_data')}</Text>
               </View>
             )}
           />
         </View>
 
+        {/* Edit Wallet Modal */}
         <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => { setModalVisible(false); setEditingAccountIndex(null); }}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <Ionicons name="create-outline" size={28} color={primaryColor} />
+              </View>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('edit_wallet_name')}</Text>
-              <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]} value={tempWalletName} onChangeText={setTempWalletName} autoFocus />
+              <TextInput
+                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                value={tempWalletName}
+                onChangeText={setTempWalletName}
+                autoFocus
+                placeholder={t('enter_wallet_name')}
+                placeholderTextColor={colors.textSecondary}
+              />
               <View style={styles.modalButtons}>
-                <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => { setModalVisible(false); setEditingAccountIndex(null); }}><Text style={{ color: colors.text }}>{t('cancel')}</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: primaryColor, borderColor: primaryColor }]} onPress={saveWalletName}><Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('save')}</Text></TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { borderColor: colors.border }]}
+                  onPress={() => { setModalVisible(false); setEditingAccountIndex(null); }}
+                >
+                  <Text style={{ color: colors.text }}>{t('cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtnPrimary, { backgroundColor: primaryColor }]}
+                  onPress={saveWalletName}
+                >
+                  <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('save')}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* Accounts Modal */}
         <Modal visible={accountsModalVisible} transparent animationType="slide" onRequestClose={() => setAccountsModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHandle} />
+
               <View style={styles.accountsModalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts')}</Text>
-                <TouchableOpacity onPress={() => setAccountsModalVisible(false)}>
-                  <Ionicons name="close" size={24} color={colors.text} />
+                <View style={styles.accountsHeaderLeft}>
+                  <Ionicons name="layers" size={24} color={primaryColor} />
+                  <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts')}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setAccountsModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.background }]}>
+                  <Ionicons name="close" size={20} color={colors.text} />
                 </TouchableOpacity>
               </View>
-              <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginBottom: 15 }}>
+              <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>
                 {t('swipe_hint')}
               </Text>
 
@@ -531,32 +683,33 @@ export default function WalletScreen() {
                 />
               </GestureHandlerRootView>
 
-              <TouchableOpacity
-                style={[styles.addAccountButton, { borderColor: primaryColor, marginTop: 8, marginBottom: Platform.OS === 'ios' ? 10 : 0 }]}
-                onPress={handleAddAccount}
-                disabled={addingAccount}
-              >
-                {addingAccount ?
-                  <ActivityIndicator size="small" color={primaryColor} /> :
-                  <>
-                    <Ionicons name="add-circle-outline" size={22} color={primaryColor} />
-                    <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text>
-                  </>
-                }
-              </TouchableOpacity>
+              <View style={styles.addAccountButtons}>
+                <TouchableOpacity
+                  style={[styles.addAccountBtn, { borderColor: primaryColor }]}
+                  onPress={handleAddAccount}
+                  disabled={addingAccount}
+                >
+                  {addingAccount ? (
+                    <ActivityIndicator size="small" color={primaryColor} />
+                  ) : (
+                    <>
+                      <Ionicons name="add-circle" size={22} color={primaryColor} />
+                      <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.addAccountButton, { borderColor: primaryColor, marginTop: 4, marginBottom: Platform.OS === 'ios' ? 10 : 0 }]}
-                onPress={() => {
-                  setAccountsModalVisible(false);
-                  navigation.navigate('ImportPrivateKey');
-                }}
-              >
-                <Ionicons name="key" size={22} color={primaryColor} />
-                <Text style={[styles.addAccountText, { color: primaryColor }]}>
-                  {t('import_private_key.title')}
-                </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.addAccountBtn, { borderColor: primaryColor }]}
+                  onPress={() => {
+                    setAccountsModalVisible(false);
+                    navigation.navigate('ImportPrivateKey');
+                  }}
+                >
+                  <Ionicons name="key" size={22} color={primaryColor} />
+                  <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('import_private_key.title')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -565,70 +718,336 @@ export default function WalletScreen() {
   );
 }
 
-const ActionButton = ({ icon, label, onPress, colors, primary }) => (
-  <TouchableOpacity style={styles.actionBtnContainer} onPress={onPress}>
-    <View style={[styles.actionBtnCircle, { backgroundColor: primary + '15' }]}>
-      <Ionicons name={icon} size={22} color={primary} />
-    </View>
-    <Text style={[styles.actionBtnLabel, { color: colors.text }]}>{label}</Text>
-  </TouchableOpacity>
-);
-
+// ========== Styles ==========
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerSection: { borderBottomLeftRadius: 24, borderBottomRightRadius: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 5, zIndex: 10 },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  walletInfo: { flexDirection: 'row', alignItems: 'center' },
-  walletName: { fontSize: 18, fontWeight: '700' },
-  accountsButton: { marginLeft: 8, padding: 4 },
-  headerIcons: { flexDirection: 'row', gap: 10 },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  balanceContainer: { alignItems: 'center', marginBottom: 24 },
-  balanceLabel: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
-  balanceAmount: { fontSize: 36, fontWeight: '800' },
-  actionsRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', flexWrap: 'wrap', gap: 8 },
-  actionBtnContainer: { alignItems: 'center', gap: 8, width: 70 },
-  actionBtnCircle: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-  actionBtnLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  listContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  
-  leftAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 20, borderTopLeftRadius: 16, borderBottomLeftRadius: 16, marginBottom: 12 },
-  rightAction: { flex: 1, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 20, borderTopRightRadius: 16, borderBottomRightRadius: 16, marginBottom: 12 },
-  assetItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 12 },
-  assetLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  assetIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F0F0F0' },
-  assetSymbol: { fontSize: 16, fontWeight: '700' },
-  assetName: { fontSize: 12 },
-  assetRight: { alignItems: 'flex-end' },
-  assetBalance: { fontSize: 16, fontWeight: '600' },
-  assetValue: { fontSize: 12 },
-  
-  emptyContainer: { padding: 40, alignItems: 'center' },
-  emptyText: { marginTop: 10, fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalOverlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 20 },
-  modalContent: { width: '100%', padding: 24, borderRadius: 24, marginBottom: 20 },
-  accountsModalContent: {
-    width: '100%',
-    maxHeight: height * 0.8,
-    padding: 24,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+
+  headerCard: {
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 10,
+    zIndex: 10,
+  },
+
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  walletInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  walletIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  walletName: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  accountsTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  accountsCount: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  copyButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  balanceSection: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  balanceLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  balanceAmount: {
+    fontSize: 42,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  loadingBalance: {
+    height: 50,
+    justifyContent: 'center',
+  },
+
+  actionsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  actionBtn: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  actionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  assetsSection: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  assetsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  refreshBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  assetItemWrapper: {
+    marginBottom: 12,
+  },
+  assetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  assetLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 14,
+  },
+  assetIconContainer: {
+    position: 'relative',
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  assetIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  badgeDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+  },
+  assetInfo: {
     flex: 1,
   },
-  accountsModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
-  input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20 },
-  modalButtons: { flexDirection: 'row', gap: 12 },
-  modalBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
-  actionText: { color: '#FFF', fontSize: 14, fontWeight: '600', marginTop: 4 },
-  
+  assetSymbol: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  assetName: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  assetRight: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
+  },
+  assetBalance: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  assetValue: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  assetChevron: {
+    marginLeft: 8,
+  },
+
+  leftAction: {
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  rightAction: {
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  swipeActionBtn: {
+    width: 80,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 18,
+  },
+  swipeActionLabel: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    marginTop: 8,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalOverlayBottom: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    padding: 28,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  modalHeader: {
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalBtn: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+  },
+  modalBtnPrimary: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+
+  accountsModalContent: {
+    width: '100%',
+    maxHeight: height * 0.85,
+    padding: 24,
+    paddingTop: 12,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    flex: 1,
+  },
+  modalHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  accountsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  accountsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   accountItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     borderRadius: 16,
   },
@@ -649,15 +1068,24 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   accountAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  accountAvatarText: { fontSize: 18, fontWeight: '700' },
-  accountName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  accountAddress: { fontSize: 12 },
+  accountAvatarText: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  accountName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  accountAddress: {
+    fontSize: 12,
+  },
   accountBalanceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -666,8 +1094,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
-  closeModalBtn: { width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 },
-  addAccountButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 14, borderWidth: 1.5, borderRadius: 14, gap: 8 },
-  addAccountText: { fontSize: 16, fontWeight: '600' },
+
+  addAccountButtons: {
+    gap: 8,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128,128,128,0.2)',
+  },
+  addAccountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    gap: 10,
+    marginBottom: 4,
+  },
+  addAccountText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  actionText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+  },
 });

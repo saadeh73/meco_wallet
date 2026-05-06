@@ -114,6 +114,8 @@ const resources = {
       choose_language: 'اختر اللغة',
 
       // ========== WalletScreen ==========
+      wallet_your_assets: "أصولك",
+      wallet_export: "تصدير",
       my_wallet: 'محفظتي',
       total_balance: 'إجمالي الرصيد',
       copy_address: 'نسخ العنوان',
@@ -322,8 +324,15 @@ const resources = {
         },
         errors: {
           privateKeyNotFound: "لم يتم العثور على المفتاح الخاص بالمحفظة"
-        }
+        },
+        already_saved: "هذا العنوان محفوظ بالفعل",
+        address_saved: "تم حفظ العنوان بنجاح",
+        save_to_address_book: "حفظ في دفتر العناوين"
       },
+
+      // ========== AddressBook (مفاتيح عامة) ==========
+      address_book: "دفتر العناوين",
+      no_saved_addresses: "لا توجد عناوين محفوظة",
 
       // ========== ReceiveScreen ==========
       receive_crypto: "استلام عملة",
@@ -511,15 +520,7 @@ const resources = {
       scanning_accounts: "جاري استكشاف الحسابات المفقودة",
       finalizing_setup: "جاري إتمام الإعدادات...",
       accounts_found: "وجدنا",
-      accounts_linked: "حساب مرتبط بهذه المحفظة.",
-
-      // ========== Address Book ==========
-      address_book: "دفتر العناوين",
-      no_saved_addresses: "لا توجد عناوين محفوظة",
-      save_address: "حفظ العنوان",
-      enter_address_name: "أدخل اسم المحفظة (مثال: محفظة أخي)",
-      address_saved: "تم حفظ العنوان بنجاح",
-      confirm_delete_address: "هل أنت متأكد من حذف هذا العنوان من الدفتر؟"
+      accounts_linked: "حساب مرتبط بهذه المحفظة."
     }
   },
   en: {
@@ -633,6 +634,8 @@ const resources = {
       choose_language: 'Choose Language',
 
       // ========== WalletScreen ==========
+      wallet_your_assets: "Your Assets",
+      wallet_export: "Export",
       my_wallet: 'My Wallet',
       total_balance: 'Total Balance',
       copy_address: 'Copy Address',
@@ -841,8 +844,15 @@ const resources = {
         },
         errors: {
           privateKeyNotFound: "Private key not found"
-        }
+        },
+        already_saved: "This address is already saved",
+        address_saved: "Address saved successfully",
+        save_to_address_book: "Save to Address Book"
       },
+
+      // ========== AddressBook (general keys) ==========
+      address_book: "Address Book",
+      no_saved_addresses: "No saved addresses",
 
       // ========== ReceiveScreen ==========
       receive_crypto: "Receive Crypto",
@@ -923,7 +933,7 @@ const resources = {
       cannot_open_link: 'Cannot open link',
       unexpected_error: 'Unexpected error occurred',
       summary: 'Summary',
-       
+
       // ========== BackupScreen ==========
       backup_wallet: "Backup Wallet",
       backup_phrase: "Backup Phrase",
@@ -1030,15 +1040,7 @@ const resources = {
       scanning_accounts: "Scanning for missing accounts",
       finalizing_setup: "Finalizing setup...",
       accounts_found: "We found",
-      accounts_linked: "account(s) linked to this wallet.",
-
-      // ========== Address Book ==========
-      address_book: "Address Book",
-      no_saved_addresses: "No saved addresses",
-      save_address: "Save Address",
-      enter_address_name: "Enter wallet name (e.g. My Brother's Wallet)",
-      address_saved: "Address saved successfully",
-      confirm_delete_address: "Are you sure you want to delete this address?"
+      accounts_linked: "account(s) linked to this wallet."
     }
   }
 };

@@ -1,3 +1,4 @@
+// SendScreen.js
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
@@ -54,7 +55,6 @@ export default function SendScreen() {
   const isDark = theme === 'dark';
   const isMounted = useRef(true);
 
-  // جلب ميزات دفتر العناوين من الـ Store
   const addressBook = useAppStore(state => state.addressBook);
   const loadAddressBook = useAppStore(state => state.loadAddressBook);
   const saveAddress = useAppStore(state => state.saveAddress);
@@ -67,8 +67,8 @@ export default function SendScreen() {
   });
 
   const colors = {
-    background: isDark ? '#0A0A0F' : '#FFFFFF',
-    card: isDark ? '#1A1A2E' : '#F8FAFD',
+    background: isDark ? '#0A0A0F' : '#F8FAFD',
+    card: isDark ? '#1A1A2E' : '#FFFFFF',
     text: isDark ? '#FFFFFF' : '#1A1A2E',
     textSecondary: isDark ? '#A0A0B0' : '#6B7280',
     border: isDark ? '#2A2A3E' : '#E5E7EB',
@@ -91,7 +91,6 @@ export default function SendScreen() {
     recipientHasTokenAccount: true,
   });
 
-  // حالات (States) دفتر العناوين
   const [addressBookModalVisible, setAddressBookModalVisible] = useState(false);
   const [saveAddressModalVisible, setSaveAddressModalVisible] = useState(false);
   const [newAddressName, setNewAddressName] = useState('');
@@ -101,7 +100,6 @@ export default function SendScreen() {
   const validationTimeoutRef = useRef(null);
   const tokenFetchInProgress = useRef(false);
 
-  // التحقق مما إذا كان الرابط المكتوب محفوظاً مسبقاً
   const isRecipientSaved = useMemo(() => {
     return addressBook.some(item => item.address === state.recipient.trim());
   }, [state.recipient, addressBook]);
@@ -111,7 +109,7 @@ export default function SendScreen() {
       if (activeAccount?.publicKey) {
         loadInitialBalance();
         updateNetworkFee();
-        loadAddressBook(); // تحميل الدفتر عند فتح الشاشة
+        loadAddressBook();
       }
       return () => {
         if (validationTimeoutRef.current) clearTimeout(validationTimeoutRef.current);
@@ -249,14 +247,14 @@ export default function SendScreen() {
     const amountNum = parseFloat(state.amount) || 0;
     const recipient = state.recipient.trim();
 
-    if (!recipient) return Alert.alert(t('sendScreen.alerts.error'), t('sendScreen.warnings.enterRecipient'));
-    if (amountNum <= 0) return Alert.alert(t('sendScreen.alerts.error'), t('sendScreen.warnings.enterAmount'));
-    if (state.recipientExists === false) return Alert.alert(t('sendScreen.alerts.error'), t('sendScreen.alerts.invalidAddress'));
-    if (amountNum > currentBalance) return Alert.alert(t('sendScreen.alerts.error'), t('sendScreen.alerts.insufficientBalance'));
+    if (!recipient) return Alert.alert(t('error'), t('sendScreen.warnings.enterRecipient'));
+    if (amountNum <= 0) return Alert.alert(t('error'), t('sendScreen.warnings.enterAmount'));
+    if (state.recipientExists === false) return Alert.alert(t('error'), t('sendScreen.alerts.invalidAddress'));
+    if (amountNum > currentBalance) return Alert.alert(t('error'), t('sendScreen.alerts.insufficientBalance'));
 
     const requiredSol = state.currency === 'SOL' ? amountNum + totalFees : totalFees;
     if (balances.sol < requiredSol) {
-      return Alert.alert(t('sendScreen.alerts.error'), `${t('sendScreen.alerts.insufficientSolForFees')}\nReq: ${requiredSol.toFixed(5)} SOL`);
+      return Alert.alert(t('error'), `${t('sendScreen.alerts.insufficientSolForFees')}\nReq: ${requiredSol.toFixed(5)} SOL`);
     }
 
     setState(prev => ({ ...prev, loading: true }));
@@ -266,7 +264,7 @@ export default function SendScreen() {
     } catch (error) {
       console.error('Send Error:', error);
       if (!error.handled) {
-        Alert.alert(t('sendScreen.alerts.error'), error.message || 'Transaction failed');
+        Alert.alert(t('error'), error.message || 'Transaction failed');
       }
     } finally {
       if (isMounted.current) setState(prev => ({ ...prev, loading: false }));
@@ -373,16 +371,15 @@ export default function SendScreen() {
     if (text) setState(prev => ({ ...prev, recipient: text.trim() }));
   }, []);
 
-  // ★★★ دوال دفتر العناوين ★★★
   const handleSaveAddressConfirm = async () => {
     if (!newAddressName.trim()) {
-      Alert.alert(t('error', 'خطأ'), t('enter_address_name', 'الرجاء إدخال اسم للمحفظة'));
+      Alert.alert(t('error'), t('enter_address_name'));
       return;
     }
     await saveAddress(newAddressName.trim(), state.recipient.trim());
     setSaveAddressModalVisible(false);
     setNewAddressName('');
-    Alert.alert(t('success', 'نجاح'), t('address_saved', 'تم حفظ العنوان بنجاح'));
+    Alert.alert(t('success'), t('address_saved'));
   };
 
   const handleSelectSavedAddress = (address) => {
@@ -392,11 +389,11 @@ export default function SendScreen() {
 
   const handleDeleteSavedAddress = (address) => {
     Alert.alert(
-      t('delete', 'حذف'),
-      t('confirm_delete_address', 'هل أنت متأكد من حذف هذا العنوان؟'),
+      t('delete'),
+      t('confirm_delete_address'),
       [
-        { text: t('cancel', 'إلغاء'), style: 'cancel' },
-        { text: t('delete', 'حذف'), style: 'destructive', onPress: () => deleteAddress(address) }
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('delete'), style: 'destructive', onPress: () => deleteAddress(address) }
       ]
     );
   };
@@ -436,14 +433,28 @@ export default function SendScreen() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>{t('sendScreen.title')}</Text>
+          
+          {/* Header */}
+          <View style={[styles.headerNew, { backgroundColor: colors.card }]}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={[styles.backButton, { backgroundColor: colors.background }]}
+            >
+              <Ionicons name="arrow-back" size={22} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>{t('sendScreen.title')}</Text>
+            <TouchableOpacity
+              onPress={() => setAddressBookModalVisible(true)}
+              style={[styles.addressBookButton, { backgroundColor: colors.background }]}
+            >
+              <Ionicons name="book-outline" size={22} color={primaryColor} />
+            </TouchableOpacity>
           </View>
 
           {activeAccount && (
             <View style={[styles.activeAccountCard, { backgroundColor: colors.card }]}>
               <Text style={[styles.activeAccountLabel, { color: colors.textSecondary }]}>
-                {t('sendScreen.sendingFrom', 'الإرسال من')}
+                {t('sendScreen.sendingFrom')}
               </Text>
               <Text style={[styles.activeAccountName, { color: colors.text }]}>{activeAccount.name}</Text>
               <Text style={[styles.activeAccountAddress, { color: primaryColor }]}>
@@ -452,105 +463,144 @@ export default function SendScreen() {
             </View>
           )}
 
-          <View style={[styles.balanceCard, { backgroundColor: colors.card }]}>
-            <View style={styles.balanceHeader}>
+          {/* Balance Card */}
+          <View style={[styles.balanceCardNew, { backgroundColor: colors.card }]}>
+            <View style={styles.balanceHeaderRow}>
               <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('sendScreen.balance.available')}</Text>
-              <TouchableOpacity onPress={() => refreshCurrentTokenBalance(state.currency)}>
-                <Ionicons name="refresh-outline" size={20} color={primaryColor} />
-              </TouchableOpacity>
+              <View style={styles.balanceRightSection}>
+                <TouchableOpacity onPress={() => refreshCurrentTokenBalance(state.currency)} style={styles.refreshBtn}>
+                  <Ionicons name="refresh-outline" size={18} color={primaryColor} />
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={[styles.balanceAmount, { color: colors.text }]}>{currentBalance.toFixed(6)} {state.currency}</Text>
+            <View style={styles.balanceAmountRow}>
+              <Text style={[styles.balanceAmountMain, { color: colors.text }]}>
+                {currentBalance.toFixed(6)}
+              </Text>
+              <Text style={[styles.balanceCurrency, { color: primaryColor }]}>{state.currency}</Text>
+            </View>
           </View>
 
-          <TouchableOpacity style={[styles.tokenSelector, { backgroundColor: colors.card }]} onPress={handleOpenTokenModal}>
+          {/* Token Selector */}
+          <TouchableOpacity style={[styles.tokenSelectorNew, { backgroundColor: colors.card }]} onPress={handleOpenTokenModal}>
             <View style={styles.tokenSelectorContent}>
               <View style={styles.tokenInfo}>
                 <Image source={{ uri: currentToken.image }} style={styles.selectedTokenIcon} />
-                <Text style={[styles.tokenName, { color: colors.text }]}>{currentToken.symbol}</Text>
+                <View>
+                  <Text style={[styles.tokenName, { color: colors.text }]}>{currentToken.symbol}</Text>
+                  <Text style={[styles.tokenFullName, { color: colors.textSecondary }]}>{currentToken.name}</Text>
+                </View>
               </View>
-              <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
+              <View style={styles.tokenSelectorRight}>
+                <Text style={[styles.changeText, { color: primaryColor }]}>{t('change')}</Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </View>
             </View>
           </TouchableOpacity>
 
+          {/* Recipient Input */}
           <View style={styles.inputSection}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>{t('sendScreen.inputs.recipient')}</Text>
-            <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: state.recipientExists === false ? colors.error : colors.border }]}>
+            <View style={[styles.inputContainerNew, { backgroundColor: colors.inputBackground, borderColor: state.recipientExists === false ? colors.error : colors.border }]}>
+              <View style={[styles.inputIconContainer, { backgroundColor: primaryColor + '15' }]}>
+                <Ionicons name="wallet-outline" size={20} color={primaryColor} />
+              </View>
               <TextInput
-                style={[styles.input, { flex: 1 }]}
+                style={[styles.inputNew, { color: colors.text }]}
                 placeholder={t('sendScreen.inputs.recipientPlaceholder')}
                 placeholderTextColor={colors.textSecondary}
                 value={state.recipient}
                 onChangeText={(text) => setState(prev => ({ ...prev, recipient: text }))}
               />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                
-                {/* أيقونة فتح دفتر العناوين */}
-                <TouchableOpacity onPress={() => setAddressBookModalVisible(true)}>
-                  <Ionicons name="book-outline" size={20} color={primaryColor} />
-                </TouchableOpacity>
-
-                {/* أيقونة حفظ العنوان (تظهر فقط إذا كان هناك رابط غير محفوظ) */}
-                {state.recipient.length >= 32 && !isRecipientSaved && (
-                  <TouchableOpacity onPress={() => setSaveAddressModalVisible(true)}>
-                    <Ionicons name="star-outline" size={20} color={colors.warning} />
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity onPress={handlePasteAddress}>
+              <View style={styles.inputActions}>
+                <TouchableOpacity onPress={handlePasteAddress} style={styles.iconBtn}>
                   <Ionicons name="clipboard-outline" size={20} color={primaryColor} />
                 </TouchableOpacity>
-                
-                <TouchableOpacity onPress={() => navigation.navigate('QRScanner')}>
+                <TouchableOpacity onPress={() => navigation.navigate('QRScanner')} style={styles.iconBtn}>
                   <Ionicons name="qr-code-outline" size={22} color={primaryColor} />
                 </TouchableOpacity>
-                
-                {state.recipient !== '' && (
-                  <TouchableOpacity onPress={() => setState(prev => ({ ...prev, recipient: '' }))}>
+                {state.recipient.length >= 32 && (
+                  <TouchableOpacity onPress={() => setState(prev => ({ ...prev, recipient: '' }))} style={styles.iconBtn}>
                     <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
                 )}
               </View>
             </View>
+            
+            {/* Quick Save Bar */}
+            {state.recipient.length >= 32 && (
+              <View style={styles.quickActions}>
+                <TouchableOpacity 
+                  style={[styles.quickActionBtn, { backgroundColor: isRecipientSaved ? colors.success + '20' : colors.warning + '20' }]}
+                  onPress={() => {
+                    if (!isRecipientSaved) {
+                      setSaveAddressModalVisible(true);
+                    } else {
+                      Alert.alert(t('info'), t('sendScreen.already_saved'));
+                    }
+                  }}
+                >
+                  <Ionicons name={isRecipientSaved ? "bookmark" : "bookmark-outline"} size={18} color={isRecipientSaved ? colors.success : colors.warning} />
+                  <Text style={[styles.quickActionText, { color: isRecipientSaved ? colors.success : colors.warning }]}>
+                    {isRecipientSaved ? t('sendScreen.saved') : t('save')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
+          {/* Amount Input */}
           <View style={styles.inputSection}>
             <View style={styles.amountHeader}>
               <Text style={[styles.inputLabel, { color: colors.text }]}>{t('sendScreen.inputs.amount')}</Text>
-              <TouchableOpacity onPress={handleMaxAmount}><Text style={[styles.maxButton, { color: primaryColor }]}>{t('sendScreen.inputs.maxButton')}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleMaxAmount}>
+                <Text style={[styles.maxButton, { color: primaryColor }]}>{t('sendScreen.inputs.maxButton')}</Text>
+              </TouchableOpacity>
             </View>
-            <View style={[styles.inputContainer, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
+            <View style={[styles.inputContainerNew, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}>
               <TextInput
-                style={[styles.input, { color: colors.text }]}
+                style={[styles.inputNew, { color: colors.text, fontSize: 20, fontWeight: '600' }]}
                 placeholder="0.00"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={state.amount}
                 onChangeText={(text) => setState(prev => ({ ...prev, amount: text.replace(/,/g, '.') }))}
               />
-              <Text style={[styles.currencyLabel, { color: colors.textSecondary }]}>{state.currency}</Text>
+              <Text style={[styles.currencyLabelNew, { color: primaryColor }]}>{state.currency}</Text>
             </View>
           </View>
 
+          {/* Send Button */}
           <TouchableOpacity
-            style={[styles.sendButton, { backgroundColor: primaryColor, opacity: state.loading ? 0.7 : 1 }]}
+            style={[styles.sendButtonNew, { backgroundColor: primaryColor, opacity: state.loading ? 0.7 : 1 }]}
             onPress={handleSend}
             disabled={state.loading}
           >
-            {state.loading ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="paper-plane-outline" size={20} color="#FFF" /><Text style={styles.sendButtonText}>{t('sendScreen.buttons.send')}</Text></>}
+            {state.loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="paper-plane" size={22} color="#FFF" />
+                <Text style={styles.sendButtonText}>{t('sendScreen.buttons.send')}</Text>
+              </>
+            )}
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
 
-      {/* نافذة اختيار العملة (الأصلية) */}
+      {/* Token Modal */}
       <Modal visible={state.modalVisible} transparent animationType="slide" onRequestClose={() => setState(prev => ({ ...prev, modalVisible: false }))}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalContentNew, { backgroundColor: colors.background }]}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('sendScreen.modals.chooseCurrency')}</Text>
-              <TouchableOpacity onPress={() => setState(prev => ({ ...prev, modalVisible: false }))}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setState(prev => ({ ...prev, modalVisible: false }))} style={[styles.closeBtn, { backgroundColor: colors.card }]}>
+                <Ionicons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
             </View>
             {state.loadingTokens ? (
-              <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 20 }} />
+              <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 40 }} />
             ) : (
               <FlatList
                 data={CORE_TOKENS.filter(t => t.symbol === 'SOL' || t.symbol === 'MECO' || (balances.tokens[t.symbol] || 0) > 0)}
@@ -563,35 +613,53 @@ export default function SendScreen() {
         </View>
       </Modal>
 
-      {/* ★★★ نافذة دفتر العناوين (المحفوظات) ★★★ */}
+      {/* Address Book Modal */}
       <Modal visible={addressBookModalVisible} transparent animationType="slide" onRequestClose={() => setAddressBookModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background, minHeight: '50%' }]}>
+          <View style={[styles.modalContentNew, { backgroundColor: colors.background }]}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('address_book', 'دفتر العناوين')}</Text>
-              <TouchableOpacity onPress={() => setAddressBookModalVisible(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+              <View style={styles.modalHeaderLeft}>
+                <Ionicons name="book" size={24} color={primaryColor} />
+                <Text style={[styles.modalTitle, { color: colors.text }]}>{t('address_book')}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAddressBookModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.card }]}>
+                <Ionicons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
             </View>
+
             {addressBook.length === 0 ? (
-              <View style={{ alignItems: 'center', padding: 20 }}>
-                <Ionicons name="book-outline" size={48} color={colors.textSecondary} style={{ marginBottom: 10 }} />
-                <Text style={{ color: colors.textSecondary }}>{t('no_saved_addresses', 'لا توجد عناوين محفوظة')}</Text>
+              <View style={styles.emptyState}>
+                <View style={[styles.emptyIconContainer, { backgroundColor: colors.card }]}>
+                  <Ionicons name="book-outline" size={48} color={colors.textSecondary} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('no_saved_addresses')}</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  {t('save_address_hint')}
+                </Text>
               </View>
             ) : (
               <FlatList
                 data={addressBook}
                 keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.addressList}
                 renderItem={({ item }) => (
                   <TouchableOpacity 
-                    style={[styles.addressItem, { backgroundColor: colors.card }]}
+                    style={[styles.addressItemNew, { backgroundColor: colors.card }]}
                     onPress={() => handleSelectSavedAddress(item.address)}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.addressName, { color: colors.text }]}>{item.name}</Text>
-                      <Text style={[styles.addressText, { color: colors.textSecondary }]}>
-                        {item.address.slice(0, 8)}...{item.address.slice(-8)}
+                    <View style={[styles.addressAvatar, { backgroundColor: primaryColor + '15' }]}>
+                      <Text style={[styles.addressAvatarText, { color: primaryColor }]}>
+                        {item.name.charAt(0).toUpperCase()}
                       </Text>
                     </View>
-                    <TouchableOpacity onPress={() => handleDeleteSavedAddress(item.address)} style={{ padding: 8 }}>
+                    <View style={styles.addressInfo}>
+                      <Text style={[styles.addressNameNew, { color: colors.text }]}>{item.name}</Text>
+                      <Text style={[styles.addressTextNew, { color: colors.textSecondary }]}>
+                        {item.address.slice(0, 12)}...{item.address.slice(-6)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleDeleteSavedAddress(item.address)} style={styles.deleteBtn}>
                       <Ionicons name="trash-outline" size={20} color={colors.error} />
                     </TouchableOpacity>
                   </TouchableOpacity>
@@ -602,30 +670,46 @@ export default function SendScreen() {
         </View>
       </Modal>
 
-      {/* ★★★ نافذة حفظ عنوان جديد ★★★ */}
+      {/* Save Address Modal */}
       <Modal visible={saveAddressModalVisible} transparent animationType="fade" onRequestClose={() => setSaveAddressModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayCenter}>
-          <View style={[styles.dialogContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.dialogTitle, { color: colors.text }]}>{t('save_address', 'حفظ العنوان')}</Text>
-            <Text style={{ color: colors.textSecondary, marginBottom: 15, fontSize: 12 }}>
-              {state.recipient.slice(0, 10)}...{state.recipient.slice(-10)}
-            </Text>
+          <View style={[styles.saveDialogContent, { backgroundColor: colors.card }]}>
+            <View style={[styles.saveDialogIcon, { backgroundColor: colors.warning + '15' }]}>
+              <Ionicons name="bookmark" size={32} color={colors.warning} />
+            </View>
+            <Text style={[styles.saveDialogTitle, { color: colors.text }]}>{t('save_address')}</Text>
+            
+            <View style={[styles.addressPreview, { backgroundColor: colors.background }]}>
+              <Text style={[styles.addressPreviewText, { color: colors.textSecondary }]}>
+                {state.recipient.slice(0, 16)}...{state.recipient.slice(-10)}
+              </Text>
+            </View>
             
             <TextInput
-              style={[styles.dialogInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
-              placeholder={t('enter_address_name', 'أدخل اسم المحفظة (مثال: محفظة أخي)')}
+              style={[styles.saveDialogInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+              placeholder={t('enter_address_name')}
               placeholderTextColor={colors.textSecondary}
               value={newAddressName}
               onChangeText={setNewAddressName}
               autoFocus
             />
 
-            <View style={styles.dialogButtons}>
-              <TouchableOpacity style={[styles.dialogBtn, { borderColor: colors.border, borderWidth: 1 }]} onPress={() => setSaveAddressModalVisible(false)}>
-                <Text style={{ color: colors.text }}>{t('cancel', 'إلغاء')}</Text>
+            <View style={styles.saveDialogButtons}>
+              <TouchableOpacity 
+                style={[styles.saveDialogBtn, { borderColor: colors.border }]} 
+                onPress={() => {
+                  setSaveAddressModalVisible(false);
+                  setNewAddressName('');
+                }}
+              >
+                <Text style={{ color: colors.text }}>{t('cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.dialogBtn, { backgroundColor: primaryColor }]} onPress={handleSaveAddressConfirm}>
-                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('save', 'حفظ')}</Text>
+              <TouchableOpacity 
+                style={[styles.saveDialogBtnPrimary, { backgroundColor: primaryColor }]} 
+                onPress={handleSaveAddressConfirm}
+              >
+                <Ionicons name="bookmark" size={18} color="#FFF" />
+                <Text style={styles.saveDialogBtnText}>{t('save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -636,56 +720,277 @@ export default function SendScreen() {
   );
 }
 
+// Styles
 const styles = StyleSheet.create({
-  scrollContent: { flexGrow: 1, padding: 20 },
-  container: { flex: 1 },
-  header: { alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 24, fontWeight: '700' },
+  scrollContent: { flexGrow: 1 },
+  container: { flex: 1, padding: 20 },
+  headerNew: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    flex: 1,
+    textAlign: 'center',
+  },
+  addressBookButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  balanceCardNew: {
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 16,
+  },
+  balanceHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  balanceRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  refreshBtn: { padding: 6 },
+  balanceAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  balanceAmountMain: { fontSize: 36, fontWeight: '800' },
+  balanceCurrency: { fontSize: 18, fontWeight: '600' },
+  tokenSelectorNew: {
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+  },
+  tokenSelectorContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tokenSelectorRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  changeText: { fontSize: 14, fontWeight: '600' },
+  selectedTokenIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 12,
+  },
+  tokenFullName: { fontSize: 12, marginTop: 2 },
+  inputSection: { marginBottom: 16 },
+  inputLabel: { fontSize: 15, fontWeight: '600', marginBottom: 10 },
+  inputContainerNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingLeft: 12,
+    paddingRight: 8,
+    height: 58,
+  },
+  inputIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  inputNew: { fontSize: 16, flex: 1, height: '100%' },
+  inputActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  currencyLabelNew: { fontSize: 16, fontWeight: '700', marginLeft: 8 },
+  amountHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  maxButton: { fontSize: 14, fontWeight: '600' },
+  quickActions: { flexDirection: 'row', marginTop: 12, gap: 10 },
+  quickActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 6,
+  },
+  quickActionText: { fontSize: 13, fontWeight: '600' },
+  sendButtonNew: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 18,
+    borderRadius: 20,
+    gap: 10,
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  sendButtonText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalOverlayCenter: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContentNew: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    paddingTop: 12,
+    maxHeight: '75%',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800' },
+  tokenList: { paddingBottom: 20 },
+  tokenItem: {
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 2,
+  },
+  tokenItemContent: { flexDirection: 'row', alignItems: 'center' },
+  tokenIcon: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
+  tokenDetails: { flex: 1 },
+  tokenItemName: { fontSize: 16, fontWeight: '600' },
+  tokenBalance: { fontSize: 13, marginTop: 2 },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, textAlign: 'center' },
+  addressList: { paddingBottom: 20 },
+  addressItemNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 10,
+  },
+  addressAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  addressAvatarText: { fontSize: 20, fontWeight: '700' },
+  addressInfo: { flex: 1 },
+  addressNameNew: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  addressTextNew: { fontSize: 12 },
+  deleteBtn: { padding: 10 },
+  saveDialogContent: {
+    width: '100%',
+    padding: 28,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  saveDialogIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  saveDialogTitle: { fontSize: 22, fontWeight: '800', marginBottom: 16 },
+  addressPreview: { width: '100%', padding: 14, borderRadius: 12, marginBottom: 16 },
+  addressPreviewText: {
+    fontSize: 12,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  saveDialogInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  saveDialogButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  saveDialogBtn: { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1 },
+  saveDialogBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  saveDialogBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
   activeAccountCard: { borderRadius: 16, padding: 16, marginBottom: 16, alignItems: 'center' },
   activeAccountLabel: { fontSize: 12, marginBottom: 4 },
   activeAccountName: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   activeAccountAddress: { fontSize: 14, fontWeight: '500' },
-  balanceCard: { borderRadius: 16, padding: 20, marginBottom: 16 },
-  balanceHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  balanceAmount: { fontSize: 28, fontWeight: '700' },
-  tokenSelector: { borderRadius: 16, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tokenSelectorContent: { flexDirection: 'row', justifyContent: 'space-between', flex: 1, alignItems: 'center' },
   tokenInfo: { flexDirection: 'row', alignItems: 'center' },
-  selectedTokenIcon: { width: 32, height: 32, borderRadius: 16, marginRight: 12 },
-  tokenIcon: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
   tokenName: { fontSize: 16, fontWeight: '600' },
-  inputSection: { marginBottom: 16 },
-  inputLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 16, height: 56 },
-  input: { fontSize: 16, height: '100%', flex: 1 },
-  amountHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  maxButton: { fontSize: 14, fontWeight: '600' },
-  currencyLabel: { fontSize: 16, fontWeight: '500', marginLeft: 8 },
-  sendButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 18, borderRadius: 16, gap: 8 },
-  sendButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
-  
-  // Modals Styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '70%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: '600' },
-  tokenList: { paddingBottom: 20 },
-  tokenItem: { borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1 },
-  tokenItemContent: { flexDirection: 'row', alignItems: 'center' },
-  tokenDetails: { flex: 1, marginLeft: 12 },
-  tokenItemName: { fontSize: 16, fontWeight: '500' },
-  tokenBalance: { fontSize: 12, marginTop: 2 },
-
-  // Address Book Styles
-  addressItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12, marginBottom: 10 },
-  addressName: { fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  addressText: { fontSize: 12 },
-  
-  // Dialog Styles
-  dialogContent: { width: '100%', padding: 24, borderRadius: 20 },
-  dialogTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
-  dialogInput: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 20 },
-  dialogButtons: { flexDirection: 'row', gap: 12 },
-  dialogBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
 });
