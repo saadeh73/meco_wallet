@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
-  Modal, FlatList, Image, Linking
+  Modal, FlatList, Image, Linking, Animated, Dimensions, Platform
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as SwapAPI from '../services/swapService'; 
+import * as SwapAPI from '../services/swapService';
 import NetInfo from '@react-native-community/netinfo';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
-// ✅ جلب دوال الرصيد المباشرة
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
+
+const { width, height } = Dimensions.get('window');
 
 export default function SwapScreen({ route }) {
   const navigation = useNavigation();
@@ -21,6 +22,11 @@ export default function SwapScreen({ route }) {
   const theme = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const swapRotateAnim = useRef(new Animated.Value(0)).current;
 
   const activeAccount = useAppStore(state => {
     const accounts = state.accounts;
@@ -48,15 +54,23 @@ export default function SwapScreen({ route }) {
   const [isOffline, setIsOffline] = useState(false);
 
   const colors = {
-    background: isDark ? '#0A0A0F' : '#F8FAFD',
+    background: isDark ? '#0A0A0F' : '#F2F3F7',
     card: isDark ? '#1A1A2E' : '#FFFFFF',
     text: isDark ? '#FFFFFF' : '#1A1A2E',
-    textSecondary: isDark ? '#A0A0B0' : '#6B7280',
-    border: isDark ? '#2A2A3E' : '#E5E7EB',
-    success: '#10B981',
-    error: '#EF4444',
+    textSecondary: isDark ? '#A0A0B0' : '#8E8E93',
+    border: isDark ? '#2A2A3E' : '#E5E5EA',
+    success: '#4CAF50',
+    error: '#FF3B30',
     warning: '#F59E0B',
   };
+
+  // Entry animations
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -65,22 +79,18 @@ export default function SwapScreen({ route }) {
     return () => unsubscribe();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (activeAccount?.publicKey) {
-        loadBalances();
-      }
-    }, [activeAccount?.publicKey])
-  );
+  useEffect(() => {
+    if (activeAccount?.publicKey) {
+      loadBalances();
+    }
+  }, [activeAccount?.publicKey]);
 
-  // ✅ الدالة المصححة لجلب الأرصدة الحقيقية مباشرة من البلوكشين
   const loadBalances = async () => {
     if (!activeAccount?.publicKey) return;
     try {
       const pubKey = activeAccount.publicKey;
       const newBalances = {};
 
-      // جلب رصيد الـ SOL أولاً
       try {
         const solBal = await getSolBalance(true, pubKey);
         newBalances['SOL'] = solBal || 0;
@@ -88,7 +98,6 @@ export default function SwapScreen({ route }) {
         newBalances['SOL'] = 0;
       }
 
-      // جلب أرصدة باقي التوكنز
       for (const token of CORE_TOKENS) {
         if (!token.swapAvailable || token.symbol === 'SOL') continue;
         try {
@@ -98,10 +107,10 @@ export default function SwapScreen({ route }) {
           newBalances[token.symbol] = 0;
         }
       }
-      
+
       setBalances(newBalances);
     } catch (error) {
-      console.error('Error loading balances in SwapScreen:', error);
+      console.error('Error loading balances:', error);
     }
   };
 
@@ -143,7 +152,7 @@ export default function SwapScreen({ route }) {
   };
 
   useEffect(() => {
-    const timer = setTimeout(fetchSwapRate, 800);
+    const timer = setTimeout(fetchSwapRate, 600);
     return () => clearTimeout(timer);
   }, [fromAmount, fromToken, toToken, t]);
 
@@ -163,8 +172,8 @@ export default function SwapScreen({ route }) {
       return;
     }
 
-    const isMecoInvolved = fromToken.symbol === 'MECO' || toToken.symbol === 'MECO';
-    const slippageBps = isMecoInvolved ? 300 : 100;
+    // 1% slippage for all tokens
+    const slippageBps = 100;
 
     Alert.alert(
       t('swap_confirm'),
@@ -216,15 +225,21 @@ export default function SwapScreen({ route }) {
       Alert.alert(t('error'), t('swap_same_token'));
       return;
     }
-    
+
+    // Animate swap button
+    Animated.sequence([
+      Animated.timing(swapRotateAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(swapRotateAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+
     const tempFrom = fromToken;
     const tempTo = toToken;
-    
+
     setFromAmount('');
     setToAmount('');
     setRate(null);
     setPriceImpact(0);
-    
+
     setFromToken(tempTo);
     setToToken(tempFrom);
   };
@@ -237,8 +252,14 @@ export default function SwapScreen({ route }) {
   const copyMintAddress = (mint) => {
     if (!mint) return;
     Clipboard.setStringAsync(mint);
-    Alert.alert(t('copied'), t('copied_to_clipboard'));
+    Alert.alert(t('success'), t('copied_to_clipboard'));
   };
+
+  // Animated swap button rotation
+  const rotateInterpolate = swapRotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
 
   const renderTokenModal = (visible, onClose, onSelect, selectedToken) => {
     return (
@@ -248,7 +269,7 @@ export default function SwapScreen({ route }) {
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('select_token')}</Text>
               <TouchableOpacity onPress={onClose}>
-                <Ionicons name="close" size={24} color={colors.text} />
+                <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <FlatList
@@ -259,14 +280,21 @@ export default function SwapScreen({ route }) {
                   style={[styles.tokenItem, { borderBottomColor: colors.border }]}
                   onPress={() => { onSelect(item); onClose(); }}
                 >
-                  <Image source={{ uri: item.image }} style={styles.tokenIcon} />
+                  <View style={[styles.tokenIconWrapper, { backgroundColor: primaryColor + '15' }]}>
+                    <Image source={{ uri: item.image }} style={styles.tokenIcon} />
+                  </View>
                   <View style={styles.tokenInfo}>
                     <Text style={[styles.tokenSymbol, { color: colors.text }]}>{item.symbol}</Text>
                     <Text style={[styles.tokenName, { color: colors.textSecondary }]}>{item.name}</Text>
                   </View>
-                  {item.symbol === selectedToken.symbol && (
-                    <Ionicons name="checkmark-circle" size={24} color={primaryColor} />
-                  )}
+                  <View style={styles.tokenBalanceWrapper}>
+                    <Text style={[styles.tokenBalance, { color: colors.text }]}>
+                      {balances[item.symbol]?.toFixed(4) || '0.0000'}
+                    </Text>
+                    {item.symbol === selectedToken.symbol && (
+                      <Ionicons name="checkmark-circle" size={22} color={primaryColor} />
+                    )}
+                  </View>
                 </TouchableOpacity>
               )}
             />
@@ -280,166 +308,210 @@ export default function SwapScreen({ route }) {
     if (!error) return null;
     const isNetworkError = error.includes(t('network_error'));
     return (
-      <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
+      <Animated.View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
         <Ionicons name="warning" size={20} color={colors.error} />
         <Text style={[styles.errorText, { color: colors.error }]}>{error}</Text>
         {isNetworkError && (
           <TouchableOpacity onPress={fetchSwapRate} style={styles.retryButton}>
-            <Ionicons name="refresh" size={18} color={colors.error} />
+            <Ionicons name="refresh" size={20} color={colors.error} />
           </TouchableOpacity>
         )}
-      </View>
+      </Animated.View>
     );
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-
-        <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
-
-        {activeAccount && (
-          <View style={[styles.activeAccountCard, { backgroundColor: colors.card }]}>
-            <Text style={[styles.activeAccountLabel, { color: colors.textSecondary }]}>
-              {t('swapping_from')}
-            </Text>
-            <Text style={[styles.activeAccountName, { color: colors.text }]}>{activeAccount.name}</Text>
-            <Text style={[styles.activeAccountAddress, { color: primaryColor }]}>
-              {activeAccount.publicKey.slice(0, 8)}...{activeAccount.publicKey.slice(-8)}
-            </Text>
-          </View>
-        )}
-
-        {isOffline && (
-          <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
-            <Ionicons name="cloud-offline" size={16} color={colors.warning} />
-            <Text style={[styles.offlineText, { color: colors.warning }]}>
-              {t('offline_mode')}
-            </Text>
-          </View>
-        )}
-
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{t('swap_from')}</Text>
-            <TouchableOpacity onPress={useMaxBalance}>
-              <Text style={[styles.maxButton, { color: primaryColor }]}>{t('swap_max')}</Text>
+      <Animated.View style={[styles.mainContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.headerSection}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
-          </View>
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, { color: colors.text }]}
-              placeholder="0.00"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="numeric"
-              value={fromAmount}
-              onChangeText={setFromAmount}
-            />
-            <TouchableOpacity
-              style={[styles.tokenSelector, { borderColor: colors.border }]}
-              onPress={() => setFromModalVisible(true)}
-            >
-              <Image source={{ uri: fromToken.image }} style={styles.selectorIcon} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>{fromToken.symbol}</Text>
-              <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-          <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
-            {t('swap_balance')}: {balances[fromToken.symbol]?.toFixed(4) || '0.0000'} {fromToken.symbol}
-          </Text>
-        </View>
-
-        <TouchableOpacity onPress={swapTokens} style={styles.swapButton}>
-          <View style={[styles.swapButtonCircle, { backgroundColor: colors.card }]}>
-            <Ionicons name="swap-vertical" size={24} color={primaryColor} />
-          </View>
-        </TouchableOpacity>
-
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{t('swap_to')}</Text>
-            <TouchableOpacity onPress={() => copyMintAddress(toToken.mint)}>
-              <Ionicons name="copy-outline" size={18} color={primaryColor} />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, { color: colors.text }]}
-              placeholder="0.00"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="numeric"
-              value={toAmount}
-              editable={false}
-            />
-            <TouchableOpacity
-              style={[styles.tokenSelector, { borderColor: colors.border }]}
-              onPress={() => setToModalVisible(true)}
-            >
-              <Image source={{ uri: toToken.image }} style={styles.selectorIcon} />
-              <Text style={[styles.selectorText, { color: colors.text }]}>{toToken.symbol}</Text>
-              <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {quoteLoading && (
-          <View style={[styles.loadingQuote, { backgroundColor: colors.card }]}>
-            <ActivityIndicator size="small" color={primaryColor} />
-            <Text style={[styles.loadingQuoteText, { color: colors.textSecondary }]}>{t('swap_loading_quote')}</Text>
-          </View>
-        )}
-
-        {rate && !quoteLoading && (
-          <View style={[styles.rateCard, { backgroundColor: colors.card }]}>
-            <View style={styles.rateRow}>
-              <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('swap_rate')}</Text>
-              <Text style={[styles.rateValue, { color: colors.text }]}>
-                1 {fromToken.symbol} = {rate.toFixed(6)} {toToken.symbol}
-              </Text>
+            <View style={styles.headerTitle}>
+              <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
             </View>
-            {priceImpact > 0 && (
-              <View style={styles.rateRow}>
-                <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>Price Impact</Text>
-                <Text style={[styles.rateValue, { color: priceImpact > 5 ? colors.error : colors.success }]}>
-                  {priceImpact.toFixed(2)}%
+          </View>
+
+          {/* Active Account Card */}
+          {activeAccount && (
+            <Animated.View style={[styles.accountCard, { backgroundColor: colors.card, opacity: fadeAnim }]}>
+              <View style={[styles.accountIconWrapper, { backgroundColor: primaryColor + '20' }]}>
+                <Ionicons name="wallet" size={20} color={primaryColor} />
+              </View>
+              <View style={styles.accountInfo}>
+                <Text style={[styles.accountName, { color: colors.text }]}>{activeAccount.name}</Text>
+                <Text style={[styles.accountAddress, { color: primaryColor }]}>
+                  {activeAccount.publicKey.slice(0, 6)}...{activeAccount.publicKey.slice(-4)}
                 </Text>
               </View>
-            )}
-            <View style={styles.rateRow}>
-              <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('swap_receive')}</Text>
-              <Text style={[styles.rateValue, { color: colors.success, fontWeight: '600' }]}>
-                {toAmount} {toToken.symbol}
+              <TouchableOpacity onPress={() => copyMintAddress(activeAccount.publicKey)} style={styles.copyBtn}>
+                <Ionicons name="copy-outline" size={18} color={primaryColor} />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {/* Offline Banner */}
+          {isOffline && (
+            <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
+              <Ionicons name="cloud-offline" size={18} color={colors.warning} />
+              <Text style={[styles.offlineText, { color: colors.warning }]}>
+                {t('offline_mode')}
+              </Text>
+            </View>
+          )}
+
+          {/* From Card */}
+          <View style={[styles.tokenCard, { backgroundColor: colors.card }]}>
+            <View style={styles.cardTopRow}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{t('swap_from')}</Text>
+              <TouchableOpacity onPress={useMaxBalance} style={[styles.maxButton, { backgroundColor: primaryColor + '15' }]}>
+                <Text style={[styles.maxButtonText, { color: primaryColor }]}>{t('swap_max')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.tokenRow}>
+              <TextInput
+                style={[styles.amountInput, { color: colors.text }]}
+                placeholder="0.00"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="numeric"
+                value={fromAmount}
+                onChangeText={setFromAmount}
+              />
+              <TouchableOpacity
+                style={[styles.tokenSelector, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
+                onPress={() => setFromModalVisible(true)}
+              >
+                <Image source={{ uri: fromToken.image }} style={styles.tokenImage} />
+                <Text style={[styles.tokenSymbol, { color: colors.text }]}>{fromToken.symbol}</Text>
+                <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.balanceRow}>
+              <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>
+                {t('swap_balance')}:
+              </Text>
+              <Text style={[styles.balanceValue, { color: colors.text }]}>
+                {balances[fromToken.symbol]?.toFixed(4) || '0.0000'} {fromToken.symbol}
               </Text>
             </View>
           </View>
-        )}
 
-        {renderError()}
+          {/* Swap Button */}
+          <View style={styles.swapButtonWrapper}>
+            <TouchableOpacity
+              onPress={swapTokens}
+              style={[styles.swapButton, { backgroundColor: colors.card }]}
+              activeOpacity={0.8}
+            >
+              <Animated.View style={{ transform: [{ rotate: rotateInterpolate }] }}>
+                <Ionicons name="swap-vertical" size={24} color={primaryColor} />
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
 
-        <TouchableOpacity
-          style={[
-            styles.swapExecuteButton,
-            { backgroundColor: primaryColor, opacity: (loading || quoteLoading || !fromAmount || isOffline) ? 0.6 : 1 }
-          ]}
-          onPress={handleSwap}
-          disabled={loading || quoteLoading || !fromAmount || isOffline}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <Ionicons name="swap-horizontal" size={20} color="#FFF" />
-              <Text style={styles.swapExecuteButtonText}>
-                {isOffline ? t('offline_mode') : t('swap_confirm')}
+          {/* To Card */}
+          <View style={[styles.tokenCard, { backgroundColor: colors.card }]}>
+            <View style={styles.cardTopRow}>
+              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{t('swap_to')}</Text>
+              <TouchableOpacity onPress={() => copyMintAddress(toToken.mint)} style={styles.copySmallBtn}>
+                <Ionicons name="link" size={16} color={primaryColor} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.tokenRow}>
+              <Text style={[styles.amountOutput, { color: colors.text }]}>
+                {toAmount || '0.00'}
               </Text>
-            </>
+              <TouchableOpacity
+                style={[styles.tokenSelector, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
+                onPress={() => setToModalVisible(true)}
+              >
+                <Image source={{ uri: toToken.image }} style={styles.tokenImage} />
+                <Text style={[styles.tokenSymbol, { color: colors.text }]}>{toToken.symbol}</Text>
+                <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Loading Quote */}
+          {quoteLoading && (
+            <View style={[styles.loadingCard, { backgroundColor: colors.card }]}>
+              <ActivityIndicator size="small" color={primaryColor} />
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>{t('swap_loading_quote')}</Text>
+            </View>
           )}
-        </TouchableOpacity>
-      </ScrollView>
+
+          {/* Rate Info */}
+          {rate && !quoteLoading && (
+            <Animated.View style={[styles.rateCard, { backgroundColor: colors.card }]}>
+              <View style={styles.rateRow}>
+                <View style={styles.rateLabelWrapper}>
+                  <Ionicons name="exchange-horizontal" size={16} color={colors.textSecondary} />
+                  <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('swap_rate')}</Text>
+                </View>
+                <Text style={[styles.rateValue, { color: colors.text }]}>
+                  1 {fromToken.symbol} = {rate.toFixed(6)} {toToken.symbol}
+                </Text>
+              </View>
+
+              {priceImpact > 0 && (
+                <View style={styles.rateRow}>
+                  <View style={styles.rateLabelWrapper}>
+                    <Ionicons name="trending-down" size={16} color={colors.textSecondary} />
+                    <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>Price Impact</Text>
+                  </View>
+                  <Text style={[styles.rateValue, { color: priceImpact > 5 ? colors.error : colors.success }]}>
+                    {priceImpact.toFixed(2)}%
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.rateRow}>
+                <View style={styles.rateLabelWrapper}>
+                  <Ionicons name="arrow-down-circle" size={16} color={colors.textSecondary} />
+                  <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('swap_receive')}</Text>
+                </View>
+                <Text style={[styles.rateValueHighlight, { color: colors.success }]}>
+                  {toAmount} {toToken.symbol}
+                </Text>
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Error */}
+          {renderError()}
+
+          {/* Swap Button */}
+          <TouchableOpacity
+            style={[
+              styles.executeButton,
+              {
+                backgroundColor: primaryColor,
+                opacity: (loading || quoteLoading || !fromAmount || isOffline) ? 0.6 : 1
+              }
+            ]}
+            onPress={handleSwap}
+            disabled={loading || quoteLoading || !fromAmount || isOffline}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="swap-horizontal" size={22} color="#FFF" />
+                <Text style={styles.executeButtonText}>
+                  {isOffline ? t('offline_mode') : t('swap_confirm')}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </Animated.View>
 
       {renderTokenModal(fromModalVisible, () => setFromModalVisible(false), setFromToken, fromToken)}
       {renderTokenModal(toModalVisible, () => setToModalVisible(false), setToToken, toToken)}
@@ -449,61 +521,235 @@ export default function SwapScreen({ route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
-  backButton: { marginBottom: 10 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 5, textAlign: 'center' },
-  subtitle: { fontSize: 14, textAlign: 'center', marginBottom: 15 },
-  activeAccountCard: {
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 15,
+  mainContent: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
+
+  // Header
+  headerSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  backButton: { padding: 8, marginRight: 12 },
+  headerTitle: { flex: 1 },
+  title: { fontSize: 24, fontWeight: '800' },
+  subtitle: { fontSize: 13, marginTop: 2 },
+
+  // Account Card
+  accountCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  activeAccountLabel: {
-    fontSize: 12,
-    marginBottom: 4,
+  accountIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  activeAccountName: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
+  accountInfo: { flex: 1 },
+  accountName: { fontSize: 15, fontWeight: '600' },
+  accountAddress: { fontSize: 12, fontWeight: '500', marginTop: 2 },
+  copyBtn: { padding: 8 },
+
+  // Offline Banner
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
   },
-  activeAccountAddress: {
-    fontSize: 13,
-    fontWeight: '500',
+  offlineText: { fontSize: 14, fontWeight: '600' },
+
+  // Token Card
+  tokenCard: {
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  card: { borderRadius: 20, padding: 16, marginBottom: 10, elevation: 2 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   cardLabel: { fontSize: 14, fontWeight: '500' },
-  maxButton: { fontSize: 14, fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  input: { flex: 1, fontSize: 24, padding: 0, height: 50 },
-  tokenSelector: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 30, paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  selectorIcon: { width: 24, height: 24, borderRadius: 12 },
-  selectorText: { fontSize: 16, fontWeight: '600' },
-  balanceText: { fontSize: 12, marginTop: 8, textAlign: 'right' },
-  swapButton: { alignSelf: 'center', marginVertical: 5, zIndex: 10 },
-  swapButtonCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', elevation: 3 },
-  loadingQuote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, marginTop: 10, gap: 8 },
-  loadingQuoteText: { fontSize: 14 },
-  rateCard: { borderRadius: 16, padding: 16, marginTop: 15, marginBottom: 10 },
-  rateRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  maxButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  maxButtonText: { fontSize: 13, fontWeight: '700' },
+  tokenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: '700',
+    padding: 0,
+  },
+  amountOutput: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  tokenSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 30,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  tokenImage: { width: 28, height: 28, borderRadius: 14 },
+  tokenSymbol: { fontSize: 16, fontWeight: '700' },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+    gap: 6,
+  },
+  balanceLabel: { fontSize: 12 },
+  balanceValue: { fontSize: 12, fontWeight: '600' },
+  copySmallBtn: { padding: 4 },
+
+  // Swap Button
+  swapButtonWrapper: {
+    alignItems: 'center',
+    marginVertical: -10,
+    zIndex: 10,
+  },
+  swapButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+
+  // Loading
+  loadingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 16,
+    marginTop: 16,
+    gap: 10,
+  },
+  loadingText: { fontSize: 14 },
+
+  // Rate Card
+  rateCard: {
+    borderRadius: 18,
+    padding: 16,
+    marginTop: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  rateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  rateLabelWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   rateLabel: { fontSize: 14 },
-  rateValue: { fontSize: 14, fontWeight: '500' },
-  errorCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginVertical: 10, gap: 8 },
-  errorText: { flex: 1, fontSize: 14 },
+  rateValue: { fontSize: 14, fontWeight: '600' },
+  rateValueHighlight: { fontSize: 16, fontWeight: '800' },
+
+  // Error
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    marginTop: 16,
+    gap: 10,
+  },
+  errorText: { flex: 1, fontSize: 14, fontWeight: '500' },
   retryButton: { padding: 4 },
-  offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 10, marginBottom: 15, gap: 8 },
-  offlineText: { fontSize: 14, fontWeight: '500' },
-  swapExecuteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 16, marginTop: 15, marginBottom: 10, gap: 8 },
-  swapExecuteButtonText: { color: '#FFF', fontSize: 18, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold' },
-  tokenItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
-  tokenIcon: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+
+  // Execute Button
+  executeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+    borderRadius: 18,
+    marginTop: 20,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  executeButtonText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    maxHeight: height * 0.7,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800' },
+  tokenItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  tokenIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  tokenIcon: { width: 28, height: 28, borderRadius: 14 },
   tokenInfo: { flex: 1 },
-  tokenSymbol: { fontSize: 16, fontWeight: '600' },
+  tokenSymbol: { fontSize: 16, fontWeight: '700' },
   tokenName: { fontSize: 12, marginTop: 2 },
+  tokenBalanceWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tokenBalance: { fontSize: 14, fontWeight: '600' },
 });

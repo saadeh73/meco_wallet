@@ -71,6 +71,12 @@ const resources = {
       swap_title: 'تبادل',
       explore: 'استكشف',
       earn: 'اكتسب',
+      change: 'تغيير',
+      save_address: 'حفظ العنوان',
+      save_address_hint: 'اضغط على أيقونة الحفظ لإضافة العنوان',
+      enter_address_name: 'أدخل اسمًا للعنوان',
+      confirm_delete_address: 'هل أنت متأكد من حذف هذا العنوان؟',
+      info: 'معلومة',
 
       // ========== حسابات متعددة (Multi-Account) ==========
       accounts: 'الحسابات',
@@ -327,7 +333,8 @@ const resources = {
         },
         already_saved: "هذا العنوان محفوظ بالفعل",
         address_saved: "تم حفظ العنوان بنجاح",
-        save_to_address_book: "حفظ في دفتر العناوين"
+        save_to_address_book: "حفظ في دفتر العناوين",
+        saved: "محفوظ"
       },
 
       // ========== AddressBook (مفاتيح عامة) ==========
@@ -355,8 +362,9 @@ const resources = {
       // ========== SwapScreen ==========
       swapping_from: "التبديل من حساب",
       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
-      swap_no_route: "لا توجد سيولة كافية لهذا الزوج حالياً (No Route Found).",
-      swap_same_token: "لا يمكن التبديل بين نفس العملة",
+      swap_no_route: "لا يوجد مسار للتبادل",
+      swap_same_token: "لا يمكن التبادل للعملة نفسها",
+      no_active_account: "لا يوجد حساب نشط",
       swap_from: 'من',
       swap_max: 'أقصى',
       swap_balance: 'الرصيد',
@@ -593,6 +601,12 @@ const resources = {
       swap_title: 'Swap',
       explore: 'Explore',
       earn: 'Earn',
+      change: 'Change',
+      save_address: 'Save Address',
+      save_address_hint: 'Tap the save icon to add this address',
+      enter_address_name: 'Enter a name for this address',
+      confirm_delete_address: 'Are you sure you want to delete this address?',
+      info: 'Info',
 
       // ========== Multi-Account ==========
       accounts: 'Accounts',
@@ -849,7 +863,8 @@ const resources = {
         },
         already_saved: "This address is already saved",
         address_saved: "Address saved successfully",
-        save_to_address_book: "Save to Address Book"
+        save_to_address_book: "Save to Address Book",
+        saved: "Saved"
       },
 
       // ========== AddressBook (general keys) ==========
@@ -877,8 +892,9 @@ const resources = {
       // ========== SwapScreen ==========
       swapping_from: "Swapping from",
       swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
-      swap_no_route: "No route found for this pair (insufficient liquidity).",
+      swap_no_route: "No route found for swap",
       swap_same_token: "Cannot swap the same token",
+      no_active_account: "No active account",
       swap_from: 'From',
       swap_max: 'MAX',
       swap_balance: 'Balance',
