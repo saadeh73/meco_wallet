@@ -355,6 +355,8 @@ const resources = {
       // ========== SwapScreen ==========
       swapping_from: "التبديل من حساب",
       swap_subtitle: 'حول عملاتك بسرعة وأمان عبر Jupiter',
+      swap_no_route: "لا توجد سيولة كافية لهذا الزوج حالياً (No Route Found).",
+      swap_same_token: "لا يمكن التبديل بين نفس العملة",
       swap_from: 'من',
       swap_max: 'أقصى',
       swap_balance: 'الرصيد',
@@ -875,6 +877,8 @@ const resources = {
       // ========== SwapScreen ==========
       swapping_from: "Swapping from",
       swap_subtitle: 'Swap your tokens quickly and securely via Jupiter',
+      swap_no_route: "No route found for this pair (insufficient liquidity).",
+      swap_same_token: "Cannot swap the same token",
       swap_from: 'From',
       swap_max: 'MAX',
       swap_balance: 'Balance',

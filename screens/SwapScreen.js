@@ -9,9 +9,11 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as SwapAPI from '../services/swapService';
+import * as SwapAPI from '../services/swapService'; 
 import NetInfo from '@react-native-community/netinfo';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
+// ✅ جلب دوال الرصيد المباشرة
+import { getSolBalance, getTokenBalance } from '../services/heliusService';
 
 export default function SwapScreen({ route }) {
   const navigation = useNavigation();
@@ -71,22 +73,35 @@ export default function SwapScreen({ route }) {
     }, [activeAccount?.publicKey])
   );
 
+  // ✅ الدالة المصححة لجلب الأرصدة الحقيقية مباشرة من البلوكشين
   const loadBalances = async () => {
     if (!activeAccount?.publicKey) return;
     try {
+      const pubKey = activeAccount.publicKey;
       const newBalances = {};
+
+      // جلب رصيد الـ SOL أولاً
+      try {
+        const solBal = await getSolBalance(true, pubKey);
+        newBalances['SOL'] = solBal || 0;
+      } catch (e) {
+        newBalances['SOL'] = 0;
+      }
+
+      // جلب أرصدة باقي التوكنز
       for (const token of CORE_TOKENS) {
-        if (!token.swapAvailable) continue;
+        if (!token.swapAvailable || token.symbol === 'SOL') continue;
         try {
-          const result = await SwapAPI.checkBalance(token.symbol, 0, activeAccount.publicKey);
-          newBalances[token.symbol] = result.balance;
+          const tokenBal = await getTokenBalance(token.mint, true, pubKey);
+          newBalances[token.symbol] = tokenBal || 0;
         } catch (e) {
           newBalances[token.symbol] = 0;
         }
       }
+      
       setBalances(newBalances);
     } catch (error) {
-      console.error('Error loading balances:', error);
+      console.error('Error loading balances in SwapScreen:', error);
     }
   };
 
@@ -99,14 +114,7 @@ export default function SwapScreen({ route }) {
 
     const netState = await NetInfo.fetch();
     if (!netState.isConnected) {
-      setError(t('network_error', 'لا يوجد اتصال بالإنترنت'));
-      setToAmount('');
-      setRate(null);
-      return;
-    }
-
-    if (fromToken.symbol === 'MECO') {
-      setError(t('meco_sell_disabled', 'عذراً، بيع MECO غير متاح حالياً. يمكنك شراؤها فقط.'));
+      setError(t('network_error'));
       setToAmount('');
       setRate(null);
       return;
@@ -122,7 +130,9 @@ export default function SwapScreen({ route }) {
     } catch (err) {
       let errorMsg = err.message || t('swap_error');
       if (errorMsg.includes('Network') || errorMsg.includes('Timeout')) {
-        errorMsg = t('network_error', 'تعذر الاتصال بالخادم، تأكد من الإنترنت');
+        errorMsg = t('network_error');
+      } else if (errorMsg.includes('مسار') || errorMsg.includes('Route')) {
+        errorMsg = t('swap_no_route');
       }
       setError(errorMsg);
       setToAmount('');
@@ -133,7 +143,7 @@ export default function SwapScreen({ route }) {
   };
 
   useEffect(() => {
-    const timer = setTimeout(fetchSwapRate, 500);
+    const timer = setTimeout(fetchSwapRate, 800);
     return () => clearTimeout(timer);
   }, [fromAmount, fromToken, toToken, t]);
 
@@ -153,13 +163,16 @@ export default function SwapScreen({ route }) {
       return;
     }
 
+    const isMecoInvolved = fromToken.symbol === 'MECO' || toToken.symbol === 'MECO';
+    const slippageBps = isMecoInvolved ? 300 : 100;
+
     Alert.alert(
       t('swap_confirm'),
       `${t('swap_from')}: ${fromAmount} ${fromToken.symbol}\n${t('swap_to')}: ${toAmount} ${toToken.symbol}\n${t('swap_rate')}: 1 ${fromToken.symbol} = ${rate?.toFixed(6)} ${toToken.symbol}`,
       [
         { text: t('cancel'), style: 'cancel' },
         {
-          text: t('confirm', 'تأكيد'),
+          text: t('confirm'),
           onPress: async () => {
             setLoading(true);
             setError('');
@@ -169,7 +182,7 @@ export default function SwapScreen({ route }) {
                 fromToken.symbol,
                 toToken.symbol,
                 parseFloat(fromAmount),
-                100,
+                slippageBps,
                 3,
                 activeAccount.publicKey,
                 privateKey
@@ -198,25 +211,20 @@ export default function SwapScreen({ route }) {
     );
   };
 
-  // ✅ الكود المُحدث - swapTokens
   const swapTokens = () => {
-    // التحقق من نفس العملة
-    if (fromToken.mintAddress === toToken.mintAddress) {
-      Alert.alert(t('error'), t('swap_same_token', 'لا يمكن التبديل بين نفس العملة'));
+    if (fromToken.mint === toToken.mint) {
+      Alert.alert(t('error'), t('swap_same_token'));
       return;
     }
     
-    // حفظ القيم القديمة
     const tempFrom = fromToken;
     const tempTo = toToken;
     
-    // مسح المبالغ أولاً
     setFromAmount('');
     setToAmount('');
     setRate(null);
     setPriceImpact(0);
     
-    // تبديل العملات
     setFromToken(tempTo);
     setToToken(tempFrom);
   };
@@ -227,8 +235,9 @@ export default function SwapScreen({ route }) {
   };
 
   const copyMintAddress = (mint) => {
+    if (!mint) return;
     Clipboard.setStringAsync(mint);
-    Alert.alert(t('copied'), t('copied_to_clipboard', 'تم نسخ عنوان العقد'));
+    Alert.alert(t('copied'), t('copied_to_clipboard'));
   };
 
   const renderTokenModal = (visible, onClose, onSelect, selectedToken) => {
@@ -269,7 +278,7 @@ export default function SwapScreen({ route }) {
 
   const renderError = () => {
     if (!error) return null;
-    const isNetworkError = error.includes('الإنترنت') || error.includes('Network') || error.includes('Timeout');
+    const isNetworkError = error.includes(t('network_error'));
     return (
       <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
         <Ionicons name="warning" size={20} color={colors.error} />
@@ -291,12 +300,12 @@ export default function SwapScreen({ route }) {
         </TouchableOpacity>
 
         <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle', 'قم بتبديل عملاتك بأمان عبر Jupiter')}</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
 
         {activeAccount && (
           <View style={[styles.activeAccountCard, { backgroundColor: colors.card }]}>
             <Text style={[styles.activeAccountLabel, { color: colors.textSecondary }]}>
-              {t('swapping_from', 'التبديل من حساب')}
+              {t('swapping_from')}
             </Text>
             <Text style={[styles.activeAccountName, { color: colors.text }]}>{activeAccount.name}</Text>
             <Text style={[styles.activeAccountAddress, { color: primaryColor }]}>
@@ -309,7 +318,7 @@ export default function SwapScreen({ route }) {
           <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
             <Ionicons name="cloud-offline" size={16} color={colors.warning} />
             <Text style={[styles.offlineText, { color: colors.warning }]}>
-              {t('offline_mode', 'أنت غير متصل بالإنترنت')}
+              {t('offline_mode')}
             </Text>
           </View>
         )}
@@ -340,7 +349,7 @@ export default function SwapScreen({ route }) {
             </TouchableOpacity>
           </View>
           <Text style={[styles.balanceText, { color: colors.textSecondary }]}>
-            {t('swap_balance')}: {balances[fromToken.symbol]?.toFixed(4) || '0'} {fromToken.symbol}
+            {t('swap_balance')}: {balances[fromToken.symbol]?.toFixed(4) || '0.0000'} {fromToken.symbol}
           </Text>
         </View>
 
@@ -425,7 +434,7 @@ export default function SwapScreen({ route }) {
             <>
               <Ionicons name="swap-horizontal" size={20} color="#FFF" />
               <Text style={styles.swapExecuteButtonText}>
-                {isOffline ? t('offline_mode', 'غير متصل') : t('swap_confirm')}
+                {isOffline ? t('offline_mode') : t('swap_confirm')}
               </Text>
             </>
           )}
