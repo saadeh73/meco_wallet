@@ -1,4 +1,4 @@
-// WalletScreen.js - محسن (مصحح) مع تأثير النسخ البصري
+// WalletScreen.js - محسن (مصحح) مع تأثير النسخ البصري ودالة الأرصدة المحسّنة
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
@@ -56,7 +56,6 @@ export default function WalletScreen() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [accountUsdBalances, setAccountUsdBalances] = useState({});
   const [loadingAccountBalances, setLoadingAccountBalances] = useState(false);
-  // ✅ حالة جديدة لتأثير النسخ البصري
   const [copyFeedback, setCopyFeedback] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -131,54 +130,64 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
+  // ★★★ الدالة الجديدة المحسّنة لجلب أرصدة الحسابات ★★★
   const fetchAccountUsdBalances = useCallback(async () => {
     if (loadingAccountBalances) return;
     setLoadingAccountBalances(true);
 
     const balances = {};
-    for (const acc of accounts) {
-      try {
-        const addr = acc.publicKey;
-        const solBal = await getSolBalance(true, addr) || 0;
 
-        let mecoAmount = 0, usdcAmount = 0, usdtAmount = 0;
-        try { mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr); } catch(e) {}
-        await new Promise(resolve => setTimeout(resolve, 300));
-        try { usdcAmount = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, addr); } catch(e) {}
-        await new Promise(resolve => setTimeout(resolve, 300));
-        try { usdtAmount = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, addr); } catch(e) {}
+    try {
+      const marketPrices = {};
+      await Promise.all(CORE_TOKENS.map(async (asset) => {
+        try {
+          if (getTokenMarketPrice) {
+            marketPrices[asset.symbol] = await getTokenMarketPrice(asset.symbol) || 0;
+          }
+        } catch (e) {
+          marketPrices[asset.symbol] = 0;
+        }
+      }));
 
-        const tokenAccounts = [];
-        if (mecoAmount > 0) tokenAccounts.push({ mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', amount: mecoAmount });
-        if (usdcAmount > 0) tokenAccounts.push({ mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount: usdcAmount });
-        if (usdtAmount > 0) tokenAccounts.push({ mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', amount: usdtAmount });
+      for (const acc of accounts) {
+        try {
+          const addr = acc.publicKey;
 
-        let accUsd = 0;
-        await Promise.all(CORE_TOKENS.map(async (asset) => {
-          let amount = 0;
-          if (asset.symbol === 'SOL') {
-            amount = solBal;
-          } else {
-            const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
-            if (tokenData) amount = tokenData.amount;
+          if (acc.index === activeAccountIndex && totalBalanceUSD > 0) {
+            balances[addr] = totalBalanceUSD;
+            continue;
           }
 
-          let price = 0;
-          try {
-            if (getTokenMarketPrice) price = await getTokenMarketPrice(asset.symbol) || 0;
-          } catch (e) {}
-          accUsd += amount * price;
-        }));
+          const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
 
-        balances[acc.publicKey] = accUsd;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } catch (e) {
-        balances[acc.publicKey] = 0;
+          let mecoAmount = 0, usdcAmount = 0, usdtAmount = 0;
+          
+          try { mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr); } catch(e) {}
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          try { usdcAmount = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, addr); } catch(e) {}
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+          try { usdtAmount = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, addr); } catch(e) {}
+
+          let accUsd = (solBal * (marketPrices['SOL'] || 0)) +
+                       (mecoAmount * (marketPrices['MECO'] || 0)) +
+                       (usdcAmount * (marketPrices['USDC'] || 0)) +
+                       (usdtAmount * (marketPrices['USDT'] || 0));
+
+          balances[addr] = accUsd;
+          
+        } catch (accountError) {
+          balances[acc.publicKey] = 0;
+        }
       }
+    } catch (globalError) {
+      console.error("Error in fetchAccountUsdBalances:", globalError);
+    } finally {
+      setAccountUsdBalances(balances);
+      setLoadingAccountBalances(false);
     }
-    setAccountUsdBalances(balances);
-    setLoadingAccountBalances(false);
-  }, [accounts, loadingAccountBalances]);
+  }, [accounts, loadingAccountBalances, activeAccountIndex, totalBalanceUSD]);
 
   useEffect(() => {
     if (accountsModalVisible && accounts.length > 0) {
@@ -192,11 +201,9 @@ export default function WalletScreen() {
     setRefreshing(false);
   };
 
-  // ✅ دالة النسخ مع تأثير بصري (وميض أخضر)
   const copyAddress = async (addressToCopy = walletAddress) => {
     if (addressToCopy) {
       await Clipboard.setStringAsync(addressToCopy);
-      // تأثير بصري: وميض أخضر على الأيقونة
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 600);
     }
