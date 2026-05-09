@@ -392,11 +392,7 @@ export default function WalletScreen() {
                 {item.amount > 0 ? item.amount.toFixed(item.amount > 100 ? 2 : 4) : '0'}
               </Text>
               <Text style={[styles.assetValue, { color: isPositive ? colors.success : colors.textSecondary }]}>
-                {item.valueUSD > 0
-                  ? (item.valueUSD < 0.01
-                      ? `$${item.valueUSD.toFixed(6)}`
-                      : `$${item.valueUSD.toFixed(2)}`)
-                  : '\$0.00'}
+                {item.valueUSD > 0 ? `$${item.valueUSD.toFixed(2)}` : '\$0.00'}
               </Text>
             </View>
             <View style={styles.assetChevron}>
@@ -508,11 +504,7 @@ export default function WalletScreen() {
                 <ActivityIndicator size="small" color={primaryColor} />
               ) : (
                 <Text style={[styles.accountBalance, { color: colors.text }]}>
-                  {usdBalance != null
-                    ? (usdBalance < 0.01
-                        ? `$${usdBalance.toFixed(6)}`
-                        : `$${usdBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
-                    : '$0.00'}
+                  ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                 </Text>
               )}
               {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
