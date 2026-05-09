@@ -199,14 +199,14 @@ export const getTokenMarketPrice = async (tokenSymbol) => {
         
         if (data.pairs && data.pairs.length > 0) {
           data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-          const mecoPrice = parseFloat(data.pairs[0].priceUsd || 0.002013);
+          const mecoPrice = parseFloat(data.pairs[0].priceUsd || 0);
           CACHE.prices.set(tokenSymbol, mecoPrice);
           return mecoPrice;
         }
       } catch (e) {
         console.warn(`⚠️ MECO DexScreener fetch failed, using fallback`);
       }
-      const fallbackPrice = 0.002013;
+      const fallbackPrice = 0 ;
       CACHE.prices.set(tokenSymbol, fallbackPrice);
       return fallbackPrice;
     }

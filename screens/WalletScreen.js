@@ -368,10 +368,8 @@ export default function WalletScreen() {
           renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
           onSwipeableWillOpen={() => closeOtherSwipeables(item.symbol, swipeableRefs)}
         >
-          <TouchableOpacity
+          <View
             style={[styles.assetItem, { backgroundColor: cardColor }]}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('TokenDetails', { token: item })}
           >
             <View style={styles.assetLeft}>
               <View style={[styles.assetIconContainer, { backgroundColor: primaryColor + '15' }]}>
@@ -398,7 +396,7 @@ export default function WalletScreen() {
             <View style={styles.assetChevron}>
               <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
             </View>
-          </TouchableOpacity>
+          </View>
         </Swipeable>
       </Animated.View>
     );
