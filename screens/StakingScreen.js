@@ -18,7 +18,7 @@ const STAKING_PLANS = [
   { id: '60d', nameKey: 'plan_60d', apy: 40, durationKey: 'plan_60d_duration' },
 ];
 
-const STAKING_TREASURY_ADDRESS = 'HQ5zpxqkELUXythSbvdRWombZ36SXFJVvTL8hpTH6wsq';
+const STAKING_TREASURY_ADDRESS = 'FoNBts4U25jm1YbZ3siT5hHzCmfuvrkzsRRJ4MWQkMQs';
 
 export default function StakingScreen() {
   const navigation = useNavigation();

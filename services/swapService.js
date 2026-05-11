@@ -28,7 +28,7 @@ export const TOKEN_DECIMALS = {
 };
 
 // ✅ عنوان خزينة المشروع ورسم الخدمة
-const FEE_COLLECTOR_ADDRESS = 'HgiM3jHagH1F6KsLRSfBPGcpSrf8CE9sEujz1Nb3FTWG';
+const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
 const SERVICE_FEE_SOL = 0.0005;
 
 // ✅ نقاط نهاية Jupiter

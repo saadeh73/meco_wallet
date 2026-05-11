@@ -11,8 +11,8 @@ import { default as heliusService } from './heliusService';
 
 // ==================== الثوابت والعناوين ====================
 const MECO_MINT = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
-const FEE_COLLECTOR_ADDRESS = 'HgiM3jHagH1F6KsLRSfBPGcpSrf8CE9sEujz1Nb3FTWG';
-const STAKING_TREASURY = 'HQ5zpxqkELUXythSbvdRWombZ36SXFJVvTL8hpTH6wsq'; 
+const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
+const STAKING_TREASURY = 'FoNBts4U25jm1YbZ3siT5hHzCmfuvrkzsRRJ4MWQkMQs'; 
 const SERVICE_FEE_SOL = 0.0005;
 
 // ==================== حماية بيانات التليجرام ====================
