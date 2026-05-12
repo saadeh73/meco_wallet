@@ -17,6 +17,7 @@ import { useAppStore } from '../store';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
+import bs58 from 'bs58';
 
 export default function CreateWalletScreen() {
   const [mnemonic, setMnemonic] = useState('');
@@ -44,26 +45,12 @@ export default function CreateWalletScreen() {
   const generateWallet = async () => {
     try {
       const generatedMnemonic = bip39.generateMnemonic(wordlist);
-
       const cleanedMnemonic = generatedMnemonic
         .toLowerCase()
         .trim()
         .replace(/\s+/g, ' ');
 
-      const seed = await bip39.mnemonicToSeed(cleanedMnemonic);
-      const keypair = Keypair.fromSeed(seed.slice(0, 32));
-
-      await SecureStore.setItemAsync('wallet_mnemonic', cleanedMnemonic);
-      await SecureStore.setItemAsync(
-        'wallet_private_key',
-        JSON.stringify(Array.from(keypair.secretKey))
-      );
-      await SecureStore.setItemAsync(
-        'wallet_public_key',
-        keypair.publicKey.toBase58()
-      );
-      await SecureStore.setItemAsync('wallet_initialized', 'true');
-
+      // لا نقوم بالحفظ هنا، فقط نعرض العبارة للمستخدم لنسخها
       setMnemonic(cleanedMnemonic);
     } catch (err) {
       console.error('Create wallet error:', err);
@@ -76,11 +63,41 @@ export default function CreateWalletScreen() {
     Alert.alert(t('copied'), t('recovery_phrase_copied'));
   };
 
-  const handleContinue = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'BottomTabs' }],
-    });
+  const handleContinue = async () => {
+    try {
+      // 1. توليد المفاتيح من العبارة
+      const seed = await bip39.mnemonicToSeed(mnemonic);
+      const keypair = Keypair.fromSeed(seed.slice(0, 32));
+      const publicKey = keypair.publicKey.toBase58();
+      const privateKey = bs58.encode(keypair.secretKey);
+
+      // 2. الحفظ الفعلي والآمن هنا (فقط عندما يضغط المستخدم "حفظت الكلمات")
+      await SecureStore.setItemAsync('wallet_mnemonic', mnemonic);
+      await SecureStore.setItemAsync('wallet_initialized', 'true');
+      await SecureStore.setItemAsync('wallet_private_key_0', privateKey);
+      await SecureStore.setItemAsync('wallet_public_key', publicKey);
+      await SecureStore.setItemAsync('wallet_private_key', privateKey);
+
+      // 3. تسجيل الحساب الأساسي فوراً
+      const mainAccount = [{
+        index: 0,
+        name: t('main_account', 'الحساب الرئيسي'),
+        publicKey: publicKey,
+        isLegacy: true
+      }];
+
+      await useAppStore.getState().restoreDiscoveredAccounts(mainAccount);
+
+      // الانتقال للشاشة الرئيسية
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'BottomTabs' }],
+      });
+
+    } catch (err) {
+      console.error('Error registering main account:', err);
+      Alert.alert(t('error'), 'حدث خطأ أثناء إعداد المحفظة.');
+    }
   };
 
   const words = mnemonic.split(' ');
