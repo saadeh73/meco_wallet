@@ -1,5 +1,5 @@
 // screens/MarketScreen.js - Fixed with Real Balances
-// Last Updated: 2026-04-28
+// Last Updated: 2026-05-12
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
@@ -12,7 +12,6 @@ import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import Svg, { Polyline } from 'react-native-svg';
 
 import { getJupiterMarketData, CORE_TOKENS } from '../services/jupiterMarketService';
@@ -256,15 +255,19 @@ export default function MarketScreen() {
       setTopMovers(moversData);
 
       if (walletPublicKey) {
+        // ✅ الحصول على الأرصدة
         const solBalance = await getSolBalance(true, walletPublicKey);
-        const solPrice = tokenData.find(t => t.symbol === 'SOL')?.current_price || 145;
-
         const mecoBalance = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, walletPublicKey);
-        const mecoPrice = tokenData.find(t => t.symbol === 'MECO')?.current_price || 0.002013;
-
         const usdcBalance = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, walletPublicKey);
+        const usdtBalance = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, walletPublicKey);
 
-        const totalValue = (solBalance * solPrice) + (mecoBalance * mecoPrice) + (usdcBalance * 1);
+        // ✅ الأسعار من نفس بيانات السوق، بدون سعر احتياطي لـ MECO
+        const solPrice = tokenData.find(t => t.symbol === 'SOL')?.current_price || 0;
+        const mecoPrice = tokenData.find(t => t.symbol === 'MECO')?.current_price || 0;
+        const usdcPrice = tokenData.find(t => t.symbol === 'USDC')?.current_price || 0;
+        const usdtPrice = tokenData.find(t => t.symbol === 'USDT')?.current_price || 0;
+
+        const totalValue = (solBalance * solPrice) + (mecoBalance * mecoPrice) + (usdcBalance * usdcPrice) + (usdtBalance * usdtPrice);
         setPortfolioValue(totalValue);
         setPortfolioChange(overviewData?.marketCapChange24h || 0);
       } else {
@@ -275,7 +278,7 @@ export default function MarketScreen() {
       console.error('Market fetch error:', error);
       setTokens(CORE_TOKENS.map((t, i) => ({
         ...t,
-        current_price: t.symbol === 'MECO' ? 0.002013 : (t.symbol === 'SOL' ? 145.50 : 1),
+        current_price: t.symbol === 'MECO' ? 0 : (t.symbol === 'SOL' ? 0 : 0),
         price_change_percentage_24h: (Math.random() - 0.5) * 10,
         rank: i + 1,
       })));

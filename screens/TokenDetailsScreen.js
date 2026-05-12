@@ -35,7 +35,6 @@ const TIMEFRAMES = [
   { label: '1Y', value: '8760', days: '365' },
 ];
 
-// عناوين العقود للـ CoinGecko (للبحث عن أسعار العملات)
 const TOKEN_MINTS = {
   SOL: 'So11111111111111111111111111111111111111112',
   MECO: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
@@ -114,7 +113,6 @@ export default function TokenDetailsScreen() {
 
   const isPositive = priceStats.change24h >= 0;
 
-  // تحميل المفضلة
   useEffect(() => {
     const loadWatchlist = async () => {
       try {
@@ -142,13 +140,12 @@ export default function TokenDetailsScreen() {
   const isWatchlisted = watchlist.includes(token.symbol);
 
   // ✅ استخدام السعر من شاشة السوق (الذي جلبته already من DexScreener للمكوّن MECO)
-  // لا حاجة لجلب السعر من جديد - السعر موجود في token.current_price
   const getPriceFromToken = () => {
     const price = token?.current_price || 0;
 
-    // 🛡️ إذا كان السعر 0 أو غير موجود، استخدم السعر الاحتياطي
+    // 🛡️ إذا كان السعر 0 أو غير موجود، استخدم 0 مباشرة
     if (price === 0 && token?.symbol === 'MECO') {
-      return 0.002013; // السعر الاحتياطي للمكوّن MECO
+      return 0; // تم التعديل: لا سعر احتياطي
     }
 
     return price;

@@ -61,10 +61,10 @@ export async function getJupiterMarketData() {
       }
     }
 
-    // ✅ جلب سعر MECO بشكل منفصل وتطبيق القيمة السوقية
-    let mecoPrice = 0.002013; // السعر الاحتياطي
-    let mecoChange = 2.5;
-    const MECO_TOTAL_SUPPLY = 1000000000; // 1 مليار عملة
+    // ✅ جلب سعر MECO بشكل منفصل
+    let mecoPrice = 0; // لا سعر احتياطي، يبقى 0 إذا فشل الجلب
+    let mecoChange = 0;
+    const MECO_TOTAL_SUPPLY = 1000000000;
     
     try {
       const mecoMint = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
@@ -78,13 +78,12 @@ export async function getJupiterMarketData() {
         mecoChange = parseFloat(bestPair.priceChange?.h24 || 0);
         console.log(`✅ MECO Live Price: $${mecoPrice} (DexScreener)`);
       } else {
-        console.log('⚠️ MECO using fallback price (no liquidity yet)');
+        console.log('⚠️ MECO no pairs, price remains 0');
       }
     } catch (dexError) {
-      console.log('⚠️ MECO using fallback price (API error)');
+      console.log('⚠️ MECO API error, price remains 0');
     }
 
-    // 3️⃣ بناء الشاشة النهائية (الدمج الدقيق)
     const finalData = CORE_TOKENS.map((token, index) => {
       let currentPrice = 0;
       let change24h = 0;
@@ -95,13 +94,13 @@ export async function getJupiterMarketData() {
       if (token.symbol === 'MECO') {
         currentPrice = mecoPrice;
         change24h = mecoChange;
-        marketCap = mecoPrice * MECO_TOTAL_SUPPLY; // 💡 القيمة السوقية الحية لعملتك
+        marketCap = mecoPrice * MECO_TOTAL_SUPPLY;
       } else if (priceMap[tokenMintLower] && priceMap[tokenMintLower].price > 0) {
         currentPrice = priceMap[tokenMintLower].price;
         change24h = priceMap[tokenMintLower].change24h;
       }
 
-      // 🛡️ حماية صريحة للعملات المستقرة 
+      // 🛡️ حماية العملات المستقرة
       if ((token.symbol === 'USDT' || token.symbol === 'USDC') && (currentPrice < 0.95 || currentPrice > 1.05 || currentPrice === 0)) {
         currentPrice = 1.00;
         change24h = 0.01;
