@@ -4,7 +4,7 @@ import {
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
   Modal, FlatList, Image, Linking, Animated, Dimensions, Platform
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,11 +79,13 @@ export default function SwapScreen({ route }) {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (activeAccount?.publicKey) {
-      loadBalances();
-    }
-  }, [activeAccount?.publicKey]);
+  useFocusEffect(
+    useCallback(() => {
+      if (activeAccount?.publicKey) {
+        loadBalances();
+      }
+    }, [activeAccount?.publicKey])
+  );
 
   const loadBalances = async () => {
     if (!activeAccount?.publicKey) return;
@@ -172,8 +174,8 @@ export default function SwapScreen({ route }) {
       return;
     }
 
-    // 1% slippage for all tokens
-    const slippageBps = 100;
+    const isMecoInvolved = fromToken.symbol === 'MECO' || toToken.symbol === 'MECO';
+    const slippageBps = isMecoInvolved ? 300 : 100; // 3% لـ MECO، و 1% للعملات القوية
 
     Alert.alert(
       t('swap_confirm'),
@@ -330,7 +332,8 @@ export default function SwapScreen({ route }) {
               <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.headerTitle}>
-              <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
+              {/* ✅ تم التعديل هنا: عنوان رئيسي منفصل عن أيقونات التطبيق */}
+              <Text style={[styles.title, { color: colors.text }]}>{t('swap_main_heading', 'تبادل العملات')}</Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
             </View>
           </View>
@@ -463,7 +466,7 @@ export default function SwapScreen({ route }) {
                 <View style={styles.rateRow}>
                   <View style={styles.rateLabelWrapper}>
                     <Ionicons name="trending-down" size={16} color={colors.textSecondary} />
-                    <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>Price Impact</Text>
+                    <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('price_impact', 'Price Impact')}</Text>
                   </View>
                   <Text style={[styles.rateValue, { color: priceImpact > 5 ? colors.error : colors.success }]}>
                     {priceImpact.toFixed(2)}%
