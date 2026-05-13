@@ -1,11 +1,11 @@
-// screens/MarketScreen.js - Fixed with Real Balances
+// screens/MarketScreen.js - UX Improved Search
 // Last Updated: 2026-05-12
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, RefreshControl, SafeAreaView, ActivityIndicator,
-  Dimensions, TextInput, Modal,
+  Dimensions, TextInput,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -214,7 +214,10 @@ export default function MarketScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  
+  // ✅ إضافة حالة جديدة للتحكم في ظهور شريط البحث المدمج بدلاً من المودال
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  
   const [watchlist, setWatchlist] = useState([]);
   const [marketOverview, setMarketOverview] = useState(null);
   const [topMovers, setTopMovers] = useState({ gainers: [], losers: [] });
@@ -255,13 +258,11 @@ export default function MarketScreen() {
       setTopMovers(moversData);
 
       if (walletPublicKey) {
-        // ✅ الحصول على الأرصدة
         const solBalance = await getSolBalance(true, walletPublicKey);
         const mecoBalance = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, walletPublicKey);
         const usdcBalance = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, walletPublicKey);
         const usdtBalance = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, walletPublicKey);
 
-        // ✅ الأسعار من نفس بيانات السوق، بدون سعر احتياطي لـ MECO
         const solPrice = tokenData.find(t => t.symbol === 'SOL')?.current_price || 0;
         const mecoPrice = tokenData.find(t => t.symbol === 'MECO')?.current_price || 0;
         const usdcPrice = tokenData.find(t => t.symbol === 'USDC')?.current_price || 0;
@@ -346,7 +347,6 @@ export default function MarketScreen() {
     return filtered;
   }, [tokens, searchQuery, activeTab, watchlist, sortBy]);
 
-  // ✅ 4 تبويبات فقط - بدون Solana
   const tabs = [
     { id: 'all', label: t('all_tokens') || 'All' },
     { id: 'watchlist', label: t('watchlist') || 'Watchlist' },
@@ -359,6 +359,12 @@ export default function MarketScreen() {
     { id: 'price', label: 'Price' },
     { id: 'change', label: '24h' },
   ];
+
+  // ✅ دالة إغلاق البحث
+  const handleCloseSearch = () => {
+    setSearchQuery('');
+    setIsSearchActive(false);
+  };
 
   if (loading) {
     return (
@@ -378,17 +384,50 @@ export default function MarketScreen() {
           <Text style={[styles.headerTitle, { color: colors.text }]}>{t('market_title') || 'Market'}</Text>
           <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{t('market_subtitle') || 'Real prices • Live updates'}</Text>
         </View>
-        <TouchableOpacity style={[styles.searchButton, { backgroundColor: colors.card }]} onPress={() => setSearchModalVisible(true)}>
+        <TouchableOpacity 
+          style={[styles.searchButton, { backgroundColor: colors.card }]} 
+          onPress={() => setIsSearchActive(!isSearchActive)} // تبديل حالة البحث
+        >
           <Ionicons name="search" size={20} color={colors.secondary} />
         </TouchableOpacity>
       </View>
 
+      {/* ✅ شريط البحث المدمج (يظهر ويختفي بسلاسة) */}
+      {isSearchActive && (
+        <View style={[styles.searchBarContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.searchInputWrapper, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="search" size={18} color={colors.secondary} style={{ marginLeft: 12 }} />
+            <TextInput 
+              style={[styles.searchInput, { color: colors.text }]}
+              placeholder={t('market_search_placeholder') || 'Search tokens...'}
+              placeholderTextColor={colors.secondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus={true}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
+                <Ionicons name="close-circle" size={18} color={colors.secondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity onPress={handleCloseSearch} style={styles.cancelBtn}>
+            <Text style={{ color: primaryColor, fontWeight: '600' }}>{t('cancel') || 'Cancel'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[primaryColor]} tintColor={primaryColor} />} showsVerticalScrollIndicator={false}>
         
-        <MarketOverviewCard data={marketOverview} isDark={isDark} />
-        <PortfolioSummaryCard totalValue={portfolioValue} changePercent={portfolioChange} isDark={isDark} />
-        <TopMoversSection gainers={topMovers.gainers} losers={topMovers.losers} isDark={isDark} />
+        {/* إخفاء البطاقات العلوية أثناء البحث لكي يركز المستخدم على النتائج */}
+        {!isSearchActive && (
+          <>
+            <MarketOverviewCard data={marketOverview} isDark={isDark} />
+            <PortfolioSummaryCard totalValue={portfolioValue} changePercent={portfolioChange} isDark={isDark} />
+            <TopMoversSection gainers={topMovers.gainers} losers={topMovers.losers} isDark={isDark} />
+          </>
+        )}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContent}>
           {tabs.map(tab => (
@@ -417,23 +456,6 @@ export default function MarketScreen() {
           ))}
         </View>
       </ScrollView>
-
-      <Modal visible={searchModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSearchModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>{t('market_search') || 'Search'}</Text>
-              <TouchableOpacity onPress={() => setSearchModalVisible(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
-            </View>
-            <TextInput style={[styles.modalInput, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
-              placeholder={t('market_search_placeholder') || 'Search...'} placeholderTextColor={colors.secondary} value={searchQuery}
-              onChangeText={setSearchQuery} autoFocus={true} />
-            <TouchableOpacity style={[styles.modalButton, { backgroundColor: primaryColor }]} onPress={() => setSearchModalVisible(false)}>
-              <Text style={styles.modalButtonText}>{t('ok') || 'OK'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -446,6 +468,14 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: 'bold' },
   headerSubtitle: { fontSize: 13, marginTop: 2 },
   searchButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  
+  // ✅ تنسيقات شريط البحث المدمج
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
+  searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, height: 44 },
+  searchInput: { flex: 1, paddingHorizontal: 10, fontSize: 15, height: '100%' },
+  clearBtn: { padding: 10 },
+  cancelBtn: { paddingLeft: 12, paddingVertical: 10 },
+
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
   overviewCard: { borderRadius: 16, padding: 16, marginBottom: 12 },
   overviewRow: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -493,11 +523,4 @@ const styles = StyleSheet.create({
   tokenPrice: { fontSize: 14, fontWeight: 'bold' },
   tokenChangeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, marginTop: 4, gap: 2 },
   tokenChangeText: { fontSize: 11, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { borderRadius: 24, padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '600' },
-  modalInput: { borderWidth: 1, borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 20 },
-  modalButton: { padding: 16, borderRadius: 12, alignItems: 'center' },
-  modalButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
