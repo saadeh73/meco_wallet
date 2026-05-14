@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Dimensions, Image, Linking, Platform, FlatList, RefreshControl,
-  Modal, TextInput, Alert, ActivityIndicator, Keyboard, TouchableWithoutFeedback
+  Dimensions, Image, Platform, FlatList, ActivityIndicator,
+  Modal, TextInput, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
@@ -12,17 +12,17 @@ import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 
-// ==================== بيانات الفرص الثابتة ====================
+// ==================== بيانات الفرص (سيتم ترجمتها في الواجهة) ====================
 const EARNING_OPPORTUNITIES = [
-  { id: 'marinade-sol', protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png', asset: 'SOL', assetIcon: 'https://assets.coingecko.com/coins/images/4128/large/solana.png', apy: 8.5, minDeposit: 0.1, description: 'تخزين سائل لـ SOL للحصول على mSOL.', descriptionEn: 'Liquid stake SOL to receive mSOL.', url: 'https://marinade.finance/app/staking', category: 'liquid-staking', featured: true },
-  { id: 'jito-sol', protocol: 'Jito', protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png', asset: 'SOL', assetIcon: 'https://assets.coingecko.com/coins/images/4128/large/solana.png', apy: 9.2, minDeposit: 0.1, description: 'تخزين SOL للحصول على JitoSOL.', descriptionEn: 'Stake SOL for JitoSOL.', url: 'https://jito.network/staking', category: 'liquid-staking', featured: true },
-  { id: 'kamino-usdc', protocol: 'Kamino', protocolIcon: 'https://www.kamino.finance/favicon.ico', asset: 'USDC', assetIcon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png', apy: 8.0, minDeposit: 10, description: 'إقراض USDC في مجمعات سيولة آلية.', descriptionEn: 'Lend USDC in automated liquidity pools.', url: 'https://app.kamino.finance/lend', category: 'lending', featured: true },
-  { id: 'drift-perps', protocol: 'Drift Protocol', protocolIcon: 'https://drift.foundation/favicon.ico', asset: 'SOL/USDC', assetIcon: 'https://drift.foundation/favicon.ico', apy: 12.0, minDeposit: 10, description: 'تداول دائم لامركزي على Solana.', descriptionEn: 'Decentralized perpetual trading on Solana.', url: 'https://app.drift.trade', category: 'trading', featured: true },
-  { id: 'solend-lending', protocol: 'Solend', protocolIcon: 'https://solend.fi/favicon.ico', asset: 'USDC', assetIcon: 'https://assets.coingecko.com/coins/images/6319/large/usdc.png', apy: 5.0, minDeposit: 10, description: 'إقراض واقتراض لامركزي على Solana.', descriptionEn: 'Decentralized lending and borrowing on Solana.', url: 'https://solend.fi/dashboard', category: 'lending', featured: false },
-  { id: 'meteora-lp', protocol: 'Meteora', protocolIcon: 'https://meteora.ag/favicon.ico', asset: 'SOL/USDC', assetIcon: 'https://meteora.ag/favicon.ico', apy: 20.0, minDeposit: 100, description: 'توفير سيولة ديناميكية على Solana.', descriptionEn: 'Dynamic liquidity provision on Solana.', url: 'https://app.meteora.ag', category: 'liquidity-providing', featured: true },
-  { id: 'jupiter-swap', protocol: 'Jupiter', protocolIcon: 'https://jup.ag/favicon.ico', asset: 'SOL', assetIcon: 'https://assets.coingecko.com/coins/images/4128/large/solana.png', apy: 0, minDeposit: 0, description: 'أفضل أسعار التبادل على Solana.', descriptionEn: 'Best swap prices on Solana.', url: 'https://jup.ag', category: 'trading', featured: true },
-  { id: 'raydium-meco-usdt', protocol: 'Raydium', protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'MECO-USDT', assetIcon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png', apy: 15.5, minDeposit: 100, description: 'توفير سيولة لزوج MECO-USDT على Raydium.', descriptionEn: 'Provide liquidity for MECO-USDT pair on Raydium.', url: 'https://raydium.io/liquidity/', category: 'liquidity-providing', featured: true, requiresVpn: true },
-  { id: 'orca-meco-usdt', protocol: 'Orca', protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'MECO-USDT', assetIcon: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png', apy: 12.0, minDeposit: 50, description: 'توفير سيولة لزوج MECO-USDT على Orca.', descriptionEn: 'Provide liquidity for MECO-USDT pair on Orca.', url: 'https://www.orca.so/pools/EEPP9R7nHgMX1hC4s9NgLGXsyXYm7BzXuicwdRtjLCLC', category: 'liquidity-providing', featured: true, requiresVpn: true },
+  { id: 'marinade-sol', protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png', asset: 'SOL', apy: 8.5, url: 'https://marinade.finance/app/staking', category: 'staking', featured: true, descKey: 'desc_marinade' },
+  { id: 'jito-sol', protocol: 'Jito', protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png', asset: 'SOL', apy: 9.2, url: 'https://jito.network/staking', category: 'staking', featured: true, descKey: 'desc_jito' },
+  { id: 'meteora-lp', protocol: 'Meteora', protocolIcon: 'https://meteora.ag/favicon.ico', asset: 'SOL/USDC', apy: 20.0, url: 'https://app.meteora.ag', category: 'defi', featured: true, descKey: 'desc_meteora' },
+  { id: 'jupiter-swap', protocol: 'Jupiter', protocolIcon: 'https://jup.ag/favicon.ico', asset: 'SOL', apy: 0, url: 'https://jup.ag', category: 'trading', featured: true, descKey: 'desc_jupiter' },
+  { id: 'kamino-usdc', protocol: 'Kamino', protocolIcon: 'https://www.kamino.finance/favicon.ico', asset: 'USDC', apy: 8.0, url: 'https://app.kamino.finance/lend', category: 'defi', featured: false, descKey: 'desc_kamino' },
+  { id: 'drift-perps', protocol: 'Drift Protocol', protocolIcon: 'https://drift.foundation/favicon.ico', asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade', category: 'trading', featured: false, descKey: 'desc_drift' },
+  { id: 'solend-lending', protocol: 'Solend', protocolIcon: 'https://solend.fi/favicon.ico', asset: 'USDC', apy: 5.0, url: 'https://solend.fi/dashboard', category: 'defi', featured: false, descKey: 'desc_solend' },
+  { id: 'raydium-meco-usdt', protocol: 'Raydium', protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'MECO-USDT', apy: 15.5, url: 'https://raydium.io/liquidity/', category: 'pools', featured: false, requiresVpn: true, descKey: 'desc_raydium' },
+  { id: 'orca-meco-usdt', protocol: 'Orca', protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'MECO-USDT', apy: 12.0, url: 'https://www.orca.so/pools/EEPP9R7nHgMX1hC4s9NgLGXsyXYm7BzXuicwdRtjLCLC', category: 'pools', featured: false, requiresVpn: true, descKey: 'desc_orca' },
 ];
 
 const BOOKMARKS_STORAGE_KEY = '@meco_bookmarks';
@@ -36,20 +36,18 @@ const SafeImage = ({ uri, style, defaultIcon = 'globe-outline', defaultColor = '
 };
 
 export default function AppPortalScreen() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const theme = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
-  const isArabic = i18n.language === 'ar';
 
-  const [refreshing, setRefreshing] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
   const [loadingBookmarks, setLoadingBookmarks] = useState(true);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newBookmark, setNewBookmark] = useState({ name: '', url: '', iconUrl: '' });
-  const [activeView, setActiveView] = useState('all'); // 'all' or 'bookmarks'
+  const [activeView, setActiveView] = useState('explore'); // 'explore' or 'bookmarks'
 
-  // 🌟 نظام التبويبات المتعددة (Multi-Tabs System)
+  // Browser Tabs State
   const [tabs, setTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
   const [inputUrl, setInputUrl] = useState('');
@@ -103,7 +101,7 @@ export default function AppPortalScreen() {
 
   const openNewTab = (url) => {
     const newId = Date.now().toString();
-    const newTab = { id: newId, url: url, title: 'Loading...', canGoBack: false, canGoForward: false };
+    const newTab = { id: newId, url: url, title: t('loading_page', 'جاري التحميل...'), canGoBack: false, canGoForward: false };
     setTabs([...tabs, newTab]);
     setActiveTabId(newId);
     setInputUrl(url);
@@ -153,33 +151,39 @@ export default function AppPortalScreen() {
 
   const activeTabDetails = tabs.find(t => t.id === activeTabId);
 
-  const renderOpportunityItem = ({ item }) => (
-    <TouchableOpacity style={[styles.opportunityCard, { backgroundColor: colors.card }]} onPress={() => openNewTab(item.url)} activeOpacity={0.8}>
-      <View style={styles.cardHeader}>
-        <View style={styles.protocolInfo}>
-          <SafeImage uri={item.protocolIcon} style={styles.protocolIcon} defaultIcon="business-outline" />
-          <View>
-            <Text style={[styles.protocolName, { color: colors.text }]}>{item.protocol}</Text>
-            <View style={styles.assetRow}>
-              <SafeImage uri={item.assetIcon} style={styles.assetIcon} defaultIcon="cash-outline" />
-              <Text style={[styles.assetName, { color: colors.textSecondary }]}>{item.asset}</Text>
-            </View>
-          </View>
-        </View>
+  // تصنيف التطبيقات
+  const featuredApps = EARNING_OPPORTUNITIES.filter(app => app.featured);
+  const categories = [
+    { id: 'staking', title: t('category_staking', 'تخزين (Staking)'), data: EARNING_OPPORTUNITIES.filter(app => app.category === 'staking') },
+    { id: 'defi', title: t('category_defi', 'تمويل لامركزي (DeFi)'), data: EARNING_OPPORTUNITIES.filter(app => app.category === 'defi') },
+    { id: 'trading', title: t('category_trading', 'تداول (Trading)'), data: EARNING_OPPORTUNITIES.filter(app => app.category === 'trading') },
+    { id: 'pools', title: t('category_pools', 'مجمعات سيولة (Pools)'), data: EARNING_OPPORTUNITIES.filter(app => app.category === 'pools') },
+  ];
+
+  // 🎨 تصميم بطاقة البانر (Featured)
+  const renderFeaturedCard = ({ item }) => (
+    <TouchableOpacity style={[styles.featuredCard, { backgroundColor: colors.card }]} onPress={() => openNewTab(item.url)} activeOpacity={0.9}>
+      <View style={styles.featuredHeader}>
+        <SafeImage uri={item.protocolIcon} style={styles.featuredIcon} defaultIcon="business-outline" />
         {item.apy > 0 && (
           <View style={[styles.apyBadge, { backgroundColor: primaryColor + '20' }]}>
-            <Text style={[styles.apyText, { color: item.apy > 10 ? colors.success : colors.warning }]}>APY {item.apy}%</Text>
+            <Text style={[styles.apyText, { color: primaryColor }]}>{t('up_to')} {item.apy}%</Text>
           </View>
         )}
       </View>
-      <Text style={[styles.description, { color: colors.textSecondary }]} numberOfLines={2}>{isArabic ? item.description : item.descriptionEn}</Text>
+      <Text style={[styles.featuredTitle, { color: colors.text }]} numberOfLines={1}>{item.protocol}</Text>
+      <Text style={[styles.featuredDesc, { color: colors.textSecondary }]} numberOfLines={2}>{t(item.descKey)}</Text>
+    </TouchableOpacity>
+  );
+
+  // 🎨 تصميم البطاقة المربعة للشبكة (Grid App Card)
+  const renderAppCard = ({ item }) => (
+    <TouchableOpacity style={[styles.appCard, { backgroundColor: colors.card }]} onPress={() => openNewTab(item.url)} activeOpacity={0.8}>
+      <SafeImage uri={item.protocolIcon} style={styles.appIcon} defaultIcon="globe-outline" />
+      <Text style={[styles.appName, { color: colors.text }]} numberOfLines={1}>{item.protocol}</Text>
+      <Text style={[styles.appDesc, { color: colors.textSecondary }]} numberOfLines={1}>{item.asset}</Text>
       {item.requiresVpn && (
-        <View style={styles.vpnWarning}>
-          <Ionicons name="warning-outline" size={14} color={colors.warning} />
-          <Text style={[styles.vpnWarningText, { color: colors.warning }]}>
-            {isArabic ? 'قد يتطلب هذا الموقع استخدام VPN للوصول إليه' : 'This site may require a VPN to access'}
-          </Text>
-        </View>
+         <Ionicons name="warning" size={14} color={colors.warning} style={styles.vpnIcon} />
       )}
     </TouchableOpacity>
   );
@@ -198,7 +202,7 @@ export default function AppPortalScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? 50 : 30 }]}>
       
-      {/* 🌟 الشريط العلوي المتطور (Browser Header) */}
+      {/* Browser Header */}
       <View style={styles.topHeaderRow}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => setActiveTabId(null)}>
           <Ionicons name={activeTabId ? "home-outline" : "home"} size={22} color={activeTabId ? colors.textSecondary : primaryColor} />
@@ -208,7 +212,7 @@ export default function AppPortalScreen() {
           <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginLeft: 10 }} />
           <TextInput
             style={[styles.urlInput, { color: colors.text }]}
-            placeholder={isArabic ? 'ابحث أو أدخل رابط...' : 'Search or enter URL...'}
+            placeholder={t('browser_search_placeholder', 'Search or enter URL...')}
             placeholderTextColor={colors.textSecondary}
             value={inputUrl}
             onChangeText={setInputUrl}
@@ -229,23 +233,23 @@ export default function AppPortalScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 🌟 القائمة المنسدلة للخيارات */}
+      {/* Browser Menu Modal */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
           <View style={styles.menuOverlay}>
             <View style={[styles.menuContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); if(activeTabDetails?.canGoBack) webviewRefs.current[activeTabId]?.goBack(); }}>
                 <Ionicons name="arrow-back" size={20} color={activeTabDetails?.canGoBack ? colors.text : colors.textSecondary} />
-                <Text style={[styles.menuText, { color: activeTabDetails?.canGoBack ? colors.text : colors.textSecondary }]}>{isArabic ? 'رجوع للخلف' : 'Back'}</Text>
+                <Text style={[styles.menuText, { color: activeTabDetails?.canGoBack ? colors.text : colors.textSecondary }]}>{t('browser_back', 'Back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); if(activeTabDetails?.canGoForward) webviewRefs.current[activeTabId]?.goForward(); }}>
                 <Ionicons name="arrow-forward" size={20} color={activeTabDetails?.canGoForward ? colors.text : colors.textSecondary} />
-                <Text style={[styles.menuText, { color: activeTabDetails?.canGoForward ? colors.text : colors.textSecondary }]}>{isArabic ? 'تقدم للأمام' : 'Forward'}</Text>
+                <Text style={[styles.menuText, { color: activeTabDetails?.canGoForward ? colors.text : colors.textSecondary }]}>{t('browser_forward', 'Forward')}</Text>
               </TouchableOpacity>
               <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
               <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); webviewRefs.current[activeTabId]?.reload(); }}>
                 <Ionicons name="refresh" size={20} color={colors.text} />
-                <Text style={[styles.menuText, { color: colors.text }]}>{isArabic ? 'تحديث الصفحة' : 'Reload'}</Text>
+                <Text style={[styles.menuText, { color: colors.text }]}>{t('browser_reload', 'Reload')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.menuItem} onPress={() => { 
                   setMenuVisible(false); 
@@ -253,18 +257,18 @@ export default function AppPortalScreen() {
                   setAddModalVisible(true); 
               }}>
                 <Ionicons name="star-outline" size={20} color={colors.warning} />
-                <Text style={[styles.menuText, { color: colors.text }]}>{isArabic ? 'إضافة للمفضلة' : 'Add Bookmark'}</Text>
+                <Text style={[styles.menuText, { color: colors.text }]}>{t('add_bookmark', 'Add Bookmark')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* 🌟 شاشة إدارة التبويبات المفتوحة (Tabs Overview) */}
+      {/* Tabs Overview Modal */}
       <Modal visible={tabsOverviewVisible} animationType="slide" onRequestClose={() => setTabsOverviewVisible(false)}>
         <View style={[styles.tabsOverviewContainer, { backgroundColor: colors.background }]}>
           <View style={styles.tabsOverviewHeader}>
-            <Text style={[styles.tabsOverviewTitle, { color: colors.text }]}>{isArabic ? 'التبويبات المفتوحة' : 'Open Tabs'}</Text>
+            <Text style={[styles.tabsOverviewTitle, { color: colors.text }]}>{t('open_tabs', 'Open Tabs')}</Text>
             <TouchableOpacity onPress={() => {setTabsOverviewVisible(false); if(!activeTabId) setActiveTabId(tabs[0]?.id);}}>
               <Ionicons name="close" size={28} color={colors.text} />
             </TouchableOpacity>
@@ -290,12 +294,12 @@ export default function AppPortalScreen() {
           />
           <TouchableOpacity style={[styles.newTabBtn, { backgroundColor: primaryColor }]} onPress={() => {setTabsOverviewVisible(false); setActiveTabId(null); setInputUrl('');}}>
             <Ionicons name="add" size={24} color="#FFF" />
-            <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>{isArabic ? 'علامة تبويب جديدة' : 'New Tab'}</Text>
+            <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>{t('new_tab', 'New Tab')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
 
-      {/* 🌟 منطقة العرض (متصفح أو رئيسية) */}
+      {/* Main Content Area */}
       <View style={{ flex: 1 }}>
         {activeTabId ? (
           tabs.map(tab => (
@@ -319,68 +323,68 @@ export default function AppPortalScreen() {
             </View>
           ))
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={[styles.banner, { backgroundColor: colors.banner }]}>
-              <View style={styles.bannerContent}>
-                <Text style={styles.bannerTitle}>{isArabic ? 'استكشف Web3' : 'Explore Web3'}</Text>
-                <Text style={styles.bannerSubtitle}>{isArabic ? 'أفضل فرص التخزين والإقراض على Solana' : 'Top staking and lending opportunities'}</Text>
-              </View>
-              <Ionicons name="compass-outline" size={60} color="rgba(255,255,255,0.2)" style={styles.bannerIcon} />
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
+            
+            <View style={styles.headerWelcome}>
+               <Text style={[styles.welcomeTitle, { color: colors.text }]}>{t('explore_web3', 'استكشف Web3')}</Text>
+               <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary }]}>{t('explore_desc', 'أفضل التطبيقات اللامركزية بين يديك')}</Text>
             </View>
 
-            {/* 🌟 تبويبات "كل التطبيقات" و"المفضلة" */}
+            {/* Tab Switches (Explore / Bookmarks) */}
             <View style={[styles.tabSwitchContainer, { backgroundColor: colors.card }]}>
-              <TouchableOpacity
-                style={[styles.tabSwitchItem, activeView === 'all' && { borderBottomColor: primaryColor, borderBottomWidth: 2 }]}
-                onPress={() => setActiveView('all')}
-              >
-                <Text style={[styles.tabSwitchText, { color: activeView === 'all' ? primaryColor : colors.textSecondary }]}>
-                  {isArabic ? 'كل التطبيقات' : 'All Apps'}
-                </Text>
+              <TouchableOpacity style={[styles.tabSwitchItem, activeView === 'explore' && { backgroundColor: primaryColor }]} onPress={() => setActiveView('explore')}>
+                <Text style={[styles.tabSwitchText, { color: activeView === 'explore' ? '#FFF' : colors.textSecondary }]}>{t('discover', 'استكشف')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tabSwitchItem, activeView === 'bookmarks' && { borderBottomColor: primaryColor, borderBottomWidth: 2 }]}
-                onPress={() => setActiveView('bookmarks')}
-              >
-                <Text style={[styles.tabSwitchText, { color: activeView === 'bookmarks' ? primaryColor : colors.textSecondary }]}>
-                  {isArabic ? 'المفضلة' : 'Bookmarks'}
-                </Text>
+              <TouchableOpacity style={[styles.tabSwitchItem, activeView === 'bookmarks' && { backgroundColor: primaryColor }]} onPress={() => setActiveView('bookmarks')}>
+                <Text style={[styles.tabSwitchText, { color: activeView === 'bookmarks' ? '#FFF' : colors.textSecondary }]}>{t('bookmarks', 'المفضلة')}</Text>
               </TouchableOpacity>
             </View>
 
-            {/* المحتوى حسب التبويب النشط */}
-            {activeView === 'all' ? (
+            {activeView === 'explore' ? (
               <>
-                <FlatList 
-                  data={EARNING_OPPORTUNITIES} 
-                  renderItem={renderOpportunityItem} 
-                  keyExtractor={item => item.id} 
-                  scrollEnabled={false} 
-                  contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 50 }} 
-                />
+                {/* 🎨 Featured Apps (Hero Carousel) */}
+                <View style={styles.sectionContainer}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('featured_apps', 'تطبيقات مميزة')}</Text>
+                  <FlatList
+                    data={featuredApps}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyExtractor={item => item.id}
+                    renderItem={renderFeaturedCard}
+                    contentContainerStyle={{ paddingHorizontal: 20 }}
+                  />
+                </View>
+
+                {/* 🎨 Grid Categories */}
+                {categories.map((category) => (
+                   category.data.length > 0 && (
+                    <View key={category.id} style={styles.sectionContainer}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}>{category.title}</Text>
+                      <FlatList
+                        data={category.data}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyExtractor={item => item.id}
+                        renderItem={renderAppCard}
+                        contentContainerStyle={{ paddingHorizontal: 20 }}
+                      />
+                    </View>
+                   )
+                ))}
               </>
             ) : (
+              // Bookmarks View
               <>
-                <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: colors.text }]}>{isArabic ? 'مفضلتك' : 'Your Bookmarks'}</Text>
-                </View>
-                
                 {loadingBookmarks ? (
-                  <ActivityIndicator size="small" color={primaryColor} style={{ marginVertical: 20 }} />
+                  <ActivityIndicator size="small" color={primaryColor} style={{ marginTop: 50 }} />
                 ) : bookmarks.length > 0 ? (
-                  <FlatList 
-                    data={bookmarks} 
-                    renderItem={renderBookmarkItem} 
-                    keyExtractor={item => item.id} 
-                    scrollEnabled={false} 
-                    contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 50 }} 
-                  />
+                  <View style={{ paddingHorizontal: 20 }}>
+                     {bookmarks.map(item => <React.Fragment key={item.id}>{renderBookmarkItem({item})}</React.Fragment>)}
+                  </View>
                 ) : (
                   <View style={[styles.emptyBookmarks, { backgroundColor: colors.card }]}>
-                    <Ionicons name="bookmark-outline" size={32} color={colors.textSecondary} />
-                    <Text style={[styles.emptyBookmarksText, { color: colors.textSecondary }]}>
-                      {isArabic ? 'لا توجد مفضلة بعد' : 'No bookmarks yet'}
-                    </Text>
+                    <Ionicons name="bookmark-outline" size={48} color={colors.textSecondary} />
+                    <Text style={[styles.emptyBookmarksText, { color: colors.textSecondary }]}>{t('no_bookmarks_yet', 'لا توجد مفضلة بعد')}</Text>
                   </View>
                 )}
               </>
@@ -389,16 +393,16 @@ export default function AppPortalScreen() {
         )}
       </View>
 
-      {/* نافذة الإضافة للمفضلة */}
+      {/* Add Bookmark Modal */}
       <Modal visible={addModalVisible} transparent animationType="fade" onRequestClose={() => setAddModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>{isArabic ? 'إضافة للمفضلة' : 'Add Bookmark'}</Text>
-            <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border }]} placeholder="Name" placeholderTextColor={colors.textSecondary} value={newBookmark.name} onChangeText={(text) => setNewBookmark(prev => ({ ...prev, name: text }))} />
-            <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border }]} placeholder="URL" placeholderTextColor={colors.textSecondary} value={newBookmark.url} onChangeText={(text) => setNewBookmark(prev => ({ ...prev, url: text }))} keyboardType="url" autoCapitalize="none" />
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('add_bookmark', 'إضافة للمفضلة')}</Text>
+            <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border }]} placeholder={t('bookmark_name_placeholder', "Name")} placeholderTextColor={colors.textSecondary} value={newBookmark.name} onChangeText={(text) => setNewBookmark(prev => ({ ...prev, name: text }))} />
+            <TextInput style={[styles.input, { color: colors.text, borderColor: colors.border }]} placeholder={t('bookmark_url_placeholder', "URL")} placeholderTextColor={colors.textSecondary} value={newBookmark.url} onChangeText={(text) => setNewBookmark(prev => ({ ...prev, url: text }))} keyboardType="url" autoCapitalize="none" />
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalButton} onPress={() => setAddModalVisible(false)}><Text style={{ color: colors.textSecondary }}>{isArabic ? 'إلغاء' : 'Cancel'}</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, { backgroundColor: primaryColor }]} onPress={handleAddBookmark}><Text style={{ color: '#FFF' }}>{isArabic ? 'حفظ' : 'Save'}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalButton} onPress={() => setAddModalVisible(false)}><Text style={{ color: colors.textSecondary }}>{t('cancel', 'إلغاء')}</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, { backgroundColor: primaryColor }]} onPress={handleAddBookmark}><Text style={{ color: '#FFF', fontWeight: 'bold' }}>{t('save', 'حفظ')}</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -408,6 +412,7 @@ export default function AppPortalScreen() {
   );
 }
 
+// ==================== STYLES ====================
 const styles = StyleSheet.create({
   container: { flex: 1 },
   topHeaderRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, marginBottom: 10, gap: 10 },
@@ -417,54 +422,64 @@ const styles = StyleSheet.create({
   dotsInsideInput: { paddingHorizontal: 10, height: '100%', justifyContent: 'center' },
   tabsBadgeContainer: { width: 40, height: 40, borderRadius: 12, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
   tabsBadgeText: { fontSize: 14, fontWeight: 'bold' },
+  
+  headerWelcome: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
+  welcomeTitle: { fontSize: 28, fontWeight: '800', marginBottom: 4 },
+  welcomeSubtitle: { fontSize: 14, fontWeight: '500' },
+
+  tabSwitchContainer: { flexDirection: 'row', marginHorizontal: 20, borderRadius: 20, marginBottom: 20, padding: 4 },
+  tabSwitchItem: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 16 },
+  tabSwitchText: { fontSize: 14, fontWeight: '700' },
+
+  sectionContainer: { marginBottom: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', paddingHorizontal: 20, marginBottom: 12 },
+
+  // App Store Style Cards
+  featuredCard: { width: width * 0.75, borderRadius: 24, padding: 20, marginRight: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
+  featuredHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  featuredIcon: { width: 56, height: 56, borderRadius: 18 },
+  apyBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+  apyText: { fontSize: 12, fontWeight: '800' },
+  featuredTitle: { fontSize: 18, fontWeight: '800', marginBottom: 6 },
+  featuredDesc: { fontSize: 13, lineHeight: 18 },
+
+  appCard: { width: 110, padding: 16, borderRadius: 20, marginRight: 12, alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
+  appIcon: { width: 48, height: 48, borderRadius: 14, marginBottom: 12 },
+  appName: { fontSize: 14, fontWeight: '700', marginBottom: 4, textAlign: 'center' },
+  appDesc: { fontSize: 11, textAlign: 'center' },
+  vpnIcon: { position: 'absolute', top: 10, right: 10 },
+
+  bookmarkCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 12 },
+  bookmarkIcon: { width: 40, height: 40, borderRadius: 12, marginRight: 14 },
+  bookmarkInfo: { flex: 1, marginRight: 8 },
+  bookmarkName: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  bookmarkUrl: { fontSize: 13 },
+  
+  emptyBookmarks: { padding: 40, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginHorizontal: 20, marginTop: 20 },
+  emptyBookmarksText: { marginTop: 12, fontSize: 15, fontWeight: '500' },
+
+  // Modals & Menus
   menuOverlay: { flex: 1, backgroundColor: 'transparent' },
-  menuContent: { position: 'absolute', top: Platform.OS === 'ios' ? 95 : 75, right: 60, width: 180, borderRadius: 12, borderWidth: 1, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
-  menuText: { fontSize: 16, fontWeight: '500' },
+  menuContent: { position: 'absolute', top: Platform.OS === 'ios' ? 95 : 75, right: 60, width: 180, borderRadius: 16, borderWidth: 1, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
+  menuText: { fontSize: 15, fontWeight: '600' },
   menuDivider: { height: 1, marginHorizontal: 10 },
+  
   tabsOverviewContainer: { flex: 1, paddingTop: Platform.OS === 'ios' ? 50 : 20 },
   tabsOverviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
-  tabsOverviewTitle: { fontSize: 24, fontWeight: 'bold' },
-  tabPreviewCard: { flex: 1, margin: 8, borderRadius: 16, borderWidth: 2, height: 180, overflow: 'hidden' },
-  tabPreviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(128,128,128,0.2)' },
-  tabPreviewTitle: { flex: 1, fontSize: 12, fontWeight: 'bold' },
+  tabsOverviewTitle: { fontSize: 24, fontWeight: '800' },
+  tabPreviewCard: { flex: 1, margin: 8, borderRadius: 20, borderWidth: 2, height: 200, overflow: 'hidden' },
+  tabPreviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(128,128,128,0.2)' },
+  tabPreviewTitle: { flex: 1, fontSize: 13, fontWeight: '700' },
   tabPreviewBody: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  newTabBtn: { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 30, elevation: 5 },
+  newTabBtn: { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 28, borderRadius: 30, elevation: 5 },
+  
   browserLoader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  banner: { marginHorizontal: 20, marginBottom: 20, borderRadius: 20, padding: 20, overflow: 'hidden' },
-  bannerContent: { zIndex: 2 },
-  bannerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFF', marginBottom: 6 },
-  bannerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)' },
-  bannerIcon: { position: 'absolute', right: -10, bottom: -10, zIndex: 1 },
-  tabSwitchContainer: { flexDirection: 'row', marginHorizontal: 20, borderRadius: 16, marginBottom: 16, paddingHorizontal: 8 },
-  tabSwitchItem: { flex: 1, paddingVertical: 14, alignItems: 'center' },
-  tabSwitchText: { fontSize: 16, fontWeight: '600' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700' },
-  opportunityCard: { borderRadius: 16, padding: 16, marginBottom: 12 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  protocolInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  protocolIcon: { width: 40, height: 40, borderRadius: 20 },
-  protocolName: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  assetRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  assetIcon: { width: 16, height: 16, borderRadius: 8 },
-  assetName: { fontSize: 13 },
-  apyBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
-  apyText: { fontSize: 14, fontWeight: '700' },
-  description: { fontSize: 13, marginBottom: 12, lineHeight: 18 },
-  vpnWarning: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, marginBottom: 8 },
-  vpnWarningText: { fontSize: 12, fontWeight: '500' },
-  bookmarkCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 8 },
-  bookmarkIcon: { width: 36, height: 36, borderRadius: 8, marginRight: 12 },
-  bookmarkInfo: { flex: 1, marginRight: 8 },
-  bookmarkName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
-  bookmarkUrl: { fontSize: 12 },
-  emptyBookmarks: { padding: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12, marginHorizontal: 20 },
-  emptyBookmarksText: { marginTop: 8, fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { borderRadius: 20, padding: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  input: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 12 },
-  modalButtons: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 10 },
-  modalButton: { padding: 12, borderRadius: 12, minWidth: 100, alignItems: 'center' },
+  
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+  modalContent: { borderRadius: 24, padding: 24 },
+  modalTitle: { fontSize: 20, fontWeight: '800', marginBottom: 20, textAlign: 'center' },
+  input: { borderWidth: 1, borderRadius: 14, padding: 16, fontSize: 16, marginBottom: 16 },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, gap: 12 },
+  modalButton: { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center' },
 });
