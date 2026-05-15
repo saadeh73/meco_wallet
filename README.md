@@ -109,7 +109,7 @@
 
 [![Download APK](https://img.shields.io/badge/📲_تحميل_تطبيق_ميكو-6C63FF?style=for-the-badge&logo=android&logoColor=white)](https://monycoin.github.io/meco_wallet-app/)
 
-**الإصدار الحالي:** `v1.11.0`  
+**الإصدار الحالي:** `v1.13.0`  
 **تاريخ التحديث:** أبريل 2026  
 
 </div>
