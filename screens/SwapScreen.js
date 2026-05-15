@@ -332,8 +332,7 @@ export default function SwapScreen({ route }) {
               <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={styles.headerTitle}>
-              {/* ✅ تم التعديل هنا: عنوان رئيسي منفصل عن أيقونات التطبيق */}
-              <Text style={[styles.title, { color: colors.text }]}>{t('swap_main_heading', 'تبادل العملات')}</Text>
+              <Text style={[styles.title, { color: colors.text }]}>{t('swap_title')}</Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
             </View>
           </View>
