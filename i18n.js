@@ -69,7 +69,7 @@ const resources = {
       market: 'السوق',
       user_settings: 'إعدادات المستخدم',
       swap_title: 'تبادل',
-      explore: 'استكشف',
+      explore: 'اكتسب',
       earn: 'اكتسب',
       change: 'تغيير',
       save_address: 'حفظ العنوان',
@@ -562,7 +562,13 @@ const resources = {
       desc_drift: "تداول دائم لامركزي على Solana.",
       desc_solend: "إقراض واقتراض لامركزي على Solana.",
       desc_raydium: "توفير سيولة لزوج MECO-USDT.",
-      desc_orca: "توفير سيولة لزوج MECO-USDT على Orca."
+      desc_orca: "توفير سيولة لزوج MECO-USDT على Orca.",
+      portal_badge_label: 'بوابة Web3',
+      portal_apy_label: 'سنوياً',
+      portal_dex_label: 'تبادل',
+      portal_open_app: 'فتح التطبيق',
+      portal_tabs_label: 'تبويبات',
+      portal_no_bookmarks_hint: 'أضف مواقعك المفضلة للوصول إليها بسرعة'
     }
   },
   en: {
@@ -1124,7 +1130,13 @@ const resources = {
       desc_drift: "Decentralized perpetual trading on Solana.",
       desc_solend: "Decentralized lending and borrowing on Solana.",
       desc_raydium: "Provide liquidity for MECO-USDT pair.",
-      desc_orca: "Provide liquidity for MECO-USDT pair on Orca."
+      desc_orca: "Provide liquidity for MECO-USDT pair on Orca.",
+      portal_badge_label: 'Web3 Portal',
+      portal_apy_label: 'APY',
+      portal_dex_label: 'DEX',
+      portal_open_app: 'Open App',
+      portal_tabs_label: 'tabs',
+      portal_no_bookmarks_hint: 'Add your favorite sites for quick access'
     }
   }
 };
