@@ -1,11 +1,9 @@
-// screens/MarketScreen.js - UX Improved Search
-// Last Updated: 2026-05-12
-
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+// screens/MarketScreen.js
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, RefreshControl, SafeAreaView, ActivityIndicator,
-  Dimensions, TextInput,
+  TextInput,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -18,234 +16,284 @@ import { getJupiterMarketData, CORE_TOKENS } from '../services/jupiterMarketServ
 import { getGlobalMarketData, getTopMovers } from '../services/marketOverviewService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
 
-const SPARKLINE_WIDTH = 70;
-const SPARKLINE_HEIGHT = 35;
-const WATCHLIST_STORAGE_KEY = '@meco_watchlist';
+const SPARKLINE_WIDTH      = 70;
+const SPARKLINE_HEIGHT     = 35;
+const WATCHLIST_KEY        = '@meco_watchlist';
+const REFRESH_INTERVAL_MS  = 30000;
 
-// ============ MarketOverviewCard ============
+// ─── MarketOverviewCard ───────────────────────────────────────────────────────
 function MarketOverviewCard({ data, isDark }) {
-  const colors = {
-    background: isDark ? 'rgba(108, 99, 255, 0.15)' : 'rgba(108, 99, 255, 0.08)',
-    text: isDark ? '#FFFFFF' : '#1A1A2E',
+  const { t } = useTranslation();
+  const C = {
+    bg:      isDark ? 'rgba(108,99,255,0.15)' : 'rgba(108,99,255,0.08)',
+    text:    isDark ? '#FFFFFF' : '#1A1A2E',
     secondary: isDark ? '#A0A0B0' : '#6B7280',
     success: '#10B981',
-    error: '#EF4444',
+    error:   '#EF4444',
   };
   const isPositive = (data?.marketCapChange24h || 0) >= 0;
 
   return (
-    <View style={[styles.overviewCard, { backgroundColor: colors.background }]}>
-      <View style={styles.overviewRow}>
-        <View style={styles.overviewItem}>
-          <Text style={[styles.overviewLabel, { color: colors.secondary }]}>Market Cap</Text>
-          <Text style={[styles.overviewValue, { color: colors.text }]}>{data?.totalMarketCapFormatted || '\$0'}</Text>
+    <View style={[S.overviewCard, { backgroundColor: C.bg }]}>
+      <View style={S.overviewRow}>
+        <View style={S.overviewItem}>
+          {/* ✅ مترجم */}
+          <Text style={[S.overviewLabel, { color: C.secondary }]}>{t('market_cap_label')}</Text>
+          <Text style={[S.overviewValue, { color: C.text }]}>{data?.totalMarketCapFormatted || '$0'}</Text>
         </View>
-        <View style={[styles.overviewItem, styles.overviewBorder]}>
-          <Text style={[styles.overviewLabel, { color: colors.secondary }]}>24h Volume</Text>
-          <Text style={[styles.overviewValue, { color: colors.text }]}>{data?.totalVolume24hFormatted || '\$0'}</Text>
+        <View style={[S.overviewItem, S.overviewBorder]}>
+          <Text style={[S.overviewLabel, { color: C.secondary }]}>{t('market_volume')}</Text>
+          <Text style={[S.overviewValue, { color: C.text }]}>{data?.totalVolume24hFormatted || '$0'}</Text>
         </View>
-        <View style={styles.overviewItem}>
-          <Text style={[styles.overviewLabel, { color: colors.secondary }]}>BTC Dom</Text>
-          <Text style={[styles.overviewValue, { color: colors.text }]}>{data?.btcDominance?.toFixed(1) || '0'}%</Text>
+        <View style={S.overviewItem}>
+          <Text style={[S.overviewLabel, { color: C.secondary }]}>{t('btc_dominance')}</Text>
+          <Text style={[S.overviewValue, { color: C.text }]}>{data?.btcDominance?.toFixed(1) || '0'}%</Text>
         </View>
       </View>
-      <View style={[styles.marketChangeBar, { backgroundColor: isPositive ? colors.success + '20' : colors.error + '20' }]}>
-        <Ionicons name={isPositive ? 'trending-up' : 'trending-down'} size={16} color={isPositive ? colors.success : colors.error} />
-        <Text style={[styles.marketChangeText, { color: isPositive ? colors.success : colors.error }]}>{data?.marketCapChangeFormatted || '0%'} (24h)</Text>
+      <View style={[S.marketChangeBar, { backgroundColor: isPositive ? C.success + '20' : C.error + '20' }]}>
+        <Ionicons name={isPositive ? 'trending-up' : 'trending-down'} size={16} color={isPositive ? C.success : C.error} />
+        {/* ✅ مترجم بدون نص ثابت "(24h)" */}
+        <Text style={[S.marketChangeText, { color: isPositive ? C.success : C.error }]}>
+          {data?.marketCapChangeFormatted || '0%'} ({t('time_24h')})
+        </Text>
       </View>
     </View>
   );
 }
 
-// ============ PortfolioSummaryCard ============
+// ─── PortfolioSummaryCard ─────────────────────────────────────────────────────
 function PortfolioSummaryCard({ totalValue, changePercent, isDark }) {
   const { t } = useTranslation();
-  const colors = {
-    background: isDark ? '#1A1A2E' : '#FFFFFF',
-    text: isDark ? '#FFFFFF' : '#1A1A2E',
+  const C = {
+    bg:      isDark ? '#1A1A2E' : '#FFFFFF',
+    text:    isDark ? '#FFFFFF' : '#1A1A2E',
     secondary: isDark ? '#A0A0B0' : '#6B7280',
     success: '#10B981',
-    error: '#EF4444',
+    error:   '#EF4444',
   };
   const isPositive = changePercent >= 0;
 
   return (
-    <View style={[styles.portfolioCard, { backgroundColor: colors.background }]}>
-      <View style={styles.portfolioHeader}>
+    <View style={[S.portfolioCard, { backgroundColor: C.bg }]}>
+      <View style={S.portfolioHeader}>
         <View>
-          <Text style={[styles.portfolioLabel, { color: colors.secondary }]}>{t('total_balance') || 'Total Balance'}</Text>
-          <Text style={[styles.portfolioValue, { color: colors.text }]}>
+          <Text style={[S.portfolioLabel, { color: C.secondary }]}>{t('total_balance')}</Text>
+          <Text style={[S.portfolioValue, { color: C.text }]}>
             ${totalValue?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
           </Text>
         </View>
-        <View style={[styles.portfolioChange, { backgroundColor: isPositive ? colors.success + '20' : colors.error + '20' }]}>
-          <Ionicons name={isPositive ? 'arrow-up' : 'arrow-down'} size={12} color={isPositive ? colors.success : colors.error} />
-          <Text style={[styles.portfolioChangeText, { color: isPositive ? colors.success : colors.error }]}>{Math.abs(changePercent).toFixed(2)}%</Text>
+        <View style={[S.portfolioChange, { backgroundColor: isPositive ? C.success + '20' : C.error + '20' }]}>
+          <Ionicons name={isPositive ? 'arrow-up' : 'arrow-down'} size={12} color={isPositive ? C.success : C.error} />
+          <Text style={[S.portfolioChangeText, { color: isPositive ? C.success : C.error }]}>
+            {Math.abs(changePercent).toFixed(2)}%
+          </Text>
         </View>
       </View>
     </View>
   );
 }
 
-// ============ TopMoversSection ============
+// ─── TopMoversSection ─────────────────────────────────────────────────────────
 function TopMoversSection({ gainers, losers, isDark }) {
   const { t } = useTranslation();
-  const colors = {
-    background: isDark ? '#1A1A2E' : '#FFFFFF',
-    text: isDark ? '#FFFFFF' : '#1A1A2E',
-    secondary: isDark ? '#A0A0B0' : '#6B7280',
+  const C = {
+    bg:      isDark ? '#1A1A2E' : '#FFFFFF',
+    text:    isDark ? '#FFFFFF' : '#1A1A2E',
     success: '#10B981',
-    error: '#EF4444',
+    error:   '#EF4444',
   };
 
-  const renderMoverItem = (item, isGainer) => (
-    <View key={item.symbol} style={[styles.moverItem, { backgroundColor: colors.background }]}>
-      <Text style={[styles.moverSymbol, { color: colors.text }]}>{item.symbol}</Text>
-      <Text style={[styles.moverChange, { color: isGainer ? colors.success : colors.error }]}>{isGainer ? '+' : ''}{item.change24h?.toFixed(1)}%</Text>
+  const MoverItem = ({ item, isGainer }) => (
+    <View style={[S.moverItem, { backgroundColor: C.bg }]}>
+      <Text style={[S.moverSymbol, { color: C.text }]}>{item.symbol}</Text>
+      <Text style={[S.moverChange, { color: isGainer ? C.success : C.error }]}>
+        {isGainer ? '+' : ''}{item.change24h?.toFixed(1)}%
+      </Text>
     </View>
   );
 
   return (
-    <View style={styles.topMoversContainer}>
-      <View style={styles.moverColumn}>
-        <View style={styles.moverHeader}>
-          <Ionicons name="flame" size={16} color={colors.success} />
-          <Text style={[styles.moverTitle, { color: colors.success }]}>{t('market_top_gainers') || 'Top Gainers'}</Text>
+    <View style={S.topMoversContainer}>
+      <View style={S.moverColumn}>
+        <View style={S.moverHeader}>
+          <Ionicons name="flame" size={16} color={C.success} />
+          <Text style={[S.moverTitle, { color: C.success }]}>{t('market_top_gainers')}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.moverRow}>{(gainers || []).slice(0, 3).map(item => renderMoverItem(item, true))}</View>
+          <View style={S.moverRow}>
+            {(gainers || []).slice(0, 3).map(item => <MoverItem key={item.symbol} item={item} isGainer />)}
+          </View>
         </ScrollView>
       </View>
-      <View style={[styles.moverColumn, { marginTop: 12 }]}>
-        <View style={styles.moverHeader}>
-          <Ionicons name="snow" size={16} color={colors.error} />
-          <Text style={[styles.moverTitle, { color: colors.error }]}>{t('market_losers') || 'Losers'}</Text>
+      <View style={[S.moverColumn, { marginTop: 12 }]}>
+        <View style={S.moverHeader}>
+          <Ionicons name="snow" size={16} color={C.error} />
+          <Text style={[S.moverTitle, { color: C.error }]}>{t('market_losers')}</Text>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.moverRow}>{(losers || []).slice(0, 3).map(item => renderMoverItem(item, false))}</View>
+          <View style={S.moverRow}>
+            {(losers || []).slice(0, 3).map(item => <MoverItem key={item.symbol} item={item} isGainer={false} />)}
+          </View>
         </ScrollView>
       </View>
     </View>
   );
 }
 
-// ============ TokenListItem ============
+// ─── TokenListItem ────────────────────────────────────────────────────────────
 function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColor }) {
-  const colors = {
-    background: isDark ? '#1A1A2E' : '#FFFFFF',
-    text: isDark ? '#FFFFFF' : '#1A1A2E',
+  const C = {
+    bg:      isDark ? '#1A1A2E' : '#FFFFFF',
+    text:    isDark ? '#FFFFFF' : '#1A1A2E',
     secondary: isDark ? '#A0A0B0' : '#6B7280',
     success: '#10B981',
-    error: '#EF4444',
+    error:   '#EF4444',
   };
-  const isPositive = (token.price_change_percentage_24h || 0) >= 0;
-  const changeColor = isPositive ? colors.success : colors.error;
+  const isPositive  = (token.price_change_percentage_24h || 0) >= 0;
+  const changeColor = isPositive ? C.success : C.error;
 
+  // Sparkline — منحنى بصري بناءً على نسبة التغيير (ليس بيانات حقيقية)
   const sparklinePoints = useMemo(() => {
     const change = token.price_change_percentage_24h || 0;
-    const values = [];
-    for (let i = 0; i < 15; i++) {
+    return Array.from({ length: 15 }, (_, i) => {
       const progress = i / 14;
-      const base = 100 * (1 + (change / 100) * progress * (0.7 + Math.sin(i * 0.5) * 0.3));
-      values.push(base);
-    }
-    return values;
+      return 100 * (1 + (change / 100) * progress * (0.7 + Math.sin(i * 0.5) * 0.3));
+    });
   }, [token.price_change_percentage_24h]);
 
   const renderSparkline = () => {
-    const min = Math.min(...sparklinePoints);
-    const max = Math.max(...sparklinePoints);
+    const min   = Math.min(...sparklinePoints);
+    const max   = Math.max(...sparklinePoints);
     const range = max - min || 1;
-    const points = sparklinePoints.map((value, i) => {
+    const pts   = sparklinePoints.map((v, i) => {
       const x = (i / 14) * SPARKLINE_WIDTH;
-      const y = SPARKLINE_HEIGHT - ((value - min) / range) * SPARKLINE_HEIGHT;
+      const y = SPARKLINE_HEIGHT - ((v - min) / range) * SPARKLINE_HEIGHT;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     return (
       <Svg width={SPARKLINE_WIDTH} height={SPARKLINE_HEIGHT}>
-        <Polyline points={points} fill="none" stroke={changeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <Polyline points={pts} fill="none" stroke={changeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     );
   };
 
   const formatPrice = (price) => {
-    if (!price || price === 0) return '\$0.00';
+    if (!price || price === 0) return '$0.00';
     if (price < 0.0001) return `$${price.toExponential(2)}`;
-    if (price < 0.01) return price.toFixed(6);
+    if (price < 0.01)   return `$${price.toFixed(6)}`;
     return `$${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   };
 
   return (
-    <TouchableOpacity style={[styles.tokenCard, { backgroundColor: colors.background }]} onPress={() => onPress(token)} onLongPress={() => onLongPress(token)} activeOpacity={0.7}>
-      <View style={styles.tokenLeft}>
-        <Text style={[styles.tokenRank, { color: colors.secondary }]}>{index + 1}</Text>
-        <View style={[styles.tokenIcon, { backgroundColor: primaryColor + '20' }]}>
-          {token.image ? <Image source={{ uri: token.image }} style={styles.tokenIconImage} /> : <Text style={[styles.tokenIconText, { color: primaryColor }]}>{token.symbol?.charAt(0)}</Text>}
+    <TouchableOpacity
+      style={[S.tokenCard, { backgroundColor: C.bg }]}
+      onPress={() => onPress(token)}
+      onLongPress={() => onLongPress(token)}
+      activeOpacity={0.7}
+    >
+      <View style={S.tokenLeft}>
+        <Text style={[S.tokenRank, { color: C.secondary }]}>{index + 1}</Text>
+        <View style={[S.tokenIcon, { backgroundColor: primaryColor + '20' }]}>
+          {token.image
+            ? <Image source={{ uri: token.image }} style={S.tokenIconImage} />
+            : <Text style={[S.tokenIconText, { color: primaryColor }]}>{token.symbol?.charAt(0)}</Text>}
         </View>
-        <View style={styles.tokenInfo}>
-          <Text style={[styles.tokenSymbol, { color: colors.text }]}>{token.symbol}</Text>
-          <Text style={[styles.tokenName, { color: colors.secondary }]} numberOfLines={1}>{token.name}</Text>
+        <View style={S.tokenInfo}>
+          <Text style={[S.tokenSymbol, { color: C.text }]}>{token.symbol}</Text>
+          <Text style={[S.tokenName, { color: C.secondary }]} numberOfLines={1}>{token.name}</Text>
         </View>
       </View>
-      <View style={styles.tokenCenter}>{renderSparkline()}</View>
-      <View style={styles.tokenRight}>
-        <Text style={[styles.tokenPrice, { color: colors.text }]}>{formatPrice(token.current_price)}</Text>
-        <View style={[styles.tokenChangeBadge, { backgroundColor: changeColor + '15' }]}>
+      <View style={S.tokenCenter}>{renderSparkline()}</View>
+      <View style={S.tokenRight}>
+        <Text style={[S.tokenPrice, { color: C.text }]}>{formatPrice(token.current_price)}</Text>
+        <View style={[S.tokenChangeBadge, { backgroundColor: changeColor + '15' }]}>
           <Ionicons name={isPositive ? 'arrow-up' : 'arrow-down'} size={10} color={changeColor} />
-          <Text style={[styles.tokenChangeText, { color: changeColor }]}>{Math.abs(token.price_change_percentage_24h || 0).toFixed(2)}%</Text>
+          <Text style={[S.tokenChangeText, { color: changeColor }]}>
+            {Math.abs(token.price_change_percentage_24h || 0).toFixed(2)}%
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
 
-// ============ MAIN SCREEN ============
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function MarketScreen() {
-  const navigation = useNavigation();
-  const { t } = useTranslation();
-  const theme = useAppStore(s => s.theme);
+  const navigation   = useNavigation();
+  const { t }        = useTranslation();
+  const theme        = useAppStore(s => s.theme);
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
-  const isDark = theme === 'dark';
+  const isDark       = theme === 'dark';
 
-  const walletPublicKey = useAppStore(s => s.walletPublicKey);
+  const activeAccount = useAppStore(s => {
+    const accounts = s.accounts;
+    const idx      = s.activeAccountIndex;
+    return accounts.length > 0 ? accounts[idx] : null;
+  });
 
-  const [tokens, setTokens] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // ✅ إضافة حالة جديدة للتحكم في ظهور شريط البحث المدمج بدلاً من المودال
+  const [tokens,         setTokens]         = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [activeTab,      setActiveTab]      = useState('all');
+  const [searchQuery,    setSearchQuery]    = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
-  
-  const [watchlist, setWatchlist] = useState([]);
+  const [watchlist,      setWatchlist]      = useState([]);
   const [marketOverview, setMarketOverview] = useState(null);
-  const [topMovers, setTopMovers] = useState({ gainers: [], losers: [] });
+  const [topMovers,      setTopMovers]      = useState({ gainers: [], losers: [] });
   const [portfolioValue, setPortfolioValue] = useState(0);
-  const [portfolioChange, setPortfolioChange] = useState(0);
-  const [sortBy, setSortBy] = useState('rank');
+  const [portfolioChange,setPortfolioChange]= useState(0);
+  const [sortBy,         setSortBy]         = useState('rank');
 
-  const colors = {
+  // ✅ flag لمنع الاستدعاء المزدوج عند أول mount
+  const isInitialMount = useRef(true);
+
+  const C = {
     background: isDark ? '#0A0A0F' : '#F8F9FA',
-    card: isDark ? '#1A1A2E' : '#FFFFFF',
-    text: isDark ? '#FFFFFF' : '#1A1A2E',
-    secondary: isDark ? '#A0A0B0' : '#6B7280',
-    border: isDark ? '#2A2A3E' : '#E5E7EB',
-    success: '#10B981',
-    error: '#EF4444',
+    card:       isDark ? '#1A1A2E' : '#FFFFFF',
+    text:       isDark ? '#FFFFFF' : '#1A1A2E',
+    secondary:  isDark ? '#A0A0B0' : '#6B7280',
+    border:     isDark ? '#2A2A3E' : '#E5E7EB',
+    success:    '#10B981',
+    error:      '#EF4444',
   };
 
+  // ── Load watchlist ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const loadWatchlist = async () => {
-      try {
-        const stored = await AsyncStorage.getItem(WATCHLIST_STORAGE_KEY);
-        if (stored) setWatchlist(JSON.parse(stored));
-      } catch (e) { console.warn('Failed to load watchlist:', e); }
-    };
-    loadWatchlist();
+    AsyncStorage.getItem(WATCHLIST_KEY)
+      .then(stored => { if (stored) setWatchlist(JSON.parse(stored)); })
+      .catch(() => {});
   }, []);
 
-  const fetchAllMarketData = async () => {
+  // ── Portfolio calculation ───────────────────────────────────────────────────
+  // ✅ حساب Portfolio لكل العملات المتاحة وليس SOL+MECO+USDC+USDT فقط
+  const calculatePortfolio = async (tokenData, publicKey) => {
+    if (!publicKey || !tokenData.length) return;
+    try {
+      let total = 0;
+
+      for (const token of CORE_TOKENS) {
+        const price = tokenData.find(tk => tk.symbol === token.symbol)?.current_price || 0;
+        if (price === 0) continue;
+
+        let balance = 0;
+        if (token.symbol === 'SOL') {
+          balance = await getSolBalance(true, publicKey).catch(() => 0);
+        } else {
+          balance = await getTokenBalance(token.mint, true, publicKey).catch(() => 0);
+        }
+        total += (balance || 0) * price;
+      }
+
+      setPortfolioValue(total);
+    } catch (_) {
+      setPortfolioValue(0);
+    }
+  };
+
+  // ── Fetch all market data ───────────────────────────────────────────────────
+  const fetchAllMarketData = useCallback(async () => {
     try {
       const [tokenData, overviewData, moversData] = await Promise.all([
         getJupiterMarketData(),
@@ -256,171 +304,175 @@ export default function MarketScreen() {
       setTokens(tokenData);
       setMarketOverview(overviewData);
       setTopMovers(moversData);
+      setPortfolioChange(overviewData?.marketCapChange24h || 0);
 
-      if (walletPublicKey) {
-        const solBalance = await getSolBalance(true, walletPublicKey);
-        const mecoBalance = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, walletPublicKey);
-        const usdcBalance = await getTokenBalance('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', true, walletPublicKey);
-        const usdtBalance = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, walletPublicKey);
-
-        const solPrice = tokenData.find(t => t.symbol === 'SOL')?.current_price || 0;
-        const mecoPrice = tokenData.find(t => t.symbol === 'MECO')?.current_price || 0;
-        const usdcPrice = tokenData.find(t => t.symbol === 'USDC')?.current_price || 0;
-        const usdtPrice = tokenData.find(t => t.symbol === 'USDT')?.current_price || 0;
-
-        const totalValue = (solBalance * solPrice) + (mecoBalance * mecoPrice) + (usdcBalance * usdcPrice) + (usdtBalance * usdtPrice);
-        setPortfolioValue(totalValue);
-        setPortfolioChange(overviewData?.marketCapChange24h || 0);
-      } else {
-        setPortfolioValue(0);
-        setPortfolioChange(0);
+      if (activeAccount?.publicKey) {
+        await calculatePortfolio(tokenData, activeAccount.publicKey);
       }
-    } catch (error) {
-      console.error('Market fetch error:', error);
-      setTokens(CORE_TOKENS.map((t, i) => ({
-        ...t,
-        current_price: t.symbol === 'MECO' ? 0 : (t.symbol === 'SOL' ? 0 : 0),
-        price_change_percentage_24h: (Math.random() - 0.5) * 10,
+    } catch (err) {
+      console.error('Market fetch error:', err);
+      // ✅ لا بيانات عشوائية — نعرض الأسعار بصفر بدلاً من Math.random()
+      setTokens(CORE_TOKENS.map((tk, i) => ({
+        ...tk,
+        current_price:               0,
+        price_change_percentage_24h: 0,
         rank: i + 1,
       })));
     }
-  };
+  }, [activeAccount?.publicKey]);
 
+  // ── Initial load + interval ─────────────────────────────────────────────────
+  // ✅ useEffect للتحميل الأول والـ interval فقط
   useEffect(() => {
-    let isMounted = true;
+    let isMounted  = true;
     const init = async () => {
       await fetchAllMarketData();
       if (isMounted) setLoading(false);
     };
     init();
-    const intervalId = setInterval(fetchAllMarketData, 30000);
-    return () => { isMounted = false; clearInterval(intervalId); };
-  }, [walletPublicKey]);
 
+    const interval = setInterval(fetchAllMarketData, REFRESH_INTERVAL_MS);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeAccount?.publicKey]);
+
+  // ✅ useFocusEffect للتحديث عند العودة للشاشة — يتخطى أول مرة
   useFocusEffect(
     useCallback(() => {
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
+        return;
+      }
       fetchAllMarketData();
-    }, [walletPublicKey])
+    }, [fetchAllMarketData])
   );
 
+  // ── Refresh ─────────────────────────────────────────────────────────────────
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchAllMarketData();
-    const stored = await AsyncStorage.getItem(WATCHLIST_STORAGE_KEY);
-    if (stored) setWatchlist(JSON.parse(stored));
+    try {
+      const stored = await AsyncStorage.getItem(WATCHLIST_KEY);
+      if (stored) setWatchlist(JSON.parse(stored));
+    } catch (_) {}
     setRefreshing(false);
   };
 
-  const handleTokenPress = (token) => navigation.navigate('TokenDetails', { token });
-
+  // ── Watchlist toggle ────────────────────────────────────────────────────────
   const handleAddToWatchlist = async (token) => {
     try {
-      let newWatchlist;
-      if (watchlist.includes(token.symbol)) {
-        newWatchlist = watchlist.filter(s => s !== token.symbol);
-      } else {
-        newWatchlist = [...watchlist, token.symbol];
-      }
-      setWatchlist(newWatchlist);
-      await AsyncStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(newWatchlist));
-    } catch (e) { console.warn('Failed to update watchlist:', e); }
+      const updated = watchlist.includes(token.symbol)
+        ? watchlist.filter(s => s !== token.symbol)
+        : [...watchlist, token.symbol];
+      setWatchlist(updated);
+      await AsyncStorage.setItem(WATCHLIST_KEY, JSON.stringify(updated));
+    } catch (_) {}
   };
 
+  // ── Filtered + sorted tokens ────────────────────────────────────────────────
+  // ✅ إصلاح تعارض اسم t — تغيير parameter إلى tk
   const filteredTokens = useMemo(() => {
-    let filtered = tokens.filter(t => {
+    let result = tokens.filter(tk => {
       if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        if (!t.symbol?.toLowerCase().includes(query) && !t.name?.toLowerCase().includes(query)) return false;
+        const q = searchQuery.toLowerCase();
+        if (!tk.symbol?.toLowerCase().includes(q) && !tk.name?.toLowerCase().includes(q)) return false;
       }
-      if (activeTab === 'watchlist') return watchlist.includes(t.symbol);
-      else if (activeTab === 'gainers') return (t.price_change_percentage_24h || 0) > 0;
-      else if (activeTab === 'losers') return (t.price_change_percentage_24h || 0) < 0;
+      if (activeTab === 'watchlist') return watchlist.includes(tk.symbol);
+      if (activeTab === 'gainers')   return (tk.price_change_percentage_24h || 0) > 0;
+      if (activeTab === 'losers')    return (tk.price_change_percentage_24h || 0) < 0;
       return true;
     });
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'price': return (b.current_price || 0) - (a.current_price || 0);
-        case 'change': return (b.price_change_percentage_24h || 0) - (a.price_change_percentage_24h || 0);
-        default: return (a.rank || 999) - (b.rank || 999);
-      }
+
+    result.sort((a, b) => {
+      if (sortBy === 'price')  return (b.current_price || 0) - (a.current_price || 0);
+      if (sortBy === 'change') return (b.price_change_percentage_24h || 0) - (a.price_change_percentage_24h || 0);
+      return (a.rank || 999) - (b.rank || 999);
     });
-    return filtered;
+
+    return result;
   }, [tokens, searchQuery, activeTab, watchlist, sortBy]);
 
+  // ✅ Tabs — كلها مترجمة
   const tabs = [
-    { id: 'all', label: t('all_tokens') || 'All' },
-    { id: 'watchlist', label: t('watchlist') || 'Watchlist' },
-    { id: 'gainers', label: t('gainers') || 'Gainers' },
-    { id: 'losers', label: t('market_losers') || 'Losers' },
+    { id: 'all',       labelKey: 'all_tokens'       },
+    { id: 'watchlist', labelKey: 'watchlist'         },
+    { id: 'gainers',   labelKey: 'gainers'           },
+    { id: 'losers',    labelKey: 'market_losers'     },
   ];
 
+  // ✅ Sort options — كلها مترجمة
   const sortOptions = [
-    { id: 'rank', label: 'Rank' },
-    { id: 'price', label: 'Price' },
-    { id: 'change', label: '24h' },
+    { id: 'rank',   labelKey: 'rank'   },
+    { id: 'price',  labelKey: 'price'  },
+    { id: 'change', labelKey: 'change' },
   ];
 
-  // ✅ دالة إغلاق البحث
-  const handleCloseSearch = () => {
-    setSearchQuery('');
-    setIsSearchActive(false);
-  };
+  const handleCloseSearch = () => { setSearchQuery(''); setIsSearchActive(false); };
 
+  // ── Loading state ───────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <View style={styles.loadingCenter}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
+        <View style={S.loadingCenter}>
           <ActivityIndicator size="large" color={primaryColor} />
-          <Text style={[styles.loadingText, { color: colors.secondary }]}>{t('loading') || 'Loading...'}</Text>
+          <Text style={[S.loadingText, { color: C.secondary }]}>{t('loading')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={styles.header}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
+
+      {/* Header */}
+      <View style={S.header}>
         <View>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>{t('market_title') || 'Market'}</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.secondary }]}>{t('market_subtitle') || 'Real prices • Live updates'}</Text>
+          <Text style={[S.headerTitle,    { color: C.text }]}>{t('market_title')}</Text>
+          <Text style={[S.headerSubtitle, { color: C.secondary }]}>{t('market_subtitle')}</Text>
         </View>
-        <TouchableOpacity 
-          style={[styles.searchButton, { backgroundColor: colors.card }]} 
-          onPress={() => setIsSearchActive(!isSearchActive)} // تبديل حالة البحث
+        <TouchableOpacity
+          style={[S.searchButton, { backgroundColor: C.card }]}
+          onPress={() => setIsSearchActive(v => !v)}
         >
-          <Ionicons name="search" size={20} color={colors.secondary} />
+          <Ionicons name={isSearchActive ? 'close' : 'search'} size={20} color={C.secondary} />
         </TouchableOpacity>
       </View>
 
-      {/* ✅ شريط البحث المدمج (يظهر ويختفي بسلاسة) */}
+      {/* Search bar */}
       {isSearchActive && (
-        <View style={[styles.searchBarContainer, { backgroundColor: colors.background }]}>
-          <View style={[styles.searchInputWrapper, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Ionicons name="search" size={18} color={colors.secondary} style={{ marginLeft: 12 }} />
-            <TextInput 
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder={t('market_search_placeholder') || 'Search tokens...'}
-              placeholderTextColor={colors.secondary}
+        <View style={[S.searchBarContainer, { backgroundColor: C.background }]}>
+          <View style={[S.searchInputWrapper, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Ionicons name="search" size={18} color={C.secondary} style={{ marginLeft: 12 }} />
+            <TextInput
+              style={[S.searchInput, { color: C.text }]}
+              placeholder={t('market_search_placeholder')}
+              placeholderTextColor={C.secondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              autoFocus={true}
+              autoFocus
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-                <Ionicons name="close-circle" size={18} color={colors.secondary} />
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={S.clearBtn}>
+                <Ionicons name="close-circle" size={18} color={C.secondary} />
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity onPress={handleCloseSearch} style={styles.cancelBtn}>
-            <Text style={{ color: primaryColor, fontWeight: '600' }}>{t('cancel') || 'Cancel'}</Text>
+          <TouchableOpacity onPress={handleCloseSearch} style={S.cancelBtn}>
+            <Text style={{ color: primaryColor, fontWeight: '600' }}>{t('cancel')}</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[primaryColor]} tintColor={primaryColor} />} showsVerticalScrollIndicator={false}>
-        
-        {/* إخفاء البطاقات العلوية أثناء البحث لكي يركز المستخدم على النتائج */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={S.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[primaryColor]} tintColor={primaryColor} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* إخفاء البطاقات العلوية أثناء البحث */}
         {!isSearchActive && (
           <>
             <MarketOverviewCard data={marketOverview} isDark={isDark} />
@@ -429,30 +481,55 @@ export default function MarketScreen() {
           </>
         )}
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContent}>
+        {/* Tabs */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.tabsScroll} contentContainerStyle={S.tabsContent}>
           {tabs.map(tab => (
-            <TouchableOpacity key={tab.id} style={[styles.tab, activeTab === tab.id && { backgroundColor: primaryColor }]} onPress={() => setActiveTab(tab.id)}>
-              <Text style={[styles.tabText, { color: activeTab === tab.id ? '#FFFFFF' : colors.secondary }]}>{tab.label}</Text>
+            <TouchableOpacity
+              key={tab.id}
+              style={[S.tab, activeTab === tab.id && { backgroundColor: primaryColor }]}
+              onPress={() => setActiveTab(tab.id)}
+            >
+              <Text style={[S.tabText, { color: activeTab === tab.id ? '#FFFFFF' : C.secondary }]}>
+                {t(tab.labelKey)}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        <View style={styles.sortContainer}>
-          {sortOptions.map(option => (
-            <TouchableOpacity key={option.id} style={[styles.sortButton, sortBy === option.id && { backgroundColor: primaryColor + '20' }]} onPress={() => setSortBy(option.id)}>
-              <Text style={[styles.sortButtonText, { color: sortBy === option.id ? primaryColor : colors.secondary }]}>{option.label}</Text>
+        {/* Sort */}
+        <View style={S.sortContainer}>
+          {sortOptions.map(opt => (
+            <TouchableOpacity
+              key={opt.id}
+              style={[S.sortButton, sortBy === opt.id && { backgroundColor: primaryColor + '20' }]}
+              onPress={() => setSortBy(opt.id)}
+            >
+              <Text style={[S.sortButtonText, { color: sortBy === opt.id ? primaryColor : C.secondary }]}>
+                {t(opt.labelKey)}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.tokenList}>
+        {/* Token list */}
+        <View style={S.tokenList}>
           {filteredTokens.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="search" size={48} color={colors.secondary} />
-              <Text style={[styles.emptyText, { color: colors.secondary }]}>{activeTab === 'watchlist' ? (t('watchlist_empty') || 'No tokens') : (t('no_results') || 'No results')}</Text>
+            <View style={S.emptyContainer}>
+              <Ionicons name="search" size={48} color={C.secondary} />
+              <Text style={[S.emptyText, { color: C.secondary }]}>
+                {activeTab === 'watchlist' ? t('watchlist_empty') : t('no_results')}
+              </Text>
             </View>
           ) : filteredTokens.map((token, index) => (
-            <TokenListItem key={token.mint || token.id} token={token} index={index} onPress={handleTokenPress} onLongPress={handleAddToWatchlist} isDark={isDark} primaryColor={primaryColor} />
+            <TokenListItem
+              key={token.mint || token.id}
+              token={token}
+              index={index}
+              onPress={() => navigation.navigate('TokenDetails', { token })}
+              onLongPress={() => handleAddToWatchlist(token)}
+              isDark={isDark}
+              primaryColor={primaryColor}
+            />
           ))}
         </View>
       </ScrollView>
@@ -460,67 +537,76 @@ export default function MarketScreen() {
   );
 }
 
-// ============ STYLES ============
-const styles = StyleSheet.create({
+// ═══════════════════════════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════════════════════════
+const S = StyleSheet.create({
   loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, fontSize: 14 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold' },
+  loadingText:   { marginTop: 12, fontSize: 14 },
+
+  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
+  headerTitle:    { fontSize: 28, fontWeight: 'bold' },
   headerSubtitle: { fontSize: 13, marginTop: 2 },
-  searchButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  
-  // ✅ تنسيقات شريط البحث المدمج
-  searchBarContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
-  searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, height: 44 },
-  searchInput: { flex: 1, paddingHorizontal: 10, fontSize: 15, height: '100%' },
-  clearBtn: { padding: 10 },
-  cancelBtn: { paddingLeft: 12, paddingVertical: 10 },
+  searchButton:   { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+
+  searchBarContainer:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
+  searchInputWrapper:  { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, height: 44 },
+  searchInput:         { flex: 1, paddingHorizontal: 10, fontSize: 15, height: '100%' },
+  clearBtn:            { padding: 10 },
+  cancelBtn:           { paddingLeft: 12, paddingVertical: 10 },
 
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
-  overviewCard: { borderRadius: 16, padding: 16, marginBottom: 12 },
-  overviewRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  overviewItem: { flex: 1, alignItems: 'center' },
-  overviewBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(128, 128, 128, 0.2)' },
-  overviewLabel: { fontSize: 12, marginBottom: 4 },
-  overviewValue: { fontSize: 16, fontWeight: 'bold' },
-  marketChangeBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 8, borderRadius: 8, gap: 6 },
-  marketChangeText: { fontSize: 14, fontWeight: '600' },
-  portfolioCard: { borderRadius: 16, padding: 16, marginBottom: 12 },
-  portfolioHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  portfolioLabel: { fontSize: 12, marginBottom: 4 },
-  portfolioValue: { fontSize: 24, fontWeight: 'bold' },
-  portfolioChange: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 },
+
+  overviewCard:       { borderRadius: 16, padding: 16, marginBottom: 12 },
+  overviewRow:        { flexDirection: 'row', justifyContent: 'space-between' },
+  overviewItem:       { flex: 1, alignItems: 'center' },
+  overviewBorder:     { borderLeftWidth: 1, borderRightWidth: 1, borderColor: 'rgba(128,128,128,0.2)' },
+  overviewLabel:      { fontSize: 12, marginBottom: 4 },
+  overviewValue:      { fontSize: 16, fontWeight: 'bold' },
+  marketChangeBar:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 8, borderRadius: 8, gap: 6 },
+  marketChangeText:   { fontSize: 14, fontWeight: '600' },
+
+  portfolioCard:       { borderRadius: 16, padding: 16, marginBottom: 12 },
+  portfolioHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  portfolioLabel:      { fontSize: 12, marginBottom: 4 },
+  portfolioValue:      { fontSize: 24, fontWeight: 'bold' },
+  portfolioChange:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 },
   portfolioChangeText: { fontSize: 14, fontWeight: '600' },
+
   topMoversContainer: { marginBottom: 12 },
-  moverColumn: {},
-  moverHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  moverTitle: { fontSize: 14, fontWeight: '600' },
-  moverRow: { flexDirection: 'row', gap: 8 },
-  moverItem: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignItems: 'center' },
-  moverSymbol: { fontSize: 12, fontWeight: '600' },
-  moverChange: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-  tabsScroll: { marginBottom: 12 },
-  tabsContent: { paddingRight: 20 },
-  tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(128, 128, 128, 0.1)' },
-  tabText: { fontSize: 14, fontWeight: '600' },
-  sortContainer: { flexDirection: 'row', marginBottom: 12, gap: 8 },
-  sortButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  sortButtonText: { fontSize: 12, fontWeight: '500' },
-  tokenList: { gap: 10 },
+  moverColumn:        {},
+  moverHeader:        { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  moverTitle:         { fontSize: 14, fontWeight: '600' },
+  moverRow:           { flexDirection: 'row', gap: 8 },
+  moverItem:          { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignItems: 'center' },
+  moverSymbol:        { fontSize: 12, fontWeight: '600' },
+  moverChange:        { fontSize: 11, fontWeight: '600', marginTop: 2 },
+
+  tabsScroll:   { marginBottom: 12 },
+  tabsContent:  { paddingRight: 20 },
+  tab:          { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(128,128,128,0.1)' },
+  tabText:      { fontSize: 14, fontWeight: '600' },
+
+  sortContainer:   { flexDirection: 'row', marginBottom: 12, gap: 8 },
+  sortButton:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  sortButtonText:  { fontSize: 12, fontWeight: '500' },
+
+  tokenList:      { gap: 10 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  emptyText: { marginTop: 12, fontSize: 16 },
-  tokenCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14 },
-  tokenLeft: { flexDirection: 'row', alignItems: 'center', flex: 1.2 },
-  tokenRank: { fontSize: 11, width: 20, textAlign: 'center' },
-  tokenIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  tokenIconImage: { width: 36, height: 36, borderRadius: 18 },
-  tokenIconText: { fontSize: 14, fontWeight: 'bold' },
-  tokenInfo: { flex: 1 },
-  tokenSymbol: { fontSize: 15, fontWeight: 'bold' },
-  tokenName: { fontSize: 11, marginTop: 1 },
-  tokenCenter: { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
-  tokenRight: { flex: 1, alignItems: 'flex-end' },
-  tokenPrice: { fontSize: 14, fontWeight: 'bold' },
+  emptyText:      { marginTop: 12, fontSize: 16 },
+
+  tokenCard:        { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14 },
+  tokenLeft:        { flexDirection: 'row', alignItems: 'center', flex: 1.2 },
+  tokenRank:        { fontSize: 11, width: 20, textAlign: 'center' },
+  tokenIcon:        { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  tokenIconImage:   { width: 36, height: 36, borderRadius: 18 },
+  tokenIconText:    { fontSize: 14, fontWeight: 'bold' },
+  tokenInfo:        { flex: 1 },
+  tokenSymbol:      { fontSize: 15, fontWeight: 'bold' },
+  tokenName:        { fontSize: 11, marginTop: 1 },
+  tokenCenter:      { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
+  tokenRight:       { flex: 1, alignItems: 'flex-end' },
+  tokenPrice:       { fontSize: 14, fontWeight: 'bold' },
   tokenChangeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, marginTop: 4, gap: 2 },
-  tokenChangeText: { fontSize: 11, fontWeight: '600' },
+  tokenChangeText:  { fontSize: 11, fontWeight: '600' },
 });

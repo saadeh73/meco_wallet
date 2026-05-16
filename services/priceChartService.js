@@ -1,156 +1,152 @@
 // services/priceChartService.js
-// خدمة جديدة لجلب بيانات الرسم البياني للأسعار (OHLC)
-// يستخدم CoinGecko API كمحرك أساسي
 
-const COINGECKO_API = 'https://api.coingecko.com/api/v3';
-const CACHE_DURATION = 60000; // 1 minute cache
+const COINGECKO_API  = 'https://api.coingecko.com/api/v3';
+const CACHE_DURATION = 60000; // 1 دقيقة
+const FETCH_TIMEOUT  = 8000;  // 8 ثوانٍ
 
-// Map من رموز SOL tokens إلى CoinGecko IDs
+// ✅ IDs محدّثة — تتزامن مع CORE_TOKENS في jupiterMarketService
 const COINGECKO_IDS = {
-  SOL: 'solana',
-  MECO: 'monycoin',
-  USDT: 'tether',
-  USDC: 'usd-coin',
-  JUP: 'jupiter-aggregator',
-  RAY: 'raydium',
-  BONK: 'bonk',
-  WIF: 'dogwifcoin',
-  PYTH: 'pyth-network',
-  JTO: 'jito',
-  RNDR: 'render-token',
-  HNT: 'helium',
-  ORCA: 'orca',
-  MNDE: 'marinade-finance',
-  BOME: 'book-of-meme',
-  TNSR: 'tensor',
+  SOL:    'solana',
+  USDT:   'tether',
+  USDC:   'usd-coin',
+  JUP:    'jupiter-exchange-solana',   // ✅ تصحيح
+  RAY:    'raydium',
+  BONK:   'bonk',
+  WIF:    'dogwifcoin',
+  PYTH:   'pyth-network',
+  JTO:    'jito-governance-token',
+  HNT:    'helium',
+  ORCA:   'orca',
+  MNDE:   'marinade',
+  BOME:   'book-of-meme',
+  POPCAT: 'popcat',                    // ✅ بديل RNDR
+  MEW:    'cat-in-a-dogs-world',       // ✅ بديل TNSR
+  // MECO غير مدرج في CoinGecko — يُعالج بشكل صريح أدناه
 };
+
+// العملات التي لا تدعم chart من CoinGecko
+const NO_CHART_SYMBOLS = new Set(['MECO', 'USDT', 'USDC']);
 
 const CACHE = {};
 
-/**
- * جلب بيانات OHLC (Open, High, Low, Close) للعملة
- * @param {string} symbol - رمز العملة
- * @param {string} days - عدد الأيام (1, 7, 30, 90, 365, max)
- * @returns {Object} بيانات OHLC مع حجم التداول
- */
-export async function getOHLCData(symbol, days = 7) {
-  const cacheKey = `${symbol}_${days}`;
-  const now = Date.now();
+// ─── Helper: fetch مع timeout ─────────────────────────────────────────────────
+const fetchWithTimeout = (url, ms = FETCH_TIMEOUT) => {
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } })
+    .finally(() => clearTimeout(timer));
+};
 
-  // Check cache
-  if (CACHE[cacheKey] && (now - CACHE[cacheKey].timestamp) < CACHE_DURATION) {
+// ─── OHLC Data ────────────────────────────────────────────────────────────────
+export async function getOHLCData(symbol, days = 7) {
+  // ✅ عملات بدون chart — نُعيد مباشرة بدون استدعاء API
+  if (NO_CHART_SYMBOLS.has(symbol)) {
+    return getEmptyChartResult(symbol, days);
+  }
+
+  const cacheKey = `ohlc_${symbol}_${days}`;
+  const now      = Date.now();
+
+  if (CACHE[cacheKey] && now - CACHE[cacheKey].timestamp < CACHE_DURATION) {
     return CACHE[cacheKey].data;
   }
 
-  const coinId = COINGECKO_IDS[symbol] || symbol.toLowerCase();
+  const coinId = COINGECKO_IDS[symbol];
+  if (!coinId) {
+    console.warn(`[PriceChart] No CoinGecko ID for ${symbol}`);
+    return getEmptyChartResult(symbol, days);
+  }
 
   try {
-    // جلب بيانات OHLC من CoinGecko
     const url = `${COINGECKO_API}/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
+    const res  = await fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const ohlcRaw = await res.json();
+    if (!Array.isArray(ohlcRaw) || ohlcRaw.length === 0) {
+      throw new Error('Empty OHLC response');
     }
 
-    const ohlcData = await response.json();
-
-    if (!Array.isArray(ohlcData) || ohlcData.length === 0) {
-      throw new Error('No OHLC data available');
-    }
-
-    // تحويل البيانات إلى تنسيق مناسب
-    const formattedData = ohlcData.map(point => ({
-      timestamp: point[0],
-      open: point[1],
-      high: point[2],
-      low: point[3],
-      close: point[4],
+    const data = ohlcRaw.map(p => ({
+      timestamp: p[0],
+      open:  p[1],
+      high:  p[2],
+      low:   p[3],
+      close: p[4],
     }));
 
-    // حساب قيم إضافية
-    const latestClose = formattedData[formattedData.length - 1]?.close || 0;
-    const firstOpen = formattedData[0]?.open || 0;
-    const change24h = firstOpen > 0 ? ((latestClose - firstOpen) / firstOpen) * 100 : 0;
+    const latestClose = data[data.length - 1]?.close || 0;
+    const firstOpen   = data[0]?.open || 0;
+
+    // ✅ التسمية الصحيحة: تغيير الفترة كلها وليس "24h" فقط
+    const periodChange = firstOpen > 0
+      ? ((latestClose - firstOpen) / firstOpen) * 100
+      : 0;
 
     const result = {
       symbol,
       days,
-      data: formattedData,
+      data,
       stats: {
-        currentPrice: latestClose,
-        openPrice: firstOpen,
-        high24h: Math.max(...formattedData.map(d => d.high)),
-        low24h: Math.min(...formattedData.map(d => d.low)),
-        change24h,
-        change24hFormatted: formatPriceChange(change24h),
+        currentPrice:        latestClose,
+        openPrice:           firstOpen,
+        high:                Math.max(...data.map(d => d.high)),
+        low:                 Math.min(...data.map(d => d.low)),
+        periodChange,                                    // ✅ تغيير الفترة
+        periodChangeFormatted: formatPriceChange(periodChange),
       },
+      sparklineData: generateSparkline(data),
       timestamp: now,
+      isFallback: false,
     };
 
-    CACHE[cacheKey] = {
-      data: result,
-      timestamp: now,
-    };
-
+    CACHE[cacheKey] = { data: result, timestamp: now };
     return result;
-  } catch (error) {
-    console.warn(`❌ [PriceChart] Failed to fetch OHLC for ${symbol}:`, error.message);
-    return generateFallbackChart(symbol, days);
+
+  } catch (err) {
+    console.warn(`❌ [PriceChart] OHLC failed for ${symbol}:`, err.message);
+    return getEmptyChartResult(symbol, days);
   }
 }
 
-/**
- * جلب بيانات Volume (حجم التداول)
- * @param {string} symbol - رمز العملة
- * @param {string} days - عدد الأيام
- * @returns {Array} بيانات Volume
- */
+// ─── Volume Data ──────────────────────────────────────────────────────────────
 export async function getVolumeData(symbol, days = 7) {
-  const coinId = COINGECKO_IDS[symbol] || symbol.toLowerCase();
+  if (NO_CHART_SYMBOLS.has(symbol)) return [];
+
+  // ✅ إضافة cache للـ volume
+  const cacheKey = `vol_${symbol}_${days}`;
+  const now      = Date.now();
+
+  if (CACHE[cacheKey] && now - CACHE[cacheKey].timestamp < CACHE_DURATION) {
+    return CACHE[cacheKey].data;
+  }
+
+  const coinId = COINGECKO_IDS[symbol];
+  if (!coinId) return [];
 
   try {
-    const url = `${COINGECKO_API}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&type=line`;
+    const url = `${COINGECKO_API}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
+    const res  = await fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+    const body = await res.json();
+    if (!Array.isArray(body?.total_volumes)) throw new Error('No volume data');
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.total_volumes || !Array.isArray(data.total_volumes)) {
-      throw new Error('No volume data available');
-    }
-
-    return data.total_volumes.map(point => ({
-      timestamp: point[0],
-      volume: point[1],
+    const volumeData = body.total_volumes.map(p => ({
+      timestamp: p[0],
+      volume:    p[1],
     }));
-  } catch (error) {
-    console.warn(`❌ [PriceChart] Failed to fetch volume for ${symbol}:`, error.message);
+
+    CACHE[cacheKey] = { data: volumeData, timestamp: now };
+    return volumeData;
+
+  } catch (err) {
+    console.warn(`❌ [PriceChart] Volume failed for ${symbol}:`, err.message);
     return [];
   }
 }
 
-/**
- * جلب البيانات الكاملة للرسمة البيانية
- * @param {string} symbol - رمز العملة
- * @param {string} days - عدد الأيام
- * @returns {Object} بيانات كاملة للرسمة
- */
+// ─── Full Chart Data ──────────────────────────────────────────────────────────
 export async function getFullChartData(symbol, days = 7) {
   try {
     const [ohlcResult, volumeData] = await Promise.all([
@@ -158,122 +154,49 @@ export async function getFullChartData(symbol, days = 7) {
       getVolumeData(symbol, days),
     ]);
 
-    return {
-      ...ohlcResult,
-      volumeData,
-      sparklineData: generateSparklineData(ohlcResult.data),
-    };
-  } catch (error) {
-    console.warn(`❌ [PriceChart] Failed to get full chart data for ${symbol}:`, error.message);
-    return generateFallbackChart(symbol, days);
+    return { ...ohlcResult, volumeData };
+
+  } catch (err) {
+    console.warn(`❌ [PriceChart] Full chart failed for ${symbol}:`, err.message);
+    return getEmptyChartResult(symbol, days);
   }
 }
 
-/**
- * توليد بيانات Sparkline مبسطة
- */
-function generateSparklineData(ohlcData) {
-  if (!ohlcData || ohlcData.length === 0) return [];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  // اختيار نقاط عشوائية لتمثيل الرسم
-  const step = Math.max(1, Math.floor(ohlcData.length / 20));
-  const points = [];
-
-  for (let i = 0; i < ohlcData.length; i += step) {
-    points.push(ohlcData[i].close);
-  }
-
-  return points;
-}
-
-/**
- * توليد بيانات افتراضية عند فشل API
- */
-function generateFallbackChart(symbol, days) {
-  const now = Date.now();
-  const hoursBack = days === '1' ? 24 : days * 24;
-  const data = [];
-  const basePrice = getBasePrice(symbol);
-
-  // توليد نقاط وهمية
-  for (let i = 0; i < 50; i++) {
-    const timestamp = now - (hoursBack * 3600000 * (1 - i / 50));
-    const randomFactor = 0.95 + Math.random() * 0.1;
-    const price = basePrice * randomFactor;
-
-    data.push({
-      timestamp,
-      open: price * 0.995,
-      high: price * 1.02,
-      low: price * 0.98,
-      close: price,
-    });
-  }
-
+// ✅ بيانات فارغة بدلاً من بيانات مزيفة بـ Math.random()
+function getEmptyChartResult(symbol, days) {
   return {
     symbol,
     days,
-    data,
-    stats: {
-      currentPrice: basePrice,
-      openPrice: basePrice * 0.98,
-      high24h: basePrice * 1.02,
-      low24h: basePrice * 0.98,
-      change24h: 2.0,
-      change24hFormatted: '+2.0%',
-    },
-    timestamp: now,
-    isFallback: true,
-    volumeData: [],
-    sparklineData: data.slice(-20).map(d => d.close),
+    data:         [],
+    stats:        { currentPrice: 0, openPrice: 0, high: 0, low: 0, periodChange: 0, periodChangeFormatted: '0%' },
+    sparklineData:[],
+    volumeData:   [],
+    timestamp:    Date.now(),
+    isFallback:   true,
   };
 }
 
-/**
- * تحديد السعر الأساسي لكل عملة
- */
-function getBasePrice(symbol) {
-  const prices = {
-    SOL: 145.50,
-    MECO: 0.000103,
-    USDT: 1.0,
-    USDC: 1.0,
-    JUP: 0.89,
-    RAY: 4.52,
-    BONK: 0.000018,
-    WIF: 2.15,
-    PYTH: 0.35,
-    JTO: 2.80,
-    RNDR: 7.50,
-    HNT: 6.20,
-    ORCA: 1.85,
-    MNDE: 0.85,
-    BOME: 0.0095,
-    TNSR: 0.85,
-  };
-
-  return prices[symbol] || 1.0;
+// Sparkline — نقاط مختصرة من بيانات OHLC الحقيقية
+function generateSparkline(ohlcData) {
+  if (!ohlcData || ohlcData.length === 0) return [];
+  const step = Math.max(1, Math.floor(ohlcData.length / 20));
+  const pts  = [];
+  for (let i = 0; i < ohlcData.length; i += step) {
+    pts.push(ohlcData[i].close);
+  }
+  return pts;
 }
 
-/**
- * تنسيق تغيير السعر
- */
 function formatPriceChange(change) {
-  if (change === undefined || change === null || isNaN(change)) return '0%';
-  const prefix = change >= 0 ? '+' : '';
-  return `${prefix}${change.toFixed(2)}%`;
+  if (!change && change !== 0) return '0%';
+  return `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
 }
 
-/**
- * مسح الكاش
- */
+// ─── Cache clear ──────────────────────────────────────────────────────────────
 export function clearPriceChartCache() {
-  Object.keys(CACHE).forEach(key => delete CACHE[key]);
+  Object.keys(CACHE).forEach(k => delete CACHE[k]);
 }
 
-export default {
-  getOHLCData,
-  getVolumeData,
-  getFullChartData,
-  clearPriceChartCache,
-};
+export default { getOHLCData, getVolumeData, getFullChartData, clearPriceChartCache };

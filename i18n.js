@@ -181,6 +181,10 @@ const resources = {
       telegram: 'تلغرام',
       explorer: 'المستكشف',
       meco_description: 'MECO هي عملة رقمية مبنية على شبكة سولانا، مصممة للمدفوعات الصغيرة السريعة والآمنة ومنخفضة التكلفة.',
+      ohlc_open: 'افتتاح',
+      ohlc_high: 'أعلى',
+      ohlc_low: 'أدنى',
+      ohlc_close: 'إغلاق',
 
       // ========== Market Stats (جديد) ==========
       sort_by: 'ترتيب حسب',
@@ -749,6 +753,10 @@ const resources = {
       telegram: 'Telegram',
       explorer: 'Explorer',
       meco_description: 'MECO is a digital currency built on the Solana network, designed for fast, secure, and low-cost micro-payments.',
+      ohlc_open: 'Open',
+      ohlc_high: 'High',
+      ohlc_low: 'Low',
+      ohlc_close: 'Close',
 
       // ========== Market Stats (New) ==========
       sort_by: 'Sort by',
