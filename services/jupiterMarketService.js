@@ -12,7 +12,7 @@ export const CORE_TOKENS = [
   {
     id: 'MonyCoin', symbol: 'MECO', name: 'MonyCoin', decimals: 9, swapAvailable: true,
     image: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png',
-    mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
+    mint: 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W',
   },
   {
     id: 'tether', symbol: 'USDT', name: 'Tether', decimals: 6, swapAvailable: true,
@@ -93,7 +93,7 @@ export const CORE_TOKENS = [
 ];
 
 // ─── ثوابت ────────────────────────────────────────────────────────────────────
-const MECO_MINT        = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
+const MECO_MINT        = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
 const MECO_TOTAL_SUPPLY = 1_000_000_000;
 const FETCH_TIMEOUT    = 8000; // 8 ثوانٍ
 

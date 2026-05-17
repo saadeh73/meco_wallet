@@ -3,7 +3,7 @@ import * as web3 from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
 
 // ✅ عنوان عقد عملة MECO
-const MECO_MINT_ADDRESS = '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i';
+const MECO_MINT_ADDRESS = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
 
 const HELIUS_URL = 'https://mainnet.helius-rpc.com/?api-key=fb28d3cf-7dd1-4667-9167-7941c3aceb66';
 

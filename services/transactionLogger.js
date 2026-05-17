@@ -113,7 +113,7 @@ function getTokenInfo(symbol) {
     'MECO': {
       symbol: 'MECO',
       name: 'MonyCoin',
-      mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
+      mint: 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W',
       decimals: 6
     },
     'USDC': {
@@ -231,8 +231,8 @@ export async function executeRealSwap(swapData) {
     const transaction = web3.Transaction.from(swapTransactionBuf);
 
     // 6. إضافة رسوم الخدمة إذا كانت هناك
-    const FEE_COLLECTOR = 'HXkEZSKictbSYan9ZxQGaHpFrbA4eLDyNtEDxVBkdFy6';
-    const SERVICE_FEE_PERCENTAGE = 0.1; // 10%
+    const FEE_COLLECTOR = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
+    const SERVICE_FEE_PERCENTAGE = 0.0005; 
     
     if (fromToken === 'SOL' && fromAmount > 0) {
       const serviceFee = fromAmount * SERVICE_FEE_PERCENTAGE;

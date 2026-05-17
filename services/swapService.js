@@ -11,7 +11,7 @@ import { default as heliusService } from './heliusService';
 // ✅ جميع العملات الـ 16 متزامنة مع jupiterMarketService
 export const TOKEN_MINTS = {
   SOL:    'So11111111111111111111111111111111111111112',
-  MECO:   '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
+  MECO:   'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W',
   USDT:   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
   USDC:   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   JUP:    'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbJedZ89LxcQ',
