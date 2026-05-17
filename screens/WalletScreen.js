@@ -100,7 +100,7 @@ export default function WalletScreen() {
         if (asset.symbol === 'SOL') {
           amount = solBal;
         } else {
-          const tokenData = tokenAccounts.find(t => t.mint === asset.mint);
+          const tokenData = tokenAccounts.find(tk => tk.mint === asset.mint);
           if (tokenData) amount = tokenData.amount;
         }
 

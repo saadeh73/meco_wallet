@@ -4,364 +4,382 @@ import * as SecureStore from 'expo-secure-store';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 
-// ✅ استيراد دوال heliusService الموثوقة
 import { getSolBalance, getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
 
-// ✅ جميع العملات الـ 16
-export const CORE_TOKENS = [
-  { symbol: 'SOL', name: 'Solana', mint: 'So11111111111111111111111111111111111111112', image: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png', swapAvailable: true },
-  { symbol: 'MECO', name: 'Meco Token', mint: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', image: 'https://bafybeicr6h2x642z42k3t6s3mnhx4t3c6h35z7x7t6q2y3w6k4s7m5t6p4.ipfs.nftstorage.link/', swapAvailable: true },
-  { symbol: 'USDT', name: 'Tether USD', mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', image: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.png', swapAvailable: true },
-  { symbol: 'USDC', name: 'USD Coin', mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', image: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png', swapAvailable: true }
-];
-
+// ─── TOKEN_MINTS ──────────────────────────────────────────────────────────────
+// ✅ جميع العملات الـ 16 متزامنة مع jupiterMarketService
 export const TOKEN_MINTS = {
-  SOL: 'So11111111111111111111111111111111111111112',
-  MECO: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
-  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+  SOL:    'So11111111111111111111111111111111111111112',
+  MECO:   '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
+  USDT:   'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  USDC:   'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  JUP:    'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbJedZ89LxcQ',
+  RAY:    '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
+  BONK:   'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+  WIF:    'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+  JTO:    'jtojtomepa8beP8AuQc6eEq5PG14zwVFmWeaKx1pC8X',
+  PYTH:   'HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3T7ef8R2mMWBwp',
+  HNT:    'hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux',
+  ORCA:   'orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE',
+  MNDE:   'MNDEFzGvMt87ueuHvVU9VcTqsAP5b3fTGPsHuuPA5ey',
+  BOME:   'ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82',
+  POPCAT: '7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr',
+  MEW:    'MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5',
 };
 
+// ─── TOKEN_DECIMALS ───────────────────────────────────────────────────────────
+// ✅ جميع العملات الـ 16 بالـ decimals الصحيحة
 export const TOKEN_DECIMALS = {
-  SOL: 9, MECO: 9, USDT: 6, USDC: 6
+  SOL:    9,
+  MECO:   9,
+  USDT:   6,
+  USDC:   6,
+  JUP:    6,
+  RAY:    6,
+  BONK:   5,
+  WIF:    6,
+  JTO:    9,
+  PYTH:   6,
+  HNT:    8,
+  ORCA:   6,
+  MNDE:   9,
+  BOME:   6,
+  POPCAT: 9,
+  MEW:    6,
 };
 
-// ✅ عنوان خزينة المشروع ورسم الخدمة
+// ─── ثوابت ────────────────────────────────────────────────────────────────────
 const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
-const SERVICE_FEE_SOL = 0.0005;
-
-// ✅ نقاط نهاية Jupiter
-const JUPITER_QUOTE_API = 'https://quote-api.jup.ag/v6/quote';
-const JUPITER_SWAP_API = 'https://quote-api.jup.ag/v6/swap';
-const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
+const SERVICE_FEE_SOL       = 0.0005;
+const JUPITER_QUOTE_API     = 'https://quote-api.jup.ag/v6/quote';
+const JUPITER_SWAP_API      = 'https://quote-api.jup.ag/v6/swap';
+const JUPITER_LITE_QUOTE_API= 'https://lite-api.jup.ag/swap/v1/quote';
 const JUPITER_LITE_SWAP_API = 'https://lite-api.jup.ag/swap/v1/swap';
+const JUPITER_API_KEY       = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
 
-const JUPITER_API_KEY = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
-
-// ✅ الترويسات
 const BROWSER_HEADERS = {
-  'Accept': 'application/json',
-  'Content-Type': 'application/json',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  'Origin': 'https://jup.ag',
-  'Referer': 'https://jup.ag/',
-  'x-api-key': JUPITER_API_KEY,
+  'Accept':          'application/json',
+  'Content-Type':    'application/json',
+  'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  'Origin':          'https://jup.ag',
+  'Referer':         'https://jup.ag/',
+  'x-api-key':       JUPITER_API_KEY,
 };
 
-// --- دوال مساعدة ---
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 30000) => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId  = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal, credentials: 'omit' });
+    const res = await fetch(url, { ...options, signal: controller.signal, credentials: 'omit' });
     clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
+    return res;
+  } catch (err) {
     clearTimeout(timeoutId);
-    if (error.name === 'AbortError') throw new Error('انتهت مهلة الاتصال بالخادم');
-    if (error.message.includes('Network request failed')) throw new Error('تعذر الاتصال بالخادم (Network Error)');
-    throw error;
+    if (err.name === 'AbortError') throw new Error('انتهت مهلة الاتصال بالخادم');
+    if (err.message.includes('Network request failed')) throw new Error('تعذر الاتصال بالخادم (Network Error)');
+    throw err;
   }
 };
 
 function getKeypairFromPrivateKey(privateKey) {
   if (!privateKey) throw new Error('المفتاح الخاص غير موجود');
-  let secretKey;
-  if (privateKey.startsWith('[')) {
-    secretKey = new Uint8Array(JSON.parse(privateKey));
-  } else {
-    secretKey = bs58.decode(privateKey);
-  }
+  const secretKey = privateKey.startsWith('[')
+    ? new Uint8Array(JSON.parse(privateKey))
+    : bs58.decode(privateKey);
   return web3.Keypair.fromSecretKey(secretKey);
 }
 
 async function getKeypair() {
-  const secretKeyStr = await SecureStore.getItemAsync('wallet_private_key');
-  if (!secretKeyStr) throw new Error('المفتاح الخاص غير موجود');
-  return getKeypairFromPrivateKey(secretKeyStr);
+  const key = await SecureStore.getItemAsync('wallet_private_key');
+  if (!key) throw new Error('المفتاح الخاص غير موجود');
+  return getKeypairFromPrivateKey(key);
 }
 
 async function getConnection() {
   try {
     return await heliusService.getConnection();
-  } catch (error) {
-    console.warn('⚠️ [Swap] فشل heliusService، استخدام الاحتياطي العام:', error.message);
+  } catch (err) {
+    console.warn('⚠️ [Swap] heliusService فشل، استخدام الاحتياطي:', err.message);
     return new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
   }
 }
 
-// --- جلب عرض السعر (Quote) ---
+// ─── getSwapQuote ─────────────────────────────────────────────────────────────
 export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 100) {
+  // ✅ تحقق مبكر قبل استدعاء API
+  if (!inputMint || !outputMint) {
+    throw new Error('عملة غير مدعومة في التبادل');
+  }
+
   const endpoints = [
-    { name: 'Main V6', url: JUPITER_QUOTE_API },
-    { name: 'Lite API', url: JUPITER_LITE_QUOTE_API }
+    { name: 'Main V6', url: JUPITER_QUOTE_API       },
+    { name: 'Lite API', url: JUPITER_LITE_QUOTE_API },
   ];
 
+  const isMeco    = inputMint === TOKEN_MINTS.MECO || outputMint === TOKEN_MINTS.MECO;
+  const extraParams = isMeco ? '&onlyDirectRoutes=false&asLegacyTransaction=true' : '';
+
   let lastError;
-  for (const endpoint of endpoints) {
-    // 🛑 إضافة معاملات Jupiter لتخطي القائمة الصارمة والسماح بالسيولة الضعيفة
-    const isMeco = inputMint === TOKEN_MINTS.MECO || outputMint === TOKEN_MINTS.MECO;
-    const extraParams = isMeco ? '&onlyDirectRoutes=false&asLegacyTransaction=true' : '';
-    
-    const url = `${endpoint.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}${extraParams}`;
-    console.log(`🔍 [Quote] محاولة ${endpoint.name}...`);
+  for (const ep of endpoints) {
+    const url = `${ep.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}${extraParams}`;
+    console.log(`🔍 [Quote] محاولة ${ep.name}...`);
     try {
-      const response = await fetchWithTimeout(url, { method: 'GET', headers: BROWSER_HEADERS }, 15000);
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`⚠️ [Quote] ${endpoint.name} فشل (${response.status}):`, errorText);
-        throw new Error(errorText);
-      }
-      const quote = await response.json();
-      if (!quote?.routePlan) throw new Error('لا يوجد مسار للتبادل (السيولة قد تكون ضعيفة جداً)');
-      console.log(`✅ [Quote] نجح عبر ${endpoint.name}`);
+      const res = await fetchWithTimeout(url, { method: 'GET', headers: BROWSER_HEADERS }, 15000);
+      if (!res.ok) throw new Error(await res.text());
+      const quote = await res.json();
+      if (!quote?.routePlan) throw new Error('لا يوجد مسار للتبادل (السيولة قد تكون ضعيفة)');
+      console.log(`✅ [Quote] نجح عبر ${ep.name}`);
       return quote;
-    } catch (error) {
-      console.warn(`❌ [Quote] ${endpoint.name} فشل:`, error.message);
-      lastError = error;
+    } catch (err) {
+      console.warn(`❌ [Quote] ${ep.name} فشل:`, err.message);
+      lastError = err;
     }
   }
-  throw new Error(`تعذر الاتصال بخوادم Jupiter أو لا يوجد مسار للتبادل. ${lastError?.message || ''}`);
+  throw new Error(`تعذر الحصول على سعر التبادل. ${lastError?.message || ''}`);
 }
 
-// --- بناء المعاملة (Swap Transaction) ---
+// ─── buildSwapTransaction ─────────────────────────────────────────────────────
 export async function buildSwapTransaction(quote, userPublicKey) {
   const endpoints = [
-    { name: 'Main V6', url: JUPITER_SWAP_API },
-    { name: 'Lite API', url: JUPITER_LITE_SWAP_API }
+    { name: 'Main V6', url: JUPITER_SWAP_API       },
+    { name: 'Lite API', url: JUPITER_LITE_SWAP_API },
   ];
 
   let lastError;
-  for (const endpoint of endpoints) {
+  for (const ep of endpoints) {
     try {
-      console.log(`🛠️ [Build] محاولة بناء المعاملة عبر ${endpoint.name}...`);
-      const response = await fetchWithTimeout(endpoint.url, {
-        method: 'POST',
+      console.log(`🛠️ [Build] محاولة ${ep.name}...`);
+      const res = await fetchWithTimeout(ep.url, {
+        method:  'POST',
         headers: BROWSER_HEADERS,
-        body: JSON.stringify({
-          quoteResponse: quote,
-          userPublicKey: userPublicKey.toString(),
-          wrapAndUnwrapSol: true,
-          dynamicComputeUnitLimit: true,
-          prioritizationFeeLamports: "auto",
-          asLegacyTransaction: true // لتفادي أخطاء الإصدارات الحديثة مع العملات الجديدة
-        })
+        body:    JSON.stringify({
+          quoteResponse:              quote,
+          userPublicKey:              userPublicKey.toString(),
+          wrapAndUnwrapSol:           true,
+          dynamicComputeUnitLimit:    true,
+          prioritizationFeeLamports:  'auto',
+          asLegacyTransaction:        true,
+        }),
       }, 20000);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`⚠️ [Build] ${endpoint.name} فشل (${response.status}):`, errorText);
-        throw new Error(errorText);
-      }
-
-      const data = await response.json();
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
       if (!data.swapTransaction) throw new Error('بيانات المعاملة غير مكتملة');
-      console.log(`✅ [Build] تم بناء المعاملة بنجاح عبر ${endpoint.name}`);
+      console.log(`✅ [Build] نجح عبر ${ep.name}`);
       return data;
-    } catch (error) {
-      console.warn(`❌ [Build] ${endpoint.name} فشل مع الخطأ:`, error.message);
-      lastError = error;
+    } catch (err) {
+      console.warn(`❌ [Build] ${ep.name} فشل:`, err.message);
+      lastError = err;
     }
   }
-  throw new Error(`فشل بناء المعاملة: ${lastError?.message || 'جميع المحاولات باءت بالفشل'}`);
+  throw new Error(`فشل بناء المعاملة: ${lastError?.message || ''}`);
 }
 
-// --- تنفيذ التبادل ---
-export async function executeSwap(inputSymbol, outputSymbol, amount, slippageBps = 100, maxRetries = 3, publicKey, privateKey) {
-  console.log(`🚀 [Swap] بدء التبادل: ${amount} ${inputSymbol} -> ${outputSymbol}`);
+// ─── executeSwap ──────────────────────────────────────────────────────────────
+export async function executeSwap(
+  inputSymbol, outputSymbol, amount,
+  slippageBps = 100, maxRetries = 3,
+  publicKey, privateKey
+) {
+  console.log(`🚀 [Swap] بدء: ${amount} ${inputSymbol} → ${outputSymbol}`);
+
+  // ✅ تحقق مبكر من دعم العملات
+  if (!TOKEN_MINTS[inputSymbol] || !TOKEN_MINTS[outputSymbol]) {
+    return { success: false, error: 'عملة غير مدعومة في التبادل' };
+  }
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`🔄 [Swap] المحاولة ${attempt} من ${maxRetries}...`);
+      console.log(`🔄 [Swap] المحاولة ${attempt}/${maxRetries}...`);
 
-      let keypair;
-      if (privateKey) {
-        keypair = getKeypairFromPrivateKey(privateKey);
-      } else {
-        keypair = await getKeypair();
-      }
+      const keypair      = privateKey ? getKeypairFromPrivateKey(privateKey) : await getKeypair();
+      const userPubKey   = publicKey  ? new web3.PublicKey(publicKey) : keypair.publicKey;
+      const connection   = await getConnection();
 
-      const userPublicKey = publicKey || keypair.publicKey.toString();
-      const connection = await getConnection();
-
-      const balanceCheck = await checkBalance(inputSymbol, amount, userPublicKey);
+      const balanceCheck = await checkBalance(inputSymbol, amount, userPubKey.toString());
       if (!balanceCheck.hasBalance) {
-        throw new Error(`رصيد ${inputSymbol} غير كاف. أو لا تملك رسوم الشبكة والخدمة.`);
+        throw new Error(`رصيد ${inputSymbol} غير كافٍ أو لا تملك رسوم الشبكة.`);
       }
 
-      const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
-      const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
+      const inputDecimals     = TOKEN_DECIMALS[inputSymbol]  || 9;
+      const outputDecimals    = TOKEN_DECIMALS[outputSymbol] || 9;
+      const amountInLamports  = Math.floor(amount * Math.pow(10, inputDecimals));
 
-      console.log(`💸 [Fee] جاري بناء معاملة رسوم التطبيق (${SERVICE_FEE_SOL} SOL)...`);
+      // ── Step 1: جلب quote ──────────────────────────────────────────────────
+      const quote    = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInLamports, slippageBps);
+      const swapData = await buildSwapTransaction(quote, userPubKey);
+
+      // ── Step 2: جلب blockhash بعد الـ quote ✅ لتجنب انتهاء الصلاحية ────────
+      const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+
+      // ── Step 3: بناء معاملة الرسوم ─────────────────────────────────────────
+      console.log(`💸 [Fee] بناء معاملة رسوم التطبيق (${SERVICE_FEE_SOL} SOL)...`);
       const feeTx = new web3.Transaction().add(
         web3.SystemProgram.transfer({
           fromPubkey: keypair.publicKey,
-          toPubkey: new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
-          lamports: Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
+          toPubkey:   new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
+          lamports:   Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
         })
       );
-      let latestBlockhash = await connection.getLatestBlockhash('confirmed');
       feeTx.recentBlockhash = latestBlockhash.blockhash;
-      feeTx.feePayer = keypair.publicKey;
-
-      const quote = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInSmallestUnit, slippageBps);
-      const swapData = await buildSwapTransaction(quote, new web3.PublicKey(userPublicKey));
-
+      feeTx.feePayer        = keypair.publicKey;
       feeTx.sign(keypair);
 
-      const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
-      const swapTx = web3.VersionedTransaction.deserialize(swapTransactionBuf);
+      // ── Step 4: توقيع معاملة الـ Swap ──────────────────────────────────────
+      const swapTx = web3.VersionedTransaction.deserialize(
+        Buffer.from(swapData.swapTransaction, 'base64')
+      );
       swapTx.sign([keypair]);
 
-      console.log(`📡 [Swap] جاري إرسال معاملة الرسوم والمبادلة للشبكة...`);
-
+      // ── Step 5: إرسال معاملة الرسوم ────────────────────────────────────────
+      console.log(`📡 [Fee] إرسال معاملة الرسوم...`);
       const feeSignature = await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true });
       console.log(`✅ [Fee] تم إرسال الرسوم: ${feeSignature}`);
 
-      const serializedSwapTx = swapTx.serialize();
-      const uint8ArraySwapTx = new Uint8Array(serializedSwapTx.buffer, serializedSwapTx.byteOffset, serializedSwapTx.byteLength);
-
+      // ── Step 6: إرسال معاملة الـ Swap ──────────────────────────────────────
+      const swapBytes = new Uint8Array(swapTx.serialize());
       let swapSignature;
+
       try {
-        swapSignature = await connection.sendRawTransaction(uint8ArraySwapTx, {
-          skipPreflight: true,
-          maxRetries: 5,
-          preflightCommitment: 'processed',
+        swapSignature = await connection.sendRawTransaction(swapBytes, {
+          skipPreflight:        true,
+          maxRetries:           5,
+          preflightCommitment:  'processed',
         });
-      } catch (sendError) {
-        swapSignature = await web3.sendAndConfirmTransaction(
-          connection,
-          swapTx,
-          [keypair],
-          { skipPreflight: true, commitment: 'confirmed' }
-        );
+      } catch (sendErr) {
+        // ✅ إصلاح: استخدام sendRawTransaction بدلاً من sendAndConfirmTransaction
+        // sendAndConfirmTransaction لا يدعم VersionedTransaction
+        console.warn('⚠️ [Swap] إعادة المحاولة بدون skipPreflight...');
+        swapSignature = await connection.sendRawTransaction(swapBytes, {
+          skipPreflight: false,
+          maxRetries:    3,
+        });
       }
 
-      console.log(`📤 [Swap] تم إرسال المبادلة: ${swapSignature}`);
+      console.log(`📤 [Swap] تم الإرسال: ${swapSignature}`);
 
+      // ── Step 7: تأكيد المعاملة ─────────────────────────────────────────────
       let confirmation;
-      let confirmAttempt = 0;
+      let currentBlockhash = latestBlockhash;
 
-      while (confirmAttempt < 3) {
+      for (let confirmAttempt = 0; confirmAttempt < 3; confirmAttempt++) {
         try {
           confirmation = await connection.confirmTransaction({
-            signature: swapSignature,
-            blockhash: latestBlockhash.blockhash,
-            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+            signature:           swapSignature,
+            blockhash:           currentBlockhash.blockhash,
+            lastValidBlockHeight:currentBlockhash.lastValidBlockHeight,
           }, 'confirmed');
 
           if (!confirmation.value.err) break;
-          else throw new Error(`رفضت الشبكة المعاملة`);
-        } catch (confirmError) {
-          confirmAttempt++;
-          if (confirmAttempt < 3) {
-            latestBlockhash = await connection.getLatestBlockhash('confirmed');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            continue;
+          throw new Error('رفضت الشبكة المعاملة');
+        } catch (confirmErr) {
+          if (confirmAttempt < 2) {
+            currentBlockhash = await connection.getLatestBlockhash('confirmed');
+            await new Promise(r => setTimeout(r, 2000));
+          } else {
+            throw confirmErr;
           }
-          throw confirmError;
         }
       }
 
-      if (confirmation?.value?.err) throw new Error(`رفضت الشبكة المعاملة`);
+      if (confirmation?.value?.err) throw new Error('رفضت الشبكة المعاملة');
 
-      console.log(`🎉 [Swap] نجاح! تم تأكيد المعاملة: ${swapSignature}`);
-
-      const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
-      const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
+      console.log(`🎉 [Swap] نجاح! ${swapSignature}`);
 
       return {
-        success: true,
-        signature: swapSignature,
-        inputAmount: amount,
-        outputAmount,
+        success:      true,
+        signature:    swapSignature,
+        inputAmount:  amount,
+        outputAmount: parseInt(quote.outAmount) / Math.pow(10, outputDecimals),
         inputSymbol,
         outputSymbol,
-        explorerUrl: `https://solscan.io/tx/${swapSignature}`
+        explorerUrl:  `https://solscan.io/tx/${swapSignature}`,
       };
 
-    } catch (error) {
-      console.error(`💥 [Swap] المحاولة ${attempt} فشلت:`, error.message);
+    } catch (err) {
+      console.error(`💥 [Swap] المحاولة ${attempt} فشلت:`, err.message);
       if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(r => setTimeout(r, 3000));
       } else {
-        return { success: false, error: error.message };
+        return { success: false, error: err.message };
       }
     }
   }
   return { success: false, error: 'فشلت جميع محاولات التبادل' };
 }
 
+// ─── checkBalance ─────────────────────────────────────────────────────────────
 export async function checkBalance(tokenSymbol, amount, publicKey) {
   try {
     const pubKeyStr = publicKey || await SecureStore.getItemAsync('wallet_public_key');
-    if (!pubKeyStr) {
+    if (!pubKeyStr) return { hasBalance: false, balance: 0, required: amount };
+
+    // ✅ تحقق من دعم العملة
+    if (!TOKEN_MINTS[tokenSymbol]) {
+      console.warn(`[checkBalance] عملة غير مدعومة: ${tokenSymbol}`);
       return { hasBalance: false, balance: 0, required: amount };
     }
 
     const solBalance = await getSolBalance(true, pubKeyStr);
 
     if (tokenSymbol === 'SOL') {
-      const requiredSol = amount + SERVICE_FEE_SOL + 0.00001;
-      return { hasBalance: solBalance >= requiredSol, balance: solBalance, required: requiredSol };
+      const required = amount + SERVICE_FEE_SOL + 0.00001;
+      return { hasBalance: solBalance >= required, balance: solBalance, required };
     }
 
-    else {
-      const mint = TOKEN_MINTS[tokenSymbol];
-      if (!mint) return { hasBalance: false, balance: 0, required: amount };
+    const tokenBalance   = await getTokenBalance(TOKEN_MINTS[tokenSymbol], true, pubKeyStr);
+    const hasEnoughToken = tokenBalance >= amount;
+    const hasEnoughSol   = solBalance   >= SERVICE_FEE_SOL + 0.00001;
 
-      const tokenBalance = await getTokenBalance(mint, true, pubKeyStr);
-
-      const hasEnoughToken = tokenBalance >= amount;
-      const hasEnoughSolForFee = solBalance >= (SERVICE_FEE_SOL + 0.00001);
-
-      return {
-        hasBalance: hasEnoughToken && hasEnoughSolForFee,
-        balance: tokenBalance,
-        required: amount
-      };
-    }
-  } catch (error) {
-    console.error('❌ [checkBalance] خطأ:', error.message);
+    return {
+      hasBalance: hasEnoughToken && hasEnoughSol,
+      balance:    tokenBalance,
+      required:   amount,
+    };
+  } catch (err) {
+    console.error('❌ [checkBalance]:', err.message);
     return { hasBalance: false, balance: 0, required: amount };
   }
 }
 
+// ─── getSwapRate ──────────────────────────────────────────────────────────────
 export async function getSwapRate(inputSymbol, outputSymbol, amount) {
+  // ✅ تحقق مبكر
+  if (!TOKEN_MINTS[inputSymbol] || !TOKEN_MINTS[outputSymbol]) {
+    throw new Error('عملة غير مدعومة في التبادل');
+  }
+
   try {
-    const inputDecimals = TOKEN_DECIMALS[inputSymbol] || 9;
+    const inputDecimals  = TOKEN_DECIMALS[inputSymbol]  || 9;
     const outputDecimals = TOKEN_DECIMALS[outputSymbol] || 9;
-    
     const amountInSmallestUnit = Math.floor(amount * Math.pow(10, inputDecimals));
-    
-    // استخدام Slipapge 300 (أي 3%) للعملات الجديدة لضمان التبادل
     const slippage = (inputSymbol === 'MECO' || outputSymbol === 'MECO') ? 300 : 100;
 
     const quote = await getSwapQuote(
       TOKEN_MINTS[inputSymbol],
       TOKEN_MINTS[outputSymbol],
       amountInSmallestUnit,
-      slippage 
+      slippage,
     );
-    
-    const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
-    const inputAmountReal = parseInt(quote.inAmount) / Math.pow(10, inputDecimals);
-    
-    const rate = outputAmount / inputAmountReal;
-    const priceImpact = quote.routePlan?.[0]?.priceImpactPct || 0;
-    
+
+    const outputAmount   = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
+    const inputAmountReal= parseInt(quote.inAmount)  / Math.pow(10, inputDecimals);
+    const rate           = outputAmount / inputAmountReal;
+    const priceImpact    = quote.routePlan?.[0]?.priceImpactPct || 0;
+
     return {
       rate,
       outputAmount,
       priceImpact,
-      marketInfos: quote.routePlan?.map(route => ({
-        percent: route.portionBps ? route.portionBps / 100 : 100,
-        label: route.swapInfo?.label || 'Direct'
-      }))
+      marketInfos: quote.routePlan?.map(r => ({
+        percent: r.portionBps ? r.portionBps / 100 : 100,
+        label:   r.swapInfo?.label || 'Direct',
+      })),
     };
-  } catch (error) {
-    console.error('[getSwapRate] خطأ:', error.message);
-    throw error;
+  } catch (err) {
+    console.error('[getSwapRate]:', err.message);
+    throw err;
   }
 }
