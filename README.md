@@ -89,8 +89,8 @@
 
 - **Blockchain:** Solana
 - **Network:** Mainnet-Beta
-- **Token Mint (MECO):** `7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i`
-- **مستكشف Solscan:** [عرض عقد العملة](https://solscan.io/token/7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i)
+- **Token Mint (MECO):** `A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W`
+- **مستكشف Solscan:** [عرض عقد العملة](https://solscan.io/token/A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W)
 
 ---
 
@@ -124,7 +124,7 @@
 |:------:|:------:|
 | ![X](https://img.shields.io/badge/X_Twitter-1DA1F2?style=flat-square&logo=x&logoColor=white) | [@MoniCoinMECO](https://x.com/MoniCoinMECO) |
 | ![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white) | [@monycoin1](https://t.me/monycoin1) |
-| ![Web](https://img.shields.io/badge/Website-6C63FF?style=flat-square&logo=google-chrome&logoColor=white) | [MonyCoin Blog](https://monycoin1.blogspot.com/) |
+| ![Web](https://img.shields.io/badge/Website-6C63FF?style=flat-square&logo=google-chrome&logoColor=white) | [MonyCoin Blog](https://monycoin73.blogspot.com/) |
 | ![Facebook](https://img.shields.io/badge/Facebook-1877F2?style=flat-square&logo=facebook&logoColor=white) |[MonyCoin Community](https://www.facebook.com/share/1ZUbCbssCU/) |
 
 </div>
