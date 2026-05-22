@@ -178,6 +178,7 @@ export async function buildSwapTransaction(quote, userPublicKey) {
 }
 
 // ─── executeSwap ──────────────────────────────────────────────────────────────
+// ✅ إصلاح شامل: نقل الرسوم خارج الحلقة
 export async function executeSwap(
   inputSymbol, outputSymbol, amount,
   slippageBps = 100, maxRetries = 3,
@@ -190,55 +191,83 @@ export async function executeSwap(
     return { success: false, error: 'عملة غير مدعومة في التبادل' };
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ إعداد أولي (مرة واحدة فقط، خارج حلقة المحاولات)
+  // ════════════════════════════════════════════════════════════════════════════
+  let keypair, userPubKey, connection;
+  try {
+    keypair    = privateKey ? getKeypairFromPrivateKey(privateKey) : await getKeypair();
+    userPubKey = publicKey  ? new web3.PublicKey(publicKey) : keypair.publicKey;
+    connection = await getConnection();
+  } catch (err) {
+    return { success: false, error: `خطأ في التهيئة: ${err.message}` };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ Step 1: التحقق من الرصيد (مرة واحدة)
+  // ════════════════════════════════════════════════════════════════════════════
+  try {
+    const balanceCheck = await checkBalance(inputSymbol, amount, userPubKey.toString());
+    if (!balanceCheck.hasBalance) {
+      return { success: false, error: `رصيد ${inputSymbol} غير كافٍ أو لا تملك رسوم الشبكة.` };
+    }
+  } catch (err) {
+    return { success: false, error: `فشل التحقق من الرصيد: ${err.message}` };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ Step 2: معاملة الرسوم (خارج الحلقة - مرة واحدة فقط)
+  // ════════════════════════════════════════════════════════════════════════════
+  let feeSignature;
+  try {
+    console.log(`💸 [Fee] بناء معاملة رسوم التطبيق (${SERVICE_FEE_SOL} SOL)...`);
+    
+    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+    
+    const feeTx = new web3.Transaction().add(
+      web3.SystemProgram.transfer({
+        fromPubkey: keypair.publicKey,
+        toPubkey:   new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
+        lamports:   Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
+      })
+    );
+    feeTx.recentBlockhash = latestBlockhash.blockhash;
+    feeTx.feePayer        = keypair.publicKey;
+    feeTx.sign(keypair);
+
+    console.log(`📡 [Fee] إرسال معاملة الرسوم...`);
+    feeSignature = await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true });
+    console.log(`✅ [Fee] تم إرسال الرسوم: ${feeSignature}`);
+  } catch (err) {
+    console.error(`❌ [Fee] فشل إرسال الرسوم:`, err.message);
+    return { success: false, error: `فشل في إرسال رسوم التطبيق: ${err.message}` };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ Step 3: حلقة المحاولات (Swap فقط - بدون رسوم)
+  // ════════════════════════════════════════════════════════════════════════════
+  const inputDecimals    = TOKEN_DECIMALS[inputSymbol]  || 9;
+  const outputDecimals   = TOKEN_DECIMALS[outputSymbol] || 9;
+  const amountInLamports = Math.floor(amount * Math.pow(10, inputDecimals));
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔄 [Swap] المحاولة ${attempt}/${maxRetries}...`);
 
-      const keypair      = privateKey ? getKeypairFromPrivateKey(privateKey) : await getKeypair();
-      const userPubKey   = publicKey  ? new web3.PublicKey(publicKey) : keypair.publicKey;
-      const connection   = await getConnection();
-
-      const balanceCheck = await checkBalance(inputSymbol, amount, userPubKey.toString());
-      if (!balanceCheck.hasBalance) {
-        throw new Error(`رصيد ${inputSymbol} غير كافٍ أو لا تملك رسوم الشبكة.`);
-      }
-
-      const inputDecimals     = TOKEN_DECIMALS[inputSymbol]  || 9;
-      const outputDecimals    = TOKEN_DECIMALS[outputSymbol] || 9;
-      const amountInLamports  = Math.floor(amount * Math.pow(10, inputDecimals));
-
-      // ── Step 1: جلب quote ──────────────────────────────────────────────────
+      // ── جلب quote ────────────────────────────────────────────────────────
       const quote    = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInLamports, slippageBps);
       const swapData = await buildSwapTransaction(quote, userPubKey);
 
-      // ── Step 2: جلب blockhash بعد الـ quote ✅ لتجنب انتهاء الصلاحية ────────
+      // ── جلب blockhash جديد للتأكد من صلاحيته ────────────────────────────
       const latestBlockhash = await connection.getLatestBlockhash('confirmed');
 
-      // ── Step 3: بناء معاملة الرسوم ─────────────────────────────────────────
-      console.log(`💸 [Fee] بناء معاملة رسوم التطبيق (${SERVICE_FEE_SOL} SOL)...`);
-      const feeTx = new web3.Transaction().add(
-        web3.SystemProgram.transfer({
-          fromPubkey: keypair.publicKey,
-          toPubkey:   new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
-          lamports:   Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
-        })
-      );
-      feeTx.recentBlockhash = latestBlockhash.blockhash;
-      feeTx.feePayer        = keypair.publicKey;
-      feeTx.sign(keypair);
-
-      // ── Step 4: توقيع معاملة الـ Swap ──────────────────────────────────────
+      // ── توقيع معاملة الـ Swap ──────────────────────────────────────────
       const swapTx = web3.VersionedTransaction.deserialize(
         Buffer.from(swapData.swapTransaction, 'base64')
       );
       swapTx.sign([keypair]);
 
-      // ── Step 5: إرسال معاملة الرسوم ────────────────────────────────────────
-      console.log(`📡 [Fee] إرسال معاملة الرسوم...`);
-      const feeSignature = await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true });
-      console.log(`✅ [Fee] تم إرسال الرسوم: ${feeSignature}`);
-
-      // ── Step 6: إرسال معاملة الـ Swap ──────────────────────────────────────
+      // ── إرسال معاملة الـ Swap ──────────────────────────────────────────
       const swapBytes = new Uint8Array(swapTx.serialize());
       let swapSignature;
 
@@ -249,8 +278,6 @@ export async function executeSwap(
           preflightCommitment:  'processed',
         });
       } catch (sendErr) {
-        // ✅ إصلاح: استخدام sendRawTransaction بدلاً من sendAndConfirmTransaction
-        // sendAndConfirmTransaction لا يدعم VersionedTransaction
         console.warn('⚠️ [Swap] إعادة المحاولة بدون skipPreflight...');
         swapSignature = await connection.sendRawTransaction(swapBytes, {
           skipPreflight: false,
@@ -260,7 +287,7 @@ export async function executeSwap(
 
       console.log(`📤 [Swap] تم الإرسال: ${swapSignature}`);
 
-      // ── Step 7: تأكيد المعاملة ─────────────────────────────────────────────
+      // ── تأكيد المعاملة ─────────────────────────────────────────────────
       let confirmation;
       let currentBlockhash = latestBlockhash;
 
@@ -291,6 +318,7 @@ export async function executeSwap(
       return {
         success:      true,
         signature:    swapSignature,
+        feeSignature: feeSignature,
         inputAmount:  amount,
         outputAmount: parseInt(quote.outAmount) / Math.pow(10, outputDecimals),
         inputSymbol,
@@ -301,13 +329,25 @@ export async function executeSwap(
     } catch (err) {
       console.error(`💥 [Swap] المحاولة ${attempt} فشلت:`, err.message);
       if (attempt < maxRetries) {
+        console.log(`⏳ [Swap] الانتظار 3 ثواني قبل المحاولة التالية...`);
         await new Promise(r => setTimeout(r, 3000));
       } else {
-        return { success: false, error: err.message };
+        return { 
+          success: false, 
+          error: err.message,
+          feeSignature: feeSignature, // ✅ إرجاع توقيع الرسوم للمرجع
+          feeStatus: 'الرسوم تم إرسالها بنجاح لكن فشل التبادل - تحقق من حسابك',
+        };
       }
     }
   }
-  return { success: false, error: 'فشلت جميع محاولات التبادل' };
+
+  return { 
+    success: false, 
+    error: 'فشلت جميع محاولات التبادل',
+    feeSignature: feeSignature,
+    feeStatus: 'الرسوم تم إرسالها بنجاح لكن فشل التبادل - تحقق من حسابك',
+  };
 }
 
 // ─── checkBalance ─────────────────────────────────────────────────────────────
