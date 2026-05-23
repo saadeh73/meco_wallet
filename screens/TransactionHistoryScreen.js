@@ -1,4 +1,4 @@
-// TransactionHistoryScreen.js - شاشة سجل المعاملات المحسنة
+// TransactionHistoryScreen.js - شاشة سجل المعاملات المحسنة (مصححة)
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ActivityIndicator,
@@ -103,14 +103,16 @@ export default function TransactionHistoryScreen() {
 
       const mergedMap = new Map();
       onChain.forEach(tx => mergedMap.set(tx.signature, tx));
+      
+      // ✅ إصلاح: نوع المعاملة مع أقواس صحيحة
       localLog.forEach(tx => {
         if (tx.transactionSignature) {
           mergedMap.set(tx.transactionSignature, {
             ...mergedMap.get(tx.transactionSignature),
             ...tx,
-            type: tx.from === publicKey ? 'send' :
+            type: tx.type === 'swap' ? 'swap' : (tx.from === publicKey ? 'send' :
                   tx.to === publicKey ? 'receive' :
-                  tx.type || 'onchain'
+                  tx.type || 'onchain')
           });
         }
       });
