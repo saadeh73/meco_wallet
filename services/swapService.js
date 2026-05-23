@@ -8,7 +8,6 @@ import { getSolBalance, getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
 
 // ─── TOKEN_MINTS ──────────────────────────────────────────────────────────────
-// ✅ جميع العملات الـ 16 متزامنة مع jupiterMarketService
 export const TOKEN_MINTS = {
   SOL:    'So11111111111111111111111111111111111111112',
   MECO:   'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W',
@@ -29,7 +28,6 @@ export const TOKEN_MINTS = {
 };
 
 // ─── TOKEN_DECIMALS ───────────────────────────────────────────────────────────
-// ✅ جميع العملات الـ 16 بالـ decimals الصحيحة
 export const TOKEN_DECIMALS = {
   SOL:    9,
   MECO:   9,
@@ -108,7 +106,6 @@ async function getConnection() {
 
 // ─── getSwapQuote ─────────────────────────────────────────────────────────────
 export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 100) {
-  // ✅ تحقق مبكر قبل استدعاء API
   if (!inputMint || !outputMint) {
     throw new Error('عملة غير مدعومة في التبادل');
   }
@@ -160,7 +157,7 @@ export async function buildSwapTransaction(quote, userPublicKey) {
           wrapAndUnwrapSol:           true,
           dynamicComputeUnitLimit:    true,
           prioritizationFeeLamports:  'auto',
-          asLegacyTransaction:        true,
+          asLegacyTransaction:        true, // مهم جداً لكي نتمكن من إضافة رسومنا كـ Instruction
         }),
       }, 20000);
 
@@ -178,7 +175,6 @@ export async function buildSwapTransaction(quote, userPublicKey) {
 }
 
 // ─── executeSwap ──────────────────────────────────────────────────────────────
-// ✅ إصلاح شامل: نقل الرسوم خارج الحلقة
 export async function executeSwap(
   inputSymbol, outputSymbol, amount,
   slippageBps = 100, maxRetries = 3,
@@ -186,13 +182,12 @@ export async function executeSwap(
 ) {
   console.log(`🚀 [Swap] بدء: ${amount} ${inputSymbol} → ${outputSymbol}`);
 
-  // ✅ تحقق مبكر من دعم العملات
   if (!TOKEN_MINTS[inputSymbol] || !TOKEN_MINTS[outputSymbol]) {
     return { success: false, error: 'عملة غير مدعومة في التبادل' };
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ✅ إعداد أولي (مرة واحدة فقط، خارج حلقة المحاولات)
+  // ✅ إعداد أولي 
   // ════════════════════════════════════════════════════════════════════════════
   let keypair, userPubKey, connection;
   try {
@@ -204,7 +199,7 @@ export async function executeSwap(
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ✅ Step 1: التحقق من الرصيد (مرة واحدة)
+  // ✅ التحقق من الرصيد 
   // ════════════════════════════════════════════════════════════════════════════
   try {
     const balanceCheck = await checkBalance(inputSymbol, amount, userPubKey.toString());
@@ -216,35 +211,7 @@ export async function executeSwap(
   }
 
   // ════════════════════════════════════════════════════════════════════════════
-  // ✅ Step 2: معاملة الرسوم (خارج الحلقة - مرة واحدة فقط)
-  // ════════════════════════════════════════════════════════════════════════════
-  let feeSignature;
-  try {
-    console.log(`💸 [Fee] بناء معاملة رسوم التطبيق (${SERVICE_FEE_SOL} SOL)...`);
-    
-    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-    
-    const feeTx = new web3.Transaction().add(
-      web3.SystemProgram.transfer({
-        fromPubkey: keypair.publicKey,
-        toPubkey:   new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
-        lamports:   Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
-      })
-    );
-    feeTx.recentBlockhash = latestBlockhash.blockhash;
-    feeTx.feePayer        = keypair.publicKey;
-    feeTx.sign(keypair);
-
-    console.log(`📡 [Fee] إرسال معاملة الرسوم...`);
-    feeSignature = await connection.sendRawTransaction(feeTx.serialize(), { skipPreflight: true });
-    console.log(`✅ [Fee] تم إرسال الرسوم: ${feeSignature}`);
-  } catch (err) {
-    console.error(`❌ [Fee] فشل إرسال الرسوم:`, err.message);
-    return { success: false, error: `فشل في إرسال رسوم التطبيق: ${err.message}` };
-  }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // ✅ Step 3: حلقة المحاولات (Swap فقط - بدون رسوم)
+  // ✅ حلقة المحاولات (معاملة واحدة مندمجة ATOMIC)
   // ════════════════════════════════════════════════════════════════════════════
   const inputDecimals    = TOKEN_DECIMALS[inputSymbol]  || 9;
   const outputDecimals   = TOKEN_DECIMALS[outputSymbol] || 9;
@@ -254,49 +221,59 @@ export async function executeSwap(
     try {
       console.log(`🔄 [Swap] المحاولة ${attempt}/${maxRetries}...`);
 
-      // ── جلب quote ────────────────────────────────────────────────────────
       const quote    = await getSwapQuote(TOKEN_MINTS[inputSymbol], TOKEN_MINTS[outputSymbol], amountInLamports, slippageBps);
       const swapData = await buildSwapTransaction(quote, userPubKey);
 
-      // ── جلب blockhash جديد للتأكد من صلاحيته ────────────────────────────
       const latestBlockhash = await connection.getLatestBlockhash('confirmed');
 
-      // ── توقيع معاملة الـ Swap ──────────────────────────────────────────
-      const swapTx = web3.VersionedTransaction.deserialize(
-        Buffer.from(swapData.swapTransaction, 'base64')
-      );
-      swapTx.sign([keypair]);
+      // ✅ تطبيق فكرتك الجراحية: تحويل المعاملة إلى Transaction عادية (Legacy) وإضافة رسوم الخدمة لها
+      const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
+      const swapTx = web3.Transaction.from(swapTransactionBuf);
 
-      // ── إرسال معاملة الـ Swap ──────────────────────────────────────────
-      const swapBytes = new Uint8Array(swapTx.serialize());
+      console.log('💸 [Swap] دمج رسوم التطبيق في المعاملة الذرية...');
+      const feeInstruction = web3.SystemProgram.transfer({
+        fromPubkey: keypair.publicKey,
+        toPubkey: new web3.PublicKey(FEE_COLLECTOR_ADDRESS),
+        lamports: Math.floor(SERVICE_FEE_SOL * web3.LAMPORTS_PER_SOL),
+      });
+
+      // إضافة الرسوم للمعاملة
+      swapTx.add(feeInstruction);
+
+      // تحديث بيانات الـ Blockhash والتوقيع
+      swapTx.recentBlockhash = latestBlockhash.blockhash;
+      swapTx.feePayer = keypair.publicKey;
+      swapTx.sign(keypair);
+
+      const swapBytes = swapTx.serialize();
+      
+      console.log(`📡 [Swap] إرسال المعاملة المدمجة (تبادل + رسوم)...`);
       let swapSignature;
-
       try {
         swapSignature = await connection.sendRawTransaction(swapBytes, {
-          skipPreflight:        true,
-          maxRetries:           5,
-          preflightCommitment:  'processed',
+          skipPreflight: true,
+          maxRetries: 5,
+          preflightCommitment: 'processed',
         });
       } catch (sendErr) {
         console.warn('⚠️ [Swap] إعادة المحاولة بدون skipPreflight...');
         swapSignature = await connection.sendRawTransaction(swapBytes, {
           skipPreflight: false,
-          maxRetries:    3,
+          maxRetries: 3,
         });
       }
 
-      console.log(`📤 [Swap] تم الإرسال: ${swapSignature}`);
+      console.log(`⏳ [Swap] تم الإرسال: ${swapSignature}. جاري التأكيد...`);
 
-      // ── تأكيد المعاملة ─────────────────────────────────────────────────
       let confirmation;
       let currentBlockhash = latestBlockhash;
 
       for (let confirmAttempt = 0; confirmAttempt < 3; confirmAttempt++) {
         try {
           confirmation = await connection.confirmTransaction({
-            signature:           swapSignature,
-            blockhash:           currentBlockhash.blockhash,
-            lastValidBlockHeight:currentBlockhash.lastValidBlockHeight,
+            signature: swapSignature,
+            blockhash: currentBlockhash.blockhash,
+            lastValidBlockHeight: currentBlockhash.lastValidBlockHeight,
           }, 'confirmed');
 
           if (!confirmation.value.err) break;
@@ -313,12 +290,12 @@ export async function executeSwap(
 
       if (confirmation?.value?.err) throw new Error('رفضت الشبكة المعاملة');
 
-      console.log(`🎉 [Swap] نجاح! ${swapSignature}`);
+      console.log(`🎉 [Swap] نجاح تام! تم التبادل وحصلت الرسوم.`);
 
       return {
         success:      true,
         signature:    swapSignature,
-        feeSignature: feeSignature,
+        feeSignature: swapSignature, // التوقيع واحد لأنها معاملة ذرية
         inputAmount:  amount,
         outputAmount: parseInt(quote.outAmount) / Math.pow(10, outputDecimals),
         inputSymbol,
@@ -335,19 +312,12 @@ export async function executeSwap(
         return { 
           success: false, 
           error: err.message,
-          feeSignature: feeSignature, // ✅ إرجاع توقيع الرسوم للمرجع
-          feeStatus: 'الرسوم تم إرسالها بنجاح لكن فشل التبادل - تحقق من حسابك',
         };
       }
     }
   }
 
-  return { 
-    success: false, 
-    error: 'فشلت جميع محاولات التبادل',
-    feeSignature: feeSignature,
-    feeStatus: 'الرسوم تم إرسالها بنجاح لكن فشل التبادل - تحقق من حسابك',
-  };
+  return { success: false, error: 'فشلت جميع محاولات التبادل' };
 }
 
 // ─── checkBalance ─────────────────────────────────────────────────────────────
@@ -356,7 +326,6 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
     const pubKeyStr = publicKey || await SecureStore.getItemAsync('wallet_public_key');
     if (!pubKeyStr) return { hasBalance: false, balance: 0, required: amount };
 
-    // ✅ تحقق من دعم العملة
     if (!TOKEN_MINTS[tokenSymbol]) {
       console.warn(`[checkBalance] عملة غير مدعومة: ${tokenSymbol}`);
       return { hasBalance: false, balance: 0, required: amount };
@@ -386,7 +355,6 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
 
 // ─── getSwapRate ──────────────────────────────────────────────────────────────
 export async function getSwapRate(inputSymbol, outputSymbol, amount) {
-  // ✅ تحقق مبكر
   if (!TOKEN_MINTS[inputSymbol] || !TOKEN_MINTS[outputSymbol]) {
     throw new Error('عملة غير مدعومة في التبادل');
   }
