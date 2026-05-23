@@ -128,6 +128,7 @@ function getTokenInfo(symbol) {
 }
 
 // 🔄 دالة تنفيذ التبادل الحقيقي عبر Jupiter
+// ✅ إصلاح: بدون رسوم خدمة إضافية - الرسوم تُحصل من swapService.js فقط
 export async function executeRealSwap(swapData) {
   const {
     fromToken,
@@ -230,36 +231,24 @@ export async function executeRealSwap(swapData) {
     const swapTransactionBuf = Buffer.from(swapTransactionData.swapTransaction, 'base64');
     const transaction = web3.Transaction.from(swapTransactionBuf);
 
-    // 6. إضافة رسوم الخدمة إذا كانت هناك
-    const FEE_COLLECTOR = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
-    const SERVICE_FEE_PERCENTAGE = 0.0005; 
-    
-    if (fromToken === 'SOL' && fromAmount > 0) {
-      const serviceFee = fromAmount * SERVICE_FEE_PERCENTAGE;
-      const serviceFeeLamports = Math.floor(serviceFee * web3.LAMPORTS_PER_SOL);
-      
-      if (serviceFeeLamports > 0) {
-        const feeInstruction = web3.SystemProgram.transfer({
-          fromPubkey: keypair.publicKey,
-          toPubkey: new web3.PublicKey(FEE_COLLECTOR),
-          lamports: serviceFeeLamports,
-        });
-        
-        transaction.add(feeInstruction);
-        console.log(`💰 Added service fee: ${serviceFee} SOL (${serviceFeeLamports} lamports)`);
-      }
-    }
+    // ✅ إصلاح: حذف كتلة الرسوم الخدمية بالكامل
+    // كانت هنا (السطر 138-147 في النسخة القديمة):
+    // if (fromToken === 'SOL' && fromAmount > 0) {
+    //   const serviceFee = fromAmount * SERVICE_FEE_PERCENTAGE;
+    //   ... إضافة رسوم
+    // }
+    // ✅ تم حذفها - الرسوم تُحصل من swapService.js فقط
 
-    // 7. تحديث blockhash و fee payer
+    // 6. تحديث blockhash و fee payer
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = keypair.publicKey;
 
-    // 8. توقيع المعاملة
+    // 7. توقيع المعاملة
     console.log('✍️ Signing transaction...');
     transaction.sign(keypair);
 
-    // 9. إرسال المعاملة
+    // 8. إرسال المعاملة
     console.log('📤 Sending transaction to Solana network...');
     const rawTransaction = transaction.serialize();
     const signature = await connection.sendRawTransaction(rawTransaction, {
@@ -269,7 +258,7 @@ export async function executeRealSwap(swapData) {
 
     console.log('⏳ Waiting for confirmation...');
     
-    // 10. انتظار التأكيد
+    // 9. انتظار التأكيد
     const confirmation = await connection.confirmTransaction({
       signature,
       blockhash,
@@ -280,10 +269,10 @@ export async function executeRealSwap(swapData) {
       throw new Error(`Transaction failed: ${confirmation.value.err}`);
     }
 
-    // 11. حساب الكمية المستلمة
+    // 10. حساب الكمية المستلمة
     const outputAmount = Number(quoteData.outAmount) / Math.pow(10, toTokenInfo.decimals);
     
-    // 12. تسجيل المعاملة الناجحة
+    // 11. تسجيل المعاملة الناجحة
     const logData = {
       type: 'swap',
       from: fromToken,
@@ -293,7 +282,7 @@ export async function executeRealSwap(swapData) {
       rate: quote?.rate || quoteData.outAmount / amountInSmallestUnit,
       priceImpact: quoteData.priceImpactPct || '0',
       networkFee,
-      serviceFee: fromToken === 'SOL' ? fromAmount * SERVICE_FEE_PERCENTAGE : 0,
+      serviceFee: 0, // ✅ بدون رسوم خدمة من هنا
       transactionSignature: signature,
       timestamp: new Date().toISOString(),
       status: 'completed',
