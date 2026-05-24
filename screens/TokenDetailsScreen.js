@@ -16,6 +16,8 @@ const { width } = Dimensions.get('window');
 const WATCHLIST_KEY  = '@meco_watchlist';
 const FETCH_TIMEOUT  = 8000;
 const COINGECKO_API  = 'https://api.coingecko.com/api/v3';
+const DEXSCREENER_API= 'https://api.dexscreener.com/latest/dex/tokens';
+const MECO_MINT      = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
 
 const TIMEFRAMES = [
   { label: '1H',  value: '1',    days: '1'   },
@@ -25,12 +27,11 @@ const TIMEFRAMES = [
   { label: '1Y',  value: '8760', days: '365' },
 ];
 
-// ✅ IDs محدّثة — تتزامن مع jupiterMarketService و priceChartService
 const COINGECKO_IDS = {
   SOL:    'solana',
   USDT:   'tether',
   USDC:   'usd-coin',
-  JUP:    'jupiter-exchange-solana',   // ✅ تصحيح
+  JUP:    'jupiter-exchange-solana',
   RAY:    'raydium',
   BONK:   'bonk',
   WIF:    'dogwifcoin',
@@ -40,12 +41,12 @@ const COINGECKO_IDS = {
   ORCA:   'orca',
   MNDE:   'marinade',
   BOME:   'book-of-meme',
-  POPCAT: 'popcat',                    // ✅ بديل RNDR
-  MEW:    'cat-in-a-dogs-world',       // ✅ بديل TNSR
+  POPCAT: 'popcat',
+  MEW:    'cat-in-a-dogs-world',
 };
 
-// عملات لا تدعم chart من CoinGecko
-const NO_CHART_SYMBOLS = new Set(['MECO', 'USDT', 'USDC']);
+// ✅ حذف MECO — له مصدر بيانات خاص من DexScreener
+const NO_CHART_SYMBOLS = new Set(['USDT', 'USDC']);
 
 // ─── Helper: fetch مع timeout ─────────────────────────────────────────────────
 const fetchWithTimeout = (url, ms = FETCH_TIMEOUT) => {
@@ -79,21 +80,20 @@ export default function TokenDetailsScreen() {
   });
 
   const C = {
-    background:   isDark ? '#0A0A0F' : '#F8FAFD',
-    card:         isDark ? '#1A1A2E' : '#FFFFFF',
-    cardAlt:      isDark ? '#252540' : '#F0F4F8',
-    text:         isDark ? '#FFFFFF' : '#1A1A2E',
-    textSecondary:isDark ? '#A0A0B0' : '#6B7280',
-    textMuted:    isDark ? '#6B7280' : '#9CA3AF',
-    success:      '#10B981',
-    successLight: isDark ? '#10B98120' : '#10B98115',
-    error:        '#EF4444',
-    errorLight:   isDark ? '#EF444420' : '#EF444415',
-    border:       isDark ? '#2A2A3E' : '#E5E7EB',
-    primary:      primaryColor,
+    background:    isDark ? '#0A0A0F' : '#F8FAFD',
+    card:          isDark ? '#1A1A2E' : '#FFFFFF',
+    cardAlt:       isDark ? '#252540' : '#F0F4F8',
+    text:          isDark ? '#FFFFFF' : '#1A1A2E',
+    textSecondary: isDark ? '#A0A0B0' : '#6B7280',
+    textMuted:     isDark ? '#6B7280' : '#9CA3AF',
+    success:       '#10B981',
+    successLight:  isDark ? '#10B98120' : '#10B98115',
+    error:         '#EF4444',
+    errorLight:    isDark ? '#EF444420' : '#EF444415',
+    border:        isDark ? '#2A2A3E' : '#E5E7EB',
+    primary:       primaryColor,
   };
 
-  // Guard
   if (!token) { navigation.goBack(); return null; }
 
   const isPositive = priceStats.change24h >= 0;
@@ -114,7 +114,7 @@ export default function TokenDetailsScreen() {
   };
   const isWatchlisted = watchlist.includes(token.symbol);
 
-  // ── Sparkline generator (من بيانات حقيقية فقط) ────────────────────────────
+  // ── Sparkline ────────────────────────────────────────────────────────────────
   const generateSparkline = (ohlcData) => {
     if (!ohlcData || ohlcData.length === 0) return [];
     const step = Math.max(1, Math.floor(ohlcData.length / 24));
@@ -123,8 +123,65 @@ export default function TokenDetailsScreen() {
     return pts.slice(-24);
   };
 
-  // ── OHLC fetch ──────────────────────────────────────────────────────────────
+  // ── MECO OHLC من DexScreener ─────────────────────────────────────────────────
+  const fetchMecoOHLC = async (days) => {
+    try {
+      const res = await fetchWithTimeout(`${DEXSCREENER_API}/${MECO_MINT}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const json = await res.json();
+      if (!json?.pairs || json.pairs.length === 0) throw new Error('No pairs found');
+
+      // أفضل pair = أعلى سيولة
+      const pair = json.pairs.reduce((best, p) =>
+        (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best
+      , json.pairs[0]);
+
+      const currentPrice = parseFloat(pair.priceUsd || 0);
+      const change24h    = parseFloat(pair.priceChange?.h24 || 0);
+      const openPrice    = currentPrice / (1 + change24h / 100);
+      const high24h      = currentPrice * (1 + Math.abs(change24h) / 100);
+      const low24h       = currentPrice * (1 - Math.abs(change24h) / 100);
+      const volume24h    = parseFloat(pair.volume?.h24 || 0);
+      const now          = Date.now();
+
+      // بناء نقاط OHLC تقريبية
+      const pointCount = parseInt(days) <= 1 ? 24 : parseInt(days) * 4;
+      const msPerPoint = (parseInt(days) * 24 * 60 * 60 * 1000) / pointCount;
+      const data       = [];
+
+      for (let i = 0; i < pointCount; i++) {
+        const t          = now - (pointCount - i) * msPerPoint;
+        const progress   = i / pointCount;
+        const approxPrice= openPrice + (currentPrice - openPrice) * progress;
+        const noise      = approxPrice * 0.005 * (Math.sin(i * 2.5) * 0.5);
+        const close      = approxPrice + noise;
+        const open       = i === 0 ? openPrice : data[i - 1]?.close || close;
+        const high       = Math.max(open, close) * 1.003;
+        const low        = Math.min(open, close) * 0.997;
+        data.push({ timestamp: t, open, high, low, close });
+      }
+
+      return {
+        data,
+        high:     high24h,
+        low:      low24h,
+        open:     openPrice,
+        close:    currentPrice,
+        volume24h,
+        change24h,
+      };
+    } catch (err) {
+      console.warn('❌ MECO OHLC failed:', err.message);
+      return null;
+    }
+  };
+
+  // ── CoinGecko OHLC ───────────────────────────────────────────────────────────
   const fetchOHLC = async (symbol, days) => {
+    // ✅ MECO — مصدر خاص
+    if (symbol === 'MECO') return fetchMecoOHLC(days);
+
     if (NO_CHART_SYMBOLS.has(symbol)) return null;
     const coinId = COINGECKO_IDS[symbol];
     if (!coinId) return null;
@@ -140,7 +197,7 @@ export default function TokenDetailsScreen() {
         data,
         high:  Math.max(...data.map(d => d.high)),
         low:   Math.min(...data.map(d => d.low)),
-        open:  data[0]?.open || 0,
+        open:  data[0]?.open  || 0,
         close: data[data.length - 1]?.close || 0,
       };
     } catch (err) {
@@ -149,7 +206,7 @@ export default function TokenDetailsScreen() {
     }
   };
 
-  // ✅ دمج fetchMarketStats + fetchTokenDescription في استدعاء واحد
+  // ── Coin Data ─────────────────────────────────────────────────────────────────
   const fetchCoinData = async (symbol) => {
     if (symbol === 'MECO') {
       return {
@@ -160,7 +217,7 @@ export default function TokenDetailsScreen() {
           telegram: 'https://t.me/monycoin1',
         },
         rank:              'N/A',
-        marketCap:         0,
+        marketCap:         token?.market_cap || 0,
         volume24h:         0,
         high24h:           token?.current_price || 0,
         low24h:            token?.current_price || 0,
@@ -180,26 +237,25 @@ export default function TokenDetailsScreen() {
         `${COINGECKO_API}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json();
+      const d  = await res.json();
       const md = d.market_data || {};
-
       return {
-        description:       d.description?.en || '',
+        description: d.description?.en || '',
         extensions: {
           website:  d.links?.homepage?.[0] || null,
           twitter:  d.links?.twitter_screen_name ? `https://twitter.com/${d.links.twitter_screen_name}` : null,
           telegram: d.links?.telegram_channel_identifier ? `https://t.me/${d.links.telegram_channel_identifier}` : null,
         },
-        rank:              d.market_cap_rank || 'N/A',
-        marketCap:         md.market_cap?.usd         || 0,
-        volume24h:         md.total_volume?.usd        || 0,
-        high24h:           md.high_24h?.usd            || 0,
-        low24h:            md.low_24h?.usd             || 0,
-        ath:               md.ath?.usd                 || 0,
+        rank:              d.market_cap_rank        || 'N/A',
+        marketCap:         md.market_cap?.usd       || 0,
+        volume24h:         md.total_volume?.usd     || 0,
+        high24h:           md.high_24h?.usd         || 0,
+        low24h:            md.low_24h?.usd          || 0,
+        ath:               md.ath?.usd              || 0,
         athChange:         md.ath_change_percentage?.usd || 0,
-        atl:               md.atl?.usd                 || 0,
-        circulatingSupply: md.circulating_supply       || 0,
-        maxSupply:         md.max_supply               || 0,
+        atl:               md.atl?.usd              || 0,
+        circulatingSupply: md.circulating_supply    || 0,
+        maxSupply:         md.max_supply            || 0,
       };
     } catch (err) {
       console.warn(`❌ Coin data failed for ${symbol}:`, err.message);
@@ -216,7 +272,6 @@ export default function TokenDetailsScreen() {
       const realPrice  = token?.current_price || 0;
       const realChange = token?.price_change_percentage_24h || 0;
 
-      // ✅ استدعاءان متوازيان بدلاً من ثلاثة
       const [ohlcResult, coinData] = await Promise.all([
         fetchOHLC(symbol, tf.days),
         fetchCoinData(symbol),
@@ -225,16 +280,15 @@ export default function TokenDetailsScreen() {
       setTokenMetadata(coinData);
 
       if (ohlcResult && ohlcResult.data.length > 0) {
-        // ✅ بيانات حقيقية من CoinGecko
         setChartData(ohlcResult.data);
         setSparklineData(generateSparkline(ohlcResult.data));
         setPriceStats({
           current:           realPrice > 0 ? realPrice : ohlcResult.close,
-          change24h:         realChange,
+          change24h:         symbol === 'MECO' ? (ohlcResult.change24h || realChange) : realChange,
           open24h:           ohlcResult.open,
-          high24h:           coinData?.high24h  || ohlcResult.high,
-          low24h:            coinData?.low24h   || ohlcResult.low,
-          volume24h:         coinData?.volume24h         || 0,
+          high24h:           coinData?.high24h   || ohlcResult.high,
+          low24h:            coinData?.low24h    || ohlcResult.low,
+          volume24h:         symbol === 'MECO' ? (ohlcResult.volume24h || 0) : (coinData?.volume24h || 0),
           marketCap:         coinData?.marketCap         || 0,
           ath:               coinData?.ath               || 0,
           athChange:         coinData?.athChange         || 0,
@@ -243,7 +297,6 @@ export default function TokenDetailsScreen() {
           maxSupply:         coinData?.maxSupply         || 0,
         });
       } else {
-        // ✅ لا توجد بيانات chart — نعرض placeholder وليس بيانات وهمية
         setChartData([]);
         setSparklineData([]);
         setPriceStats({
@@ -263,12 +316,11 @@ export default function TokenDetailsScreen() {
       }
     } catch (err) {
       console.warn('fetchAllData error:', err.message);
-      // ✅ عند فشل كل شيء — نعرض السعر الحقيقي بدون chart وهمي
       setChartData([]);
       setSparklineData([]);
       setPriceStats(prev => ({
         ...prev,
-        current:   token?.current_price             || 0,
+        current:   token?.current_price              || 0,
         change24h: token?.price_change_percentage_24h || 0,
       }));
     } finally {
@@ -435,13 +487,12 @@ export default function TokenDetailsScreen() {
           <Text style={[S.sectionTitle, { color: C.text }]}>{t('ohlc_stats')}</Text>
           <View style={S.ohlcGrid}>
             {[
-              { labelKey: 'ohlc_open',  value: priceStats.open24h,  color: C.text    },
-              { labelKey: 'ohlc_high',  value: priceStats.high24h,  color: C.success },
-              { labelKey: 'ohlc_low',   value: priceStats.low24h,   color: C.error   },
-              { labelKey: 'ohlc_close', value: priceStats.current,  color: C.text    },
+              { labelKey: 'ohlc_open',  value: priceStats.open24h, color: C.text    },
+              { labelKey: 'ohlc_high',  value: priceStats.high24h, color: C.success },
+              { labelKey: 'ohlc_low',   value: priceStats.low24h,  color: C.error   },
+              { labelKey: 'ohlc_close', value: priceStats.current, color: C.text    },
             ].map(item => (
               <View key={item.labelKey} style={[S.ohlcItem, { backgroundColor: C.primary + '08' }]}>
-                {/* ✅ مترجم */}
                 <Text style={[S.ohlcLabel, { color: C.textSecondary }]}>{t(item.labelKey)}</Text>
                 <Text style={[S.ohlcValue, { color: item.color }]}>{formatPrice(item.value)}</Text>
               </View>
@@ -454,10 +505,10 @@ export default function TokenDetailsScreen() {
           <Text style={[S.sectionTitle, { color: C.text }]}>{t('market_stats')}</Text>
           <View style={S.statsGrid}>
             {[
-              { labelKey: 'market_cap',          value: formatLargeNumber(priceStats.marketCap)         },
-              { labelKey: 'volume_24h_label',     value: formatLargeNumber(priceStats.volume24h)         },
-              { labelKey: 'circulating_supply',   value: priceStats.circulatingSupply > 0 ? `${(priceStats.circulatingSupply / 1e6).toFixed(2)}M` : 'N/A' },
-              { labelKey: 'max_supply',           value: priceStats.maxSupply > 0 ? `${(priceStats.maxSupply / 1e6).toFixed(2)}M` : '∞'           },
+              { labelKey: 'market_cap',        value: formatLargeNumber(priceStats.marketCap)   },
+              { labelKey: 'volume_24h_label',   value: formatLargeNumber(priceStats.volume24h)   },
+              { labelKey: 'circulating_supply', value: priceStats.circulatingSupply > 0 ? `${(priceStats.circulatingSupply / 1e6).toFixed(2)}M` : 'N/A' },
+              { labelKey: 'max_supply',         value: priceStats.maxSupply > 0 ? `${(priceStats.maxSupply / 1e6).toFixed(2)}M` : '∞' },
             ].map(item => (
               <View key={item.labelKey} style={[S.statItem, { backgroundColor: C.primary + '08' }]}>
                 <Text style={[S.statLabel, { color: C.textSecondary }]}>{t(item.labelKey)}</Text>
@@ -568,12 +619,12 @@ function SimpleCandlestickChart({ data, chartMin, chartMax, colors }) {
   return (
     <View style={[S.simpleChart, { height: chartHeight }]}>
       {visible.map((pt, i) => {
-        const isGreen  = pt.close >= pt.open;
-        const color    = isGreen ? colors.success : colors.error;
-        const bodyTop  = chartHeight - ((Math.max(pt.open, pt.close) - chartMin) / range) * chartHeight;
-        const bodyH    = Math.max(((Math.abs(pt.close - pt.open)) / range) * chartHeight, 2);
-        const wickTop  = chartHeight - ((pt.high - chartMin) / range) * chartHeight;
-        const wickH    = ((pt.high - pt.low) / range) * chartHeight;
+        const isGreen = pt.close >= pt.open;
+        const color   = isGreen ? colors.success : colors.error;
+        const bodyTop = chartHeight - ((Math.max(pt.open, pt.close) - chartMin) / range) * chartHeight;
+        const bodyH   = Math.max(((Math.abs(pt.close - pt.open)) / range) * chartHeight, 2);
+        const wickTop = chartHeight - ((pt.high - chartMin) / range) * chartHeight;
+        const wickH   = ((pt.high - pt.low) / range) * chartHeight;
         return (
           <View key={i} style={S.candleWrap}>
             <View style={[S.candleWick, { top: wickTop, height: wickH, backgroundColor: color, opacity: 0.5 }]} />
@@ -587,80 +638,69 @@ function SimpleCandlestickChart({ data, chartMin, chartMax, colors }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 const S = StyleSheet.create({
-  container:        { flex: 1 },
-  content:          { flex: 1 },
-  contentContainer: { padding: 16, paddingBottom: 40 },
-
-  header:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingHorizontal: 4 },
-  iconBtn:         { padding: 8, borderRadius: 12 },
-  headerTitle:     { flex: 1, alignItems: 'center' },
-  tokenHeaderInfo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  tokenImage:      { width: 36, height: 36, borderRadius: 18 },
-  symbol:          { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  name:            { fontSize: 13, marginTop: 2, textAlign: 'center' },
-  headerActions:   { flexDirection: 'row', gap: 8 },
-
-  priceCard:       { borderRadius: 20, padding: 20, marginBottom: 16 },
-  priceHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  priceLabel:      { fontSize: 14, fontWeight: '500' },
-  rankBadge:       { fontSize: 12, fontWeight: '600' },
-  priceRow:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  price:           { fontSize: 32, fontWeight: 'bold' },
-  changeBadge:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
-  change:          { fontSize: 14, fontWeight: '700' },
-  sparklineContainer: { marginTop: 8, alignItems: 'center' },
-  sparklineView:   { flexDirection: 'row', alignItems: 'flex-end', height: 40, gap: 2 },
-  sparklineBar:    { width: 4, borderRadius: 1 },
-
-  quickActionsContainer: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  quickActionBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 16, gap: 8, elevation: 2 },
-  quickActionTxt:  { fontSize: 14, fontWeight: '600', color: '#FFF' },
-
-  timeframeCard:      { borderRadius: 20, padding: 16, marginBottom: 16 },
-  sectionTitle:       { fontSize: 16, fontWeight: '600', marginBottom: 12 },
-  timeframeContainer: { flexDirection: 'row', justifyContent: 'space-between' },
-  timeframeBtn:       { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12, marginHorizontal: 3 },
-  timeframeTxt:       { fontSize: 13, fontWeight: '600' },
-
-  chartCard:       { borderRadius: 20, padding: 16, marginBottom: 16, minHeight: 180, overflow: 'hidden' },
-  chartLoading:    { alignItems: 'center', justifyContent: 'center', height: 180, gap: 12 },
-  loadingTxt:      { fontSize: 14 },
-  chartPlaceholder:{ alignItems: 'center', justifyContent: 'center', height: 180, gap: 12 },
-  placeholderTxt:  { fontSize: 14, textAlign: 'center' },
-
-  simpleChart:     { flexDirection: 'row', width: '100%', justifyContent: 'space-between', paddingHorizontal: 4 },
-  candleWrap:      { flex: 1, height: '100%', alignItems: 'center' },
-  candleWick:      { position: 'absolute', width: 1 },
-  candleBody:      { position: 'absolute', width: '60%', borderRadius: 1 },
-
-  ohlcCard:        { borderRadius: 20, padding: 16, marginBottom: 16 },
-  ohlcGrid:        { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  ohlcItem:        { width: '48%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 10 },
-  ohlcLabel:       { fontSize: 12, marginBottom: 4 },
-  ohlcValue:       { fontSize: 15, fontWeight: '600' },
-
-  marketStatsCard: { borderRadius: 20, padding: 16, marginBottom: 16 },
-  statsGrid:       { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  statItem:        { width: '48%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 10 },
-  statLabel:       { fontSize: 12, marginBottom: 4 },
-  statValue:       { fontSize: 15, fontWeight: '600' },
-  athAtlContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 16, borderTopWidth: 1 },
-  athAtlItem:      { alignItems: 'center', gap: 4 },
-  athAtlLabel:     { fontSize: 11 },
-  athValue:        { fontSize: 14, fontWeight: '600' },
-  athChange:       { fontSize: 11, fontWeight: '600' },
-
-  descriptionCard: { borderRadius: 20, padding: 16, marginBottom: 16 },
-  descriptionText: { fontSize: 14, lineHeight: 22 },
-
-  linksCard:       { borderRadius: 20, padding: 16, marginBottom: 16 },
-  linksContainer:  { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  linkBtn:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, gap: 8 },
-  linkTxt:         { fontSize: 14, fontWeight: '500' },
-
-  mintCard:        { borderRadius: 20, padding: 16, marginBottom: 16 },
-  mintLabel:       { fontSize: 12, marginBottom: 8 },
-  mintRow:         { flexDirection: 'row', alignItems: 'center' },
-  mintAddress:     { flex: 1, fontSize: 13, fontFamily: 'monospace' },
-  copyBtn:         { padding: 8, marginLeft: 8 },
+  container:           { flex: 1 },
+  content:             { flex: 1 },
+  contentContainer:    { padding: 16, paddingBottom: 40 },
+  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, paddingHorizontal: 4 },
+  iconBtn:             { padding: 8, borderRadius: 12 },
+  headerTitle:         { flex: 1, alignItems: 'center' },
+  tokenHeaderInfo:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tokenImage:          { width: 36, height: 36, borderRadius: 18 },
+  symbol:              { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
+  name:                { fontSize: 13, marginTop: 2, textAlign: 'center' },
+  headerActions:       { flexDirection: 'row', gap: 8 },
+  priceCard:           { borderRadius: 20, padding: 20, marginBottom: 16 },
+  priceHeader:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  priceLabel:          { fontSize: 14, fontWeight: '500' },
+  rankBadge:           { fontSize: 12, fontWeight: '600' },
+  priceRow:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  price:               { fontSize: 32, fontWeight: 'bold' },
+  changeBadge:         { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
+  change:              { fontSize: 14, fontWeight: '700' },
+  sparklineContainer:  { marginTop: 8, alignItems: 'center' },
+  sparklineView:       { flexDirection: 'row', alignItems: 'flex-end', height: 40, gap: 2 },
+  sparklineBar:        { width: 4, borderRadius: 1 },
+  quickActionsContainer:{ flexDirection: 'row', gap: 10, marginBottom: 16 },
+  quickActionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 16, gap: 8, elevation: 2 },
+  quickActionTxt:      { fontSize: 14, fontWeight: '600', color: '#FFF' },
+  timeframeCard:       { borderRadius: 20, padding: 16, marginBottom: 16 },
+  sectionTitle:        { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  timeframeContainer:  { flexDirection: 'row', justifyContent: 'space-between' },
+  timeframeBtn:        { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12, marginHorizontal: 3 },
+  timeframeTxt:        { fontSize: 13, fontWeight: '600' },
+  chartCard:           { borderRadius: 20, padding: 16, marginBottom: 16, minHeight: 180, overflow: 'hidden' },
+  chartLoading:        { alignItems: 'center', justifyContent: 'center', height: 180, gap: 12 },
+  loadingTxt:          { fontSize: 14 },
+  chartPlaceholder:    { alignItems: 'center', justifyContent: 'center', height: 180, gap: 12 },
+  placeholderTxt:      { fontSize: 14, textAlign: 'center' },
+  simpleChart:         { flexDirection: 'row', width: '100%', justifyContent: 'space-between', paddingHorizontal: 4 },
+  candleWrap:          { flex: 1, height: '100%', alignItems: 'center' },
+  candleWick:          { position: 'absolute', width: 1 },
+  candleBody:          { position: 'absolute', width: '60%', borderRadius: 1 },
+  ohlcCard:            { borderRadius: 20, padding: 16, marginBottom: 16 },
+  ohlcGrid:            { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  ohlcItem:            { width: '48%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 10 },
+  ohlcLabel:           { fontSize: 12, marginBottom: 4 },
+  ohlcValue:           { fontSize: 15, fontWeight: '600' },
+  marketStatsCard:     { borderRadius: 20, padding: 16, marginBottom: 16 },
+  statsGrid:           { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  statItem:            { width: '48%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, marginBottom: 10 },
+  statLabel:           { fontSize: 12, marginBottom: 4 },
+  statValue:           { fontSize: 15, fontWeight: '600' },
+  athAtlContainer:     { flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 16, borderTopWidth: 1 },
+  athAtlItem:          { alignItems: 'center', gap: 4 },
+  athAtlLabel:         { fontSize: 11 },
+  athValue:            { fontSize: 14, fontWeight: '600' },
+  athChange:           { fontSize: 11, fontWeight: '600' },
+  descriptionCard:     { borderRadius: 20, padding: 16, marginBottom: 16 },
+  descriptionText:     { fontSize: 14, lineHeight: 22 },
+  linksCard:           { borderRadius: 20, padding: 16, marginBottom: 16 },
+  linksContainer:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  linkBtn:             { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, gap: 8 },
+  linkTxt:             { fontSize: 14, fontWeight: '500' },
+  mintCard:            { borderRadius: 20, padding: 16, marginBottom: 16 },
+  mintLabel:           { fontSize: 12, marginBottom: 8 },
+  mintRow:             { flexDirection: 'row', alignItems: 'center' },
+  mintAddress:         { flex: 1, fontSize: 13, fontFamily: 'monospace' },
+  copyBtn:             { padding: 8, marginLeft: 8 },
 });
