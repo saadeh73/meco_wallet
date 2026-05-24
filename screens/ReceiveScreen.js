@@ -17,7 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'react-native-qrcode-styled';
-import { logTransaction } from '../services/transactionLogger';
+import { logTransaction } from '../services/transactionService';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');

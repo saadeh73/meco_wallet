@@ -14,7 +14,7 @@ import {
   getCurrentNetworkFee, getLatestBlockhash, clearBalanceCache, heliusRpcRequest
 } from '../services/heliusService';
 import heliusService from '../services/heliusService'; // ✅ للحصول على connection مع fallback
-import { logTransaction } from '../services/transactionLogger';
+import { logTransaction } from '../services/transactionService';
 import { Ionicons } from '@expo/vector-icons';
 import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
