@@ -1,26 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { heliusRpcRequest } from './heliusService';
 
-const STORAGE_KEY   = 'transaction_log';
-const MAX_LOG_SIZE  = 100; // ✅ حد أقصى لمنع تضخم التخزين
+const STORAGE_KEY  = 'transaction_log';
+const MAX_LOG_SIZE = 100;
 
 // ─── logTransaction ───────────────────────────────────────────────────────────
-// 📝 حفظ عملية جديدة مع deduplication وحد أقصى للسجل
 export async function logTransaction(data) {
   try {
     const existing = await AsyncStorage.getItem(STORAGE_KEY);
     const logs     = existing ? JSON.parse(existing) : [];
 
-    // ✅ deduplication — لا تحفظ إذا كان التوقيع موجوداً مسبقاً
-    if (data.signature && logs.some(l => l.signature === data.signature)) {
+    // ✅ دعم كلا الحقلين signature و transactionSignature
+    const key = data.signature || data.transactionSignature;
+    if (key && logs.some(l => (l.signature || l.transactionSignature) === key)) {
       console.log('⚠️ Transaction already logged, skipping.');
       return true;
     }
 
-    // ✅ إضافة timestamp إذا لم يكن موجوداً
     const entry   = { ...data, savedAt: data.savedAt || Date.now() };
-
-    // ✅ حد أقصى MAX_LOG_SIZE — احذف الأقدم عند التجاوز
     const updated = [entry, ...logs].slice(0, MAX_LOG_SIZE);
 
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -33,7 +30,6 @@ export async function logTransaction(data) {
 }
 
 // ─── getTransactionLog ────────────────────────────────────────────────────────
-// 📦 جلب السجل المحلي كاملاً
 export async function getTransactionLog() {
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -45,10 +41,8 @@ export async function getTransactionLog() {
 }
 
 // ─── getTransactions ──────────────────────────────────────────────────────────
-// 🔍 جلب آخر المعاملات من Helius بدفعة واحدة (batch) بدلاً من N+1 requests
 export async function getTransactions(address, limit = 10) {
   try {
-    // الخطوة 1: جلب التوقيعات
     const signatures = await heliusRpcRequest('getSignaturesForAddress', [
       address,
       { limit },
@@ -56,29 +50,41 @@ export async function getTransactions(address, limit = 10) {
 
     if (!signatures || signatures.length === 0) return [];
 
-    // ✅ الخطوة 2: جلب تفاصيل المعاملات دفعة واحدة بدلاً من N+1
-    const txDetails = await heliusRpcRequest('getTransactions', [
-      signatures.map(s => s.signature),
-      {
-        encoding:                       'jsonParsed',
-        maxSupportedTransactionVersion: 0, // ✅ دعم Versioned Transactions
-      },
-    ]);
+    // ✅ جلب تفاصيل كل معاملة بشكل فردي موثوق بدلاً من batch غير مضمون
+    const transactions = await Promise.all(
+      signatures.map(async (sig) => {
+        try {
+          const tx = await heliusRpcRequest('getTransaction', [
+            sig.signature,
+            {
+              encoding:                       'jsonParsed',
+              maxSupportedTransactionVersion: 0,
+            },
+          ]);
+          return {
+            signature:  sig.signature,
+            slot:       sig.slot,
+            blockTime:  tx?.blockTime    || null,
+            status:     sig.confirmationStatus || 'unknown',
+            fee:        tx?.meta?.fee    || 0,
+            err:        tx?.meta?.err    || null,
+            type:       'onchain',
+          };
+        } catch (_) {
+          return {
+            signature: sig.signature,
+            slot:      sig.slot,
+            blockTime: null,
+            status:    sig.confirmationStatus || 'unknown',
+            fee:       0,
+            err:       null,
+            type:      'onchain',
+          };
+        }
+      })
+    );
 
-    // الخطوة 3: دمج البيانات مع التحقق من null
-    return signatures.map((sig, index) => {
-      const tx = txDetails?.[index] || null;
-      return {
-        signature:  sig.signature,
-        slot:       sig.slot,
-        blockTime:  tx?.blockTime    || null,
-        status:     sig.confirmationStatus || 'unknown',
-        fee:        tx?.meta?.fee    || 0,
-        err:        tx?.meta?.err    || null,
-        type:       'onchain',
-      };
-    });
-
+    return transactions;
   } catch (err) {
     console.error('❌ Error fetching transactions:', err);
     return [];
@@ -86,7 +92,6 @@ export async function getTransactions(address, limit = 10) {
 }
 
 // ─── clearTransactionLog ──────────────────────────────────────────────────────
-// 🗑️ مسح سجل المعاملات المحلي
 export async function clearTransactionLog() {
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);
@@ -99,7 +104,6 @@ export async function clearTransactionLog() {
 }
 
 // ─── getSwapStats ─────────────────────────────────────────────────────────────
-// 📊 إحصائيات التبادلات من السجل المحلي
 export async function getSwapStats() {
   try {
     const logs     = await getTransactionLog();

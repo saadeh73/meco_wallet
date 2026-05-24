@@ -313,7 +313,7 @@ export async function executeSwap(
       // ✅ تسجيل المعاملة في السجل المحلي بعد النجاح مباشرة
       await logTransaction({
         type:       'swap',
-        signature:  swapSignature,
+        transactionSignature: swapSignature, // ✅ متسق مع SendScreen
         from:       inputSymbol,
         to:         outputSymbol,
         fromAmount: amount,
@@ -361,13 +361,13 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
     const solBalance = await getSolBalance(true, pubKeyStr);
 
     if (tokenSymbol === 'SOL') {
-      const required = amount + SERVICE_FEE_SOL + 0.005;
+      const required = amount + SERVICE_FEE_SOL + 0.002;
       return { hasBalance: solBalance >= required, balance: solBalance, required };
     }
 
     const tokenBalance   = await getTokenBalance(TOKEN_MINTS[tokenSymbol], true, pubKeyStr);
     const hasEnoughToken = tokenBalance >= amount;
-    const hasEnoughSol   = solBalance >= SERVICE_FEE_SOL + 0.005;
+    const hasEnoughSol   = solBalance >= SERVICE_FEE_SOL + 0.002;
 
     return {
       hasBalance: hasEnoughToken && hasEnoughSol,
