@@ -158,6 +158,19 @@ const resources = {
       market_unavailable: "غير متاح",
       market_balance: "رصيد",
 
+      // ========== إضافة رمز مخصص (Market) ==========
+      add_custom_token: 'إضافة رمز مخصص',
+      custom_token_address: 'عنوان العقد (Contract Address)',
+      custom_token_placeholder: 'أدخل عنوان العقد على Solana...',
+      fetch_token_data: 'جلب البيانات',
+      token_added_success: 'تم إضافة {{symbol}} بنجاح',
+      token_already_exists: 'هذا الرمز موجود بالفعل في القائمة',
+      token_already_added: 'هذا الرمز مضاف بالفعل',
+      token_not_found: 'لم يتم العثور على بيانات لهذا الرمز',
+      invalid_contract_address: 'عنوان العقد غير صالح',
+      research: 'إعادة البحث',
+      delete_token_confirm: 'هل تريد حذف {{symbol}} من القائمة؟',
+
       // ========== TokenDetailsScreen (جديد) ==========
       token_details: 'تفاصيل العملة',
       current_price: 'السعر الحالي',
@@ -657,7 +670,7 @@ const resources = {
       account_added: '{{name}} added successfully',
       account_add_failed: 'Failed to add account',
       delete_account: 'Delete Account',
-      delete_account_confirmation: 'Are you sure you want to delete "{{name}}"? This cannot be undone.',
+      delete_account_confirmation: 'Are you sure you want to delete "{{name}}" This cannot be undone.',
       swipe_hint: 'Swipe left to edit, right to copy address',
       edit: 'Edit',
       copy: 'Copy',
@@ -729,6 +742,19 @@ const resources = {
       market_last_update: "Last update",
       market_unavailable: "Unavailable",
       market_balance: "Balance",
+
+      // ========== Custom Token (Market) ==========
+      add_custom_token: 'Add Custom Token',
+      custom_token_address: 'Contract Address',
+      custom_token_placeholder: 'Enter Solana contract address...',
+      fetch_token_data: 'Fetch Data',
+      token_added_success: '{{symbol}} added successfully',
+      token_already_exists: 'This token already exists in the list',
+      token_already_added: 'This token is already added',
+      token_not_found: 'No data found for this token',
+      invalid_contract_address: 'Invalid contract address',
+      research: 'Search Again',
+      delete_token_confirm: 'Remove {{symbol}} from the list?',
 
       // ========== TokenDetailsScreen (New) ==========
       token_details: 'Token Details',

@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, RefreshControl, SafeAreaView, ActivityIndicator,
-  TextInput,
+  TextInput, Modal, Alert,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -12,32 +12,33 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Polyline } from 'react-native-svg';
 
-import { getJupiterMarketData, CORE_TOKENS } from '../services/jupiterMarketService';
+import {
+  getJupiterMarketData, CORE_TOKENS,
+  fetchCustomTokenByMint, saveCustomToken, deleteCustomToken, getCustomTokens,
+} from '../services/jupiterMarketService';
 import { getGlobalMarketData, getTopMovers } from '../services/marketOverviewService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
 
-const SPARKLINE_WIDTH      = 70;
-const SPARKLINE_HEIGHT     = 35;
-const WATCHLIST_KEY        = '@meco_watchlist';
-const REFRESH_INTERVAL_MS  = 30000;
+const SPARKLINE_WIDTH     = 70;
+const SPARKLINE_HEIGHT    = 35;
+const WATCHLIST_KEY       = '@meco_watchlist';
+const REFRESH_INTERVAL_MS = 30000;
 
 // ─── MarketOverviewCard ───────────────────────────────────────────────────────
 function MarketOverviewCard({ data, isDark }) {
   const { t } = useTranslation();
   const C = {
-    bg:      isDark ? 'rgba(108,99,255,0.15)' : 'rgba(108,99,255,0.08)',
-    text:    isDark ? '#FFFFFF' : '#1A1A2E',
+    bg:        isDark ? 'rgba(108,99,255,0.15)' : 'rgba(108,99,255,0.08)',
+    text:      isDark ? '#FFFFFF' : '#1A1A2E',
     secondary: isDark ? '#A0A0B0' : '#6B7280',
-    success: '#10B981',
-    error:   '#EF4444',
+    success:   '#10B981',
+    error:     '#EF4444',
   };
   const isPositive = (data?.marketCapChange24h || 0) >= 0;
-
   return (
     <View style={[S.overviewCard, { backgroundColor: C.bg }]}>
       <View style={S.overviewRow}>
         <View style={S.overviewItem}>
-          {/* ✅ مترجم */}
           <Text style={[S.overviewLabel, { color: C.secondary }]}>{t('market_cap_label')}</Text>
           <Text style={[S.overviewValue, { color: C.text }]}>{data?.totalMarketCapFormatted || '$0'}</Text>
         </View>
@@ -52,7 +53,6 @@ function MarketOverviewCard({ data, isDark }) {
       </View>
       <View style={[S.marketChangeBar, { backgroundColor: isPositive ? C.success + '20' : C.error + '20' }]}>
         <Ionicons name={isPositive ? 'trending-up' : 'trending-down'} size={16} color={isPositive ? C.success : C.error} />
-        {/* ✅ مترجم بدون نص ثابت "(24h)" */}
         <Text style={[S.marketChangeText, { color: isPositive ? C.success : C.error }]}>
           {data?.marketCapChangeFormatted || '0%'} ({t('time_24h')})
         </Text>
@@ -65,14 +65,13 @@ function MarketOverviewCard({ data, isDark }) {
 function PortfolioSummaryCard({ totalValue, changePercent, isDark }) {
   const { t } = useTranslation();
   const C = {
-    bg:      isDark ? '#1A1A2E' : '#FFFFFF',
-    text:    isDark ? '#FFFFFF' : '#1A1A2E',
+    bg:        isDark ? '#1A1A2E' : '#FFFFFF',
+    text:      isDark ? '#FFFFFF' : '#1A1A2E',
     secondary: isDark ? '#A0A0B0' : '#6B7280',
-    success: '#10B981',
-    error:   '#EF4444',
+    success:   '#10B981',
+    error:     '#EF4444',
   };
   const isPositive = changePercent >= 0;
-
   return (
     <View style={[S.portfolioCard, { backgroundColor: C.bg }]}>
       <View style={S.portfolioHeader}>
@@ -102,7 +101,6 @@ function TopMoversSection({ gainers, losers, isDark }) {
     success: '#10B981',
     error:   '#EF4444',
   };
-
   const MoverItem = ({ item, isGainer }) => (
     <View style={[S.moverItem, { backgroundColor: C.bg }]}>
       <Text style={[S.moverSymbol, { color: C.text }]}>{item.symbol}</Text>
@@ -111,7 +109,6 @@ function TopMoversSection({ gainers, losers, isDark }) {
       </Text>
     </View>
   );
-
   return (
     <View style={S.topMoversContainer}>
       <View style={S.moverColumn}>
@@ -143,16 +140,15 @@ function TopMoversSection({ gainers, losers, isDark }) {
 // ─── TokenListItem ────────────────────────────────────────────────────────────
 function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColor }) {
   const C = {
-    bg:      isDark ? '#1A1A2E' : '#FFFFFF',
-    text:    isDark ? '#FFFFFF' : '#1A1A2E',
+    bg:        isDark ? '#1A1A2E' : '#FFFFFF',
+    text:      isDark ? '#FFFFFF' : '#1A1A2E',
     secondary: isDark ? '#A0A0B0' : '#6B7280',
-    success: '#10B981',
-    error:   '#EF4444',
+    success:   '#10B981',
+    error:     '#EF4444',
   };
   const isPositive  = (token.price_change_percentage_24h || 0) >= 0;
   const changeColor = isPositive ? C.success : C.error;
 
-  // Sparkline — منحنى بصري بناءً على نسبة التغيير (ليس بيانات حقيقية)
   const sparklinePoints = useMemo(() => {
     const change = token.price_change_percentage_24h || 0;
     return Array.from({ length: 15 }, (_, i) => {
@@ -199,7 +195,15 @@ function TokenListItem({ token, index, onPress, onLongPress, isDark, primaryColo
             : <Text style={[S.tokenIconText, { color: primaryColor }]}>{token.symbol?.charAt(0)}</Text>}
         </View>
         <View style={S.tokenInfo}>
-          <Text style={[S.tokenSymbol, { color: C.text }]}>{token.symbol}</Text>
+          <View style={S.tokenSymbolRow}>
+            <Text style={[S.tokenSymbol, { color: C.text }]}>{token.symbol}</Text>
+            {/* ✅ شارة للرموز المضافة */}
+            {token.isCustom && (
+              <View style={[S.customBadge, { backgroundColor: primaryColor + '20' }]}>
+                <Text style={[S.customBadgeText, { color: primaryColor }]}>+</Text>
+              </View>
+            )}
+          </View>
           <Text style={[S.tokenName, { color: C.secondary }]} numberOfLines={1}>{token.name}</Text>
         </View>
       </View>
@@ -233,20 +237,26 @@ export default function MarketScreen() {
     return accounts.length > 0 ? accounts[idx] : null;
   });
 
-  const [tokens,         setTokens]         = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const [refreshing,     setRefreshing]     = useState(false);
-  const [activeTab,      setActiveTab]      = useState('all');
-  const [searchQuery,    setSearchQuery]    = useState('');
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const [watchlist,      setWatchlist]      = useState([]);
-  const [marketOverview, setMarketOverview] = useState(null);
-  const [topMovers,      setTopMovers]      = useState({ gainers: [], losers: [] });
-  const [portfolioValue, setPortfolioValue] = useState(0);
-  const [portfolioChange,setPortfolioChange]= useState(0);
-  const [sortBy,         setSortBy]         = useState('rank');
+  const [tokens,          setTokens]          = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [refreshing,      setRefreshing]      = useState(false);
+  const [activeTab,       setActiveTab]       = useState('all');
+  const [searchQuery,     setSearchQuery]     = useState('');
+  const [isSearchActive,  setIsSearchActive]  = useState(false);
+  const [watchlist,       setWatchlist]       = useState([]);
+  const [marketOverview,  setMarketOverview]  = useState(null);
+  const [topMovers,       setTopMovers]       = useState({ gainers: [], losers: [] });
+  const [portfolioValue,  setPortfolioValue]  = useState(0);
+  const [portfolioChange, setPortfolioChange] = useState(0);
+  const [sortBy,          setSortBy]          = useState('rank');
 
-  // ✅ flag لمنع الاستدعاء المزدوج عند أول mount
+  // ✅ حالة Modal إضافة رمز مخصص
+  const [addTokenModal,    setAddTokenModal]    = useState(false);
+  const [mintInput,        setMintInput]        = useState('');
+  const [fetchingToken,    setFetchingToken]    = useState(false);
+  const [previewToken,     setPreviewToken]     = useState(null);
+  const [fetchError,       setFetchError]       = useState('');
+
   const isInitialMount = useRef(true);
 
   const C = {
@@ -259,24 +269,19 @@ export default function MarketScreen() {
     error:      '#EF4444',
   };
 
-  // ── Load watchlist ──────────────────────────────────────────────────────────
   useEffect(() => {
     AsyncStorage.getItem(WATCHLIST_KEY)
       .then(stored => { if (stored) setWatchlist(JSON.parse(stored)); })
       .catch(() => {});
   }, []);
 
-  // ── Portfolio calculation ───────────────────────────────────────────────────
-  // ✅ حساب Portfolio لكل العملات المتاحة وليس SOL+MECO+USDC+USDT فقط
   const calculatePortfolio = async (tokenData, publicKey) => {
     if (!publicKey || !tokenData.length) return;
     try {
       let total = 0;
-
       for (const token of CORE_TOKENS) {
         const price = tokenData.find(tk => tk.symbol === token.symbol)?.current_price || 0;
         if (price === 0) continue;
-
         let balance = 0;
         if (token.symbol === 'SOL') {
           balance = await getSolBalance(true, publicKey).catch(() => 0);
@@ -285,14 +290,12 @@ export default function MarketScreen() {
         }
         total += (balance || 0) * price;
       }
-
       setPortfolioValue(total);
     } catch (_) {
       setPortfolioValue(0);
     }
   };
 
-  // ── Fetch all market data ───────────────────────────────────────────────────
   const fetchAllMarketData = useCallback(async () => {
     try {
       const [tokenData, overviewData, moversData] = await Promise.all([
@@ -300,18 +303,15 @@ export default function MarketScreen() {
         getGlobalMarketData(),
         getTopMovers(5),
       ]);
-
       setTokens(tokenData);
       setMarketOverview(overviewData);
       setTopMovers(moversData);
       setPortfolioChange(overviewData?.marketCapChange24h || 0);
-
       if (activeAccount?.publicKey) {
         await calculatePortfolio(tokenData, activeAccount.publicKey);
       }
     } catch (err) {
       console.error('Market fetch error:', err);
-      // ✅ لا بيانات عشوائية — نعرض الأسعار بصفر بدلاً من Math.random()
       setTokens(CORE_TOKENS.map((tk, i) => ({
         ...tk,
         current_price:               0,
@@ -321,35 +321,24 @@ export default function MarketScreen() {
     }
   }, [activeAccount?.publicKey]);
 
-  // ── Initial load + interval ─────────────────────────────────────────────────
-  // ✅ useEffect للتحميل الأول والـ interval فقط
   useEffect(() => {
-    let isMounted  = true;
+    let isMounted = true;
     const init = async () => {
       await fetchAllMarketData();
       if (isMounted) setLoading(false);
     };
     init();
-
     const interval = setInterval(fetchAllMarketData, REFRESH_INTERVAL_MS);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => { isMounted = false; clearInterval(interval); };
   }, [activeAccount?.publicKey]);
 
-  // ✅ useFocusEffect للتحديث عند العودة للشاشة — يتخطى أول مرة
   useFocusEffect(
     useCallback(() => {
-      if (isInitialMount.current) {
-        isInitialMount.current = false;
-        return;
-      }
+      if (isInitialMount.current) { isInitialMount.current = false; return; }
       fetchAllMarketData();
     }, [fetchAllMarketData])
   );
 
-  // ── Refresh ─────────────────────────────────────────────────────────────────
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchAllMarketData();
@@ -360,7 +349,6 @@ export default function MarketScreen() {
     setRefreshing(false);
   };
 
-  // ── Watchlist toggle ────────────────────────────────────────────────────────
   const handleAddToWatchlist = async (token) => {
     try {
       const updated = watchlist.includes(token.symbol)
@@ -371,8 +359,69 @@ export default function MarketScreen() {
     } catch (_) {}
   };
 
-  // ── Filtered + sorted tokens ────────────────────────────────────────────────
-  // ✅ إصلاح تعارض اسم t — تغيير parameter إلى tk
+  // ── ✅ جلب بيانات الرمز المخصص ───────────────────────────────────────────────
+  const handleFetchCustomToken = async () => {
+    if (!mintInput.trim()) return;
+    setFetchingToken(true);
+    setFetchError('');
+    setPreviewToken(null);
+    try {
+      const tokenData = await fetchCustomTokenByMint(mintInput.trim());
+      setPreviewToken(tokenData);
+    } catch (err) {
+      // استخدام مفاتيح الخطأ
+      const message = err.message?.includes('not found') ? t('token_not_found')
+                    : err.message?.includes('Invalid')    ? t('invalid_contract_address')
+                    : t('error');
+      setFetchError(message);
+    } finally {
+      setFetchingToken(false);
+    }
+  };
+
+  // ── ✅ حفظ الرمز المخصص ──────────────────────────────────────────────────────
+  const handleSaveCustomToken = async () => {
+    if (!previewToken) return;
+    try {
+      await saveCustomToken(previewToken);
+      setAddTokenModal(false);
+      setMintInput('');
+      setPreviewToken(null);
+      setFetchError('');
+      await fetchAllMarketData(); // تحديث القائمة فوراً
+      Alert.alert(t('success'), t('token_added_success', { symbol: previewToken.symbol }));
+    } catch (err) {
+      const message = err.message?.includes('already exists') ? t('token_already_exists') : t('error');
+      setFetchError(message);
+    }
+  };
+
+  // ── ✅ حذف رمز مخصص ──────────────────────────────────────────────────────────
+  const handleDeleteCustomToken = (token) => {
+    Alert.alert(
+      t('delete'),
+      t('delete_token_confirm', { symbol: token.symbol }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('delete'),
+          style: 'destructive',
+          onPress: async () => {
+            await deleteCustomToken(token.mint);
+            await fetchAllMarketData();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCloseAddModal = () => {
+    setAddTokenModal(false);
+    setMintInput('');
+    setPreviewToken(null);
+    setFetchError('');
+  };
+
   const filteredTokens = useMemo(() => {
     let result = tokens.filter(tk => {
       if (searchQuery) {
@@ -394,15 +443,13 @@ export default function MarketScreen() {
     return result;
   }, [tokens, searchQuery, activeTab, watchlist, sortBy]);
 
-  // ✅ Tabs — كلها مترجمة
   const tabs = [
-    { id: 'all',       labelKey: 'all_tokens'       },
-    { id: 'watchlist', labelKey: 'watchlist'         },
-    { id: 'gainers',   labelKey: 'gainers'           },
-    { id: 'losers',    labelKey: 'market_losers'     },
+    { id: 'all',       labelKey: 'all_tokens'   },
+    { id: 'watchlist', labelKey: 'watchlist'     },
+    { id: 'gainers',   labelKey: 'gainers'       },
+    { id: 'losers',    labelKey: 'market_losers' },
   ];
 
-  // ✅ Sort options — كلها مترجمة
   const sortOptions = [
     { id: 'rank',   labelKey: 'rank'   },
     { id: 'price',  labelKey: 'price'  },
@@ -411,7 +458,13 @@ export default function MarketScreen() {
 
   const handleCloseSearch = () => { setSearchQuery(''); setIsSearchActive(false); };
 
-  // ── Loading state ───────────────────────────────────────────────────────────
+  const formatPrice = (price) => {
+    if (!price || price === 0) return '$0.00';
+    if (price < 0.0001) return `$${price.toExponential(2)}`;
+    if (price < 0.01)   return `$${price.toFixed(6)}`;
+    return `$${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
@@ -423,7 +476,6 @@ export default function MarketScreen() {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.background }}>
 
@@ -441,7 +493,7 @@ export default function MarketScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Search bar */}
+      {/* ✅ Search bar مع زر + */}
       {isSearchActive && (
         <View style={[S.searchBarContainer, { backgroundColor: C.background }]}>
           <View style={[S.searchInputWrapper, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -459,6 +511,13 @@ export default function MarketScreen() {
                 <Ionicons name="close-circle" size={18} color={C.secondary} />
               </TouchableOpacity>
             )}
+            {/* ✅ زر + لإضافة رمز مخصص */}
+            <TouchableOpacity
+              onPress={() => setAddTokenModal(true)}
+              style={[S.addTokenBtn, { backgroundColor: primaryColor }]}
+            >
+              <Ionicons name="add" size={20} color="#FFF" />
+            </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={handleCloseSearch} style={S.cancelBtn}>
             <Text style={{ color: primaryColor, fontWeight: '600' }}>{t('cancel')}</Text>
@@ -472,7 +531,6 @@ export default function MarketScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[primaryColor]} tintColor={primaryColor} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* إخفاء البطاقات العلوية أثناء البحث */}
         {!isSearchActive && (
           <>
             <MarketOverviewCard data={marketOverview} isDark={isDark} />
@@ -481,7 +539,6 @@ export default function MarketScreen() {
           </>
         )}
 
-        {/* Tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.tabsScroll} contentContainerStyle={S.tabsContent}>
           {tabs.map(tab => (
             <TouchableOpacity
@@ -496,7 +553,6 @@ export default function MarketScreen() {
           ))}
         </ScrollView>
 
-        {/* Sort */}
         <View style={S.sortContainer}>
           {sortOptions.map(opt => (
             <TouchableOpacity
@@ -511,7 +567,6 @@ export default function MarketScreen() {
           ))}
         </View>
 
-        {/* Token list */}
         <View style={S.tokenList}>
           {filteredTokens.length === 0 ? (
             <View style={S.emptyContainer}>
@@ -525,37 +580,151 @@ export default function MarketScreen() {
               key={token.mint || token.id}
               token={token}
               index={index}
-              onPress={() => navigation.navigate('TokenDetails', { token })}
-              onLongPress={() => handleAddToWatchlist(token)}
+              onPress={(tk) => {
+                navigation.navigate('TokenDetails', { token: tk });
+              }}
+              onLongPress={(tk) => {
+                if (tk.isCustom) {
+                  handleDeleteCustomToken(tk);
+                } else {
+                  handleAddToWatchlist(tk);
+                }
+              }}
               isDark={isDark}
               primaryColor={primaryColor}
             />
           ))}
         </View>
       </ScrollView>
+
+      {/* ✅ Modal إضافة رمز مخصص */}
+      <Modal
+        visible={addTokenModal}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCloseAddModal}
+      >
+        <View style={S.modalOverlay}>
+          <View style={[S.modalContent, { backgroundColor: C.card }]}>
+            <View style={S.modalHandle} />
+
+            <View style={S.modalHeader}>
+              <Text style={[S.modalTitle, { color: C.text }]}>{t('add_custom_token')}</Text>
+              <TouchableOpacity onPress={handleCloseAddModal} style={[S.modalCloseBtn, { backgroundColor: C.background }]}>
+                <Ionicons name="close" size={20} color={C.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* حقل إدخال عنوان العقد */}
+            <Text style={[S.modalLabel, { color: C.secondary }]}>{t('custom_token_address')}</Text>
+            <View style={[S.modalInputWrapper, { backgroundColor: C.background, borderColor: C.border }]}>
+              <TextInput
+                style={[S.modalInput, { color: C.text }]}
+                placeholder={t('custom_token_placeholder')}
+                placeholderTextColor={C.secondary}
+                value={mintInput}
+                onChangeText={(text) => {
+                  setMintInput(text);
+                  setPreviewToken(null);
+                  setFetchError('');
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {/* رسالة خطأ */}
+            {fetchError ? (
+              <Text style={[S.fetchError, { color: C.error }]}>{fetchError}</Text>
+            ) : null}
+
+            {/* زر البحث */}
+            {!previewToken && (
+              <TouchableOpacity
+                style={[S.fetchBtn, { backgroundColor: primaryColor, opacity: fetchingToken || !mintInput.trim() ? 0.6 : 1 }]}
+                onPress={handleFetchCustomToken}
+                disabled={fetchingToken || !mintInput.trim()}
+              >
+                {fetchingToken
+                  ? <ActivityIndicator color="#FFF" size="small" />
+                  : <>
+                      <Ionicons name="search" size={18} color="#FFF" />
+                      <Text style={S.fetchBtnText}>{t('fetch_token_data')}</Text>
+                    </>
+                }
+              </TouchableOpacity>
+            )}
+
+            {/* ✅ معاينة الرمز */}
+            {previewToken && (
+              <View style={[S.previewCard, { backgroundColor: C.background, borderColor: C.border }]}>
+                <View style={S.previewHeader}>
+                  <View style={[S.previewIcon, { backgroundColor: primaryColor + '20' }]}>
+                    {previewToken.image
+                      ? <Image source={{ uri: previewToken.image }} style={S.previewIconImage} />
+                      : <Text style={[S.previewIconText, { color: primaryColor }]}>{previewToken.symbol?.charAt(0)}</Text>
+                    }
+                  </View>
+                  <View style={S.previewInfo}>
+                    <Text style={[S.previewSymbol, { color: C.text }]}>{previewToken.symbol}</Text>
+                    <Text style={[S.previewName,   { color: C.secondary }]}>{previewToken.name}</Text>
+                  </View>
+                  <View style={S.previewPriceCol}>
+                    <Text style={[S.previewPrice, { color: C.text }]}>{formatPrice(previewToken.current_price)}</Text>
+                    <Text style={[S.previewChange, {
+                      color: (previewToken.price_change_percentage_24h || 0) >= 0 ? C.success : C.error
+                    }]}>
+                      {(previewToken.price_change_percentage_24h || 0) >= 0 ? '+' : ''}
+                      {(previewToken.price_change_percentage_24h || 0).toFixed(2)}%
+                    </Text>
+                  </View>
+                </View>
+
+                {/* أزرار إضافة / إعادة البحث */}
+                <View style={S.previewActions}>
+                  <TouchableOpacity
+                    style={[S.previewCancelBtn, { borderColor: C.border }]}
+                    onPress={() => { setPreviewToken(null); setMintInput(''); }}
+                  >
+                    <Text style={{ color: C.secondary, fontWeight: '600' }}>{t('research')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[S.previewAddBtn, { backgroundColor: primaryColor }]}
+                    onPress={handleSaveCustomToken}
+                  >
+                    <Ionicons name="add-circle" size={18} color="#FFF" />
+                    <Text style={S.previewAddText}>{t('add_custom_token')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
 const S = StyleSheet.create({
-  loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText:   { marginTop: 12, fontSize: 14 },
+  loadingCenter:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText:    { marginTop: 12, fontSize: 14 },
 
   header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
   headerTitle:    { fontSize: 28, fontWeight: 'bold' },
   headerSubtitle: { fontSize: 13, marginTop: 2 },
   searchButton:   { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 
-  searchBarContainer:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
-  searchInputWrapper:  { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, height: 44 },
-  searchInput:         { flex: 1, paddingHorizontal: 10, fontSize: 15, height: '100%' },
-  clearBtn:            { padding: 10 },
-  cancelBtn:           { paddingLeft: 12, paddingVertical: 10 },
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
+  searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, height: 44 },
+  searchInput:        { flex: 1, paddingHorizontal: 10, fontSize: 15, height: '100%' },
+  clearBtn:           { padding: 10 },
+  cancelBtn:          { paddingLeft: 12, paddingVertical: 10 },
+  // ✅ زر +
+  addTokenBtn:        { width: 36, height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 4 },
 
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  scrollContent:  { paddingHorizontal: 20, paddingBottom: 100 },
 
   overviewCard:       { borderRadius: 16, padding: 16, marginBottom: 12 },
   overviewRow:        { flexDirection: 'row', justifyContent: 'space-between' },
@@ -587,26 +756,59 @@ const S = StyleSheet.create({
   tab:          { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(128,128,128,0.1)' },
   tabText:      { fontSize: 14, fontWeight: '600' },
 
-  sortContainer:   { flexDirection: 'row', marginBottom: 12, gap: 8 },
-  sortButton:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  sortButtonText:  { fontSize: 12, fontWeight: '500' },
+  sortContainer:  { flexDirection: 'row', marginBottom: 12, gap: 8 },
+  sortButton:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  sortButtonText: { fontSize: 12, fontWeight: '500' },
 
   tokenList:      { gap: 10 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   emptyText:      { marginTop: 12, fontSize: 16 },
 
-  tokenCard:        { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14 },
-  tokenLeft:        { flexDirection: 'row', alignItems: 'center', flex: 1.2 },
-  tokenRank:        { fontSize: 11, width: 20, textAlign: 'center' },
-  tokenIcon:        { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  tokenIconImage:   { width: 36, height: 36, borderRadius: 18 },
-  tokenIconText:    { fontSize: 14, fontWeight: 'bold' },
-  tokenInfo:        { flex: 1 },
-  tokenSymbol:      { fontSize: 15, fontWeight: 'bold' },
-  tokenName:        { fontSize: 11, marginTop: 1 },
-  tokenCenter:      { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
-  tokenRight:       { flex: 1, alignItems: 'flex-end' },
-  tokenPrice:       { fontSize: 14, fontWeight: 'bold' },
-  tokenChangeBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, marginTop: 4, gap: 2 },
-  tokenChangeText:  { fontSize: 11, fontWeight: '600' },
+  tokenCard:         { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14 },
+  tokenLeft:         { flexDirection: 'row', alignItems: 'center', flex: 1.2 },
+  tokenRank:         { fontSize: 11, width: 20, textAlign: 'center' },
+  tokenIcon:         { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  tokenIconImage:    { width: 36, height: 36, borderRadius: 18 },
+  tokenIconText:     { fontSize: 14, fontWeight: 'bold' },
+  tokenInfo:         { flex: 1 },
+  tokenSymbolRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tokenSymbol:       { fontSize: 15, fontWeight: 'bold' },
+  tokenName:         { fontSize: 11, marginTop: 1 },
+  customBadge:       { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 },
+  customBadgeText:   { fontSize: 10, fontWeight: '800' },
+  tokenCenter:       { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
+  tokenRight:        { flex: 1, alignItems: 'flex-end' },
+  tokenPrice:        { fontSize: 14, fontWeight: 'bold' },
+  tokenChangeBadge:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, marginTop: 4, gap: 2 },
+  tokenChangeText:   { fontSize: 11, fontWeight: '600' },
+
+  // ✅ Modal styles
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent:    { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingTop: 12 },
+  modalHandle:     { width: 40, height: 4, backgroundColor: '#E5E5EA', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle:      { fontSize: 20, fontWeight: '800' },
+  modalCloseBtn:   { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  modalLabel:      { fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  modalInputWrapper:{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, height: 50, marginBottom: 12 },
+  modalInput:      { flex: 1, fontSize: 14 },
+  fetchError:      { fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  fetchBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 14, gap: 8, marginBottom: 16 },
+  fetchBtnText:    { color: '#FFF', fontSize: 16, fontWeight: '700' },
+
+  previewCard:     { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 16 },
+  previewHeader:   { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  previewIcon:     { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  previewIconImage:{ width: 48, height: 48, borderRadius: 24 },
+  previewIconText: { fontSize: 20, fontWeight: 'bold' },
+  previewInfo:     { flex: 1 },
+  previewSymbol:   { fontSize: 18, fontWeight: '800' },
+  previewName:     { fontSize: 13, marginTop: 2 },
+  previewPriceCol: { alignItems: 'flex-end' },
+  previewPrice:    { fontSize: 16, fontWeight: '700' },
+  previewChange:   { fontSize: 13, fontWeight: '600', marginTop: 2 },
+  previewActions:  { flexDirection: 'row', gap: 12 },
+  previewCancelBtn:{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
+  previewAddBtn:   { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, gap: 8 },
+  previewAddText:  { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

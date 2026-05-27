@@ -13,11 +13,11 @@ import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
-const WATCHLIST_KEY  = '@meco_watchlist';
-const FETCH_TIMEOUT  = 8000;
-const COINGECKO_API  = 'https://api.coingecko.com/api/v3';
-const DEXSCREENER_API= 'https://api.dexscreener.com/latest/dex/tokens';
-const MECO_MINT      = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
+const WATCHLIST_KEY   = '@meco_watchlist';
+const FETCH_TIMEOUT   = 8000;
+const COINGECKO_API   = 'https://api.coingecko.com/api/v3';
+const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex/tokens';
+const MECO_MINT       = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
 
 const TIMEFRAMES = [
   { label: '1H',  value: '1',    days: '1'   },
@@ -45,10 +45,9 @@ const COINGECKO_IDS = {
   MEW:    'cat-in-a-dogs-world',
 };
 
-// ✅ حذف MECO — له مصدر بيانات خاص من DexScreener
+// ✅ USDT و USDC فقط بلا رسم بياني — MECO والرموز المخصصة تستخدم DexScreener
 const NO_CHART_SYMBOLS = new Set(['USDT', 'USDC']);
 
-// ─── Helper: fetch مع timeout ─────────────────────────────────────────────────
 const fetchWithTimeout = (url, ms = FETCH_TIMEOUT) => {
   const ctrl  = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
@@ -56,7 +55,6 @@ const fetchWithTimeout = (url, ms = FETCH_TIMEOUT) => {
     .finally(() => clearTimeout(timer));
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function TokenDetailsScreen() {
   const navigation   = useNavigation();
   const route        = useRoute();
@@ -98,7 +96,6 @@ export default function TokenDetailsScreen() {
 
   const isPositive = priceStats.change24h >= 0;
 
-  // ── Watchlist ───────────────────────────────────────────────────────────────
   useEffect(() => {
     AsyncStorage.getItem(WATCHLIST_KEY)
       .then(s => { if (s) setWatchlist(JSON.parse(s)); })
@@ -114,7 +111,6 @@ export default function TokenDetailsScreen() {
   };
   const isWatchlisted = watchlist.includes(token.symbol);
 
-  // ── Sparkline ────────────────────────────────────────────────────────────────
   const generateSparkline = (ohlcData) => {
     if (!ohlcData || ohlcData.length === 0) return [];
     const step = Math.max(1, Math.floor(ohlcData.length / 24));
@@ -123,16 +119,15 @@ export default function TokenDetailsScreen() {
     return pts.slice(-24);
   };
 
-  // ── MECO OHLC من DexScreener ─────────────────────────────────────────────────
-  const fetchMecoOHLC = async (days) => {
+  // ── DexScreener OHLC — لـ MECO وأي رمز مخصص ─────────────────────────────
+  const fetchDexScreenerOHLC = async (mintAddress, days) => {
     try {
-      const res = await fetchWithTimeout(`${DEXSCREENER_API}/${MECO_MINT}`);
+      const res = await fetchWithTimeout(`${DEXSCREENER_API}/${mintAddress}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const json = await res.json();
       if (!json?.pairs || json.pairs.length === 0) throw new Error('No pairs found');
 
-      // أفضل pair = أعلى سيولة
       const pair = json.pairs.reduce((best, p) =>
         (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best
       , json.pairs[0]);
@@ -145,7 +140,6 @@ export default function TokenDetailsScreen() {
       const volume24h    = parseFloat(pair.volume?.h24 || 0);
       const now          = Date.now();
 
-      // بناء نقاط OHLC تقريبية
       const pointCount = parseInt(days) <= 1 ? 24 : parseInt(days) * 4;
       const msPerPoint = (parseInt(days) * 24 * 60 * 60 * 1000) / pointCount;
       const data       = [];
@@ -162,29 +156,24 @@ export default function TokenDetailsScreen() {
         data.push({ timestamp: t, open, high, low, close });
       }
 
-      return {
-        data,
-        high:     high24h,
-        low:      low24h,
-        open:     openPrice,
-        close:    currentPrice,
-        volume24h,
-        change24h,
-      };
+      return { data, high: high24h, low: low24h, open: openPrice, close: currentPrice, volume24h, change24h };
     } catch (err) {
-      console.warn('❌ MECO OHLC failed:', err.message);
+      console.warn(`❌ DexScreener OHLC failed for ${mintAddress}:`, err.message);
       return null;
     }
   };
 
-  // ── CoinGecko OHLC ───────────────────────────────────────────────────────────
+  // ── OHLC fetch ───────────────────────────────────────────────────────────────
   const fetchOHLC = async (symbol, days) => {
-    // ✅ MECO — مصدر خاص
-    if (symbol === 'MECO') return fetchMecoOHLC(days);
-
     if (NO_CHART_SYMBOLS.has(symbol)) return null;
+
+    // ✅ MECO — DexScreener
+    if (symbol === 'MECO') return fetchDexScreenerOHLC(MECO_MINT, days);
+
     const coinId = COINGECKO_IDS[symbol];
-    if (!coinId) return null;
+
+    // ✅ أي رمز مخصص غير موجود في CoinGecko — DexScreener تلقائياً
+    if (!coinId) return fetchDexScreenerOHLC(token.mint, days);
 
     try {
       const res = await fetchWithTimeout(`${COINGECKO_API}/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`);
@@ -208,14 +197,14 @@ export default function TokenDetailsScreen() {
 
   // ── Coin Data ─────────────────────────────────────────────────────────────────
   const fetchCoinData = async (symbol) => {
-    if (symbol === 'MECO') {
+    if (symbol === 'MECO' || !COINGECKO_IDS[symbol]) {
       return {
-        description: t('meco_description'),
-        extensions: {
+        description: symbol === 'MECO' ? t('meco_description') : (token.description || ''),
+        extensions: symbol === 'MECO' ? {
           website:  'https://monycoin.github.io/meco-token/',
           twitter:  'https://twitter.com/MoniCoinMECO',
           telegram: 'https://t.me/monycoin1',
-        },
+        } : {},
         rank:              'N/A',
         marketCap:         token?.market_cap || 0,
         volume24h:         0,
@@ -224,14 +213,12 @@ export default function TokenDetailsScreen() {
         ath:               0,
         athChange:         0,
         atl:               0,
-        circulatingSupply: 1_000_000_000,
-        maxSupply:         1_000_000_000,
+        circulatingSupply: symbol === 'MECO' ? 1_000_000_000 : 0,
+        maxSupply:         symbol === 'MECO' ? 1_000_000_000 : 0,
       };
     }
 
     const coinId = COINGECKO_IDS[symbol];
-    if (!coinId) return null;
-
     try {
       const res = await fetchWithTimeout(
         `${COINGECKO_API}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`
@@ -263,7 +250,7 @@ export default function TokenDetailsScreen() {
     }
   };
 
-  // ── Main fetch ──────────────────────────────────────────────────────────────
+  // ── Main fetch ───────────────────────────────────────────────────────────────
   const fetchAllData = async (tf, isRefresh = false) => {
     try {
       if (!isRefresh) setLoading(true);
@@ -284,11 +271,11 @@ export default function TokenDetailsScreen() {
         setSparklineData(generateSparkline(ohlcResult.data));
         setPriceStats({
           current:           realPrice > 0 ? realPrice : ohlcResult.close,
-          change24h:         symbol === 'MECO' ? (ohlcResult.change24h || realChange) : realChange,
+          change24h:         (symbol === 'MECO' || token.isCustom) ? (ohlcResult.change24h || realChange) : realChange,
           open24h:           ohlcResult.open,
           high24h:           coinData?.high24h   || ohlcResult.high,
           low24h:            coinData?.low24h    || ohlcResult.low,
-          volume24h:         symbol === 'MECO' ? (ohlcResult.volume24h || 0) : (coinData?.volume24h || 0),
+          volume24h:         (symbol === 'MECO' || token.isCustom) ? (ohlcResult.volume24h || 0) : (coinData?.volume24h || 0),
           marketCap:         coinData?.marketCap         || 0,
           ath:               coinData?.ath               || 0,
           athChange:         coinData?.athChange         || 0,
@@ -338,7 +325,6 @@ export default function TokenDetailsScreen() {
     setRefreshing(false);
   }, [selectedTimeframe, token?.symbol]);
 
-  // ── Actions ─────────────────────────────────────────────────────────────────
   const copyMintAddress = async () => {
     if (!token.mint) return;
     await Clipboard.setStringAsync(token.mint);
@@ -347,7 +333,6 @@ export default function TokenDetailsScreen() {
   const openExplorer = () => { if (token.mint) Linking.openURL(`https://solscan.io/token/${token.mint}`); };
   const openLink     = (url) => { if (url) Linking.openURL(url); };
 
-  // ── Formatters ───────────────────────────────────────────────────────────────
   const formatLargeNumber = (n) => {
     if (!n || n === 0) return 'N/A';
     if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
@@ -377,7 +362,6 @@ export default function TokenDetailsScreen() {
   };
   const { min: chartMin, max: chartMax } = getChartMinMax();
 
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <SafeAreaView style={[S.container, { backgroundColor: C.background }]}>
       <ScrollView
@@ -386,7 +370,6 @@ export default function TokenDetailsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
         showsVerticalScrollIndicator={false}
       >
-
         {/* Header */}
         <View style={S.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={[S.iconBtn, { backgroundColor: C.primary + '18' }]}>
@@ -516,7 +499,6 @@ export default function TokenDetailsScreen() {
               </View>
             ))}
           </View>
-
           {priceStats.ath > 0 && (
             <View style={[S.athAtlContainer, { borderTopColor: C.primary + '18' }]}>
               <View style={S.athAtlItem}>
@@ -593,7 +575,6 @@ export default function TokenDetailsScreen() {
   );
 }
 
-// ─── Sparkline ────────────────────────────────────────────────────────────────
 function SparklineView({ data, isPositive, colors }) {
   if (data.length < 2) return null;
   const min   = Math.min(...data);
@@ -610,7 +591,6 @@ function SparklineView({ data, isPositive, colors }) {
   );
 }
 
-// ─── Candlestick Chart ────────────────────────────────────────────────────────
 function SimpleCandlestickChart({ data, chartMin, chartMax, colors }) {
   if (data.length === 0) return null;
   const range       = chartMax - chartMin || 1;
@@ -636,7 +616,6 @@ function SimpleCandlestickChart({ data, chartMin, chartMax, colors }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
 const S = StyleSheet.create({
   container:           { flex: 1 },
   content:             { flex: 1 },
@@ -660,7 +639,7 @@ const S = StyleSheet.create({
   sparklineContainer:  { marginTop: 8, alignItems: 'center' },
   sparklineView:       { flexDirection: 'row', alignItems: 'flex-end', height: 40, gap: 2 },
   sparklineBar:        { width: 4, borderRadius: 1 },
-  quickActionsContainer:{ flexDirection: 'row', gap: 10, marginBottom: 16 },
+  quickActionsContainer: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   quickActionBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 16, gap: 8, elevation: 2 },
   quickActionTxt:      { fontSize: 14, fontWeight: '600', color: '#FFF' },
   timeframeCard:       { borderRadius: 20, padding: 16, marginBottom: 16 },

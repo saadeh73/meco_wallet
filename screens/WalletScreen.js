@@ -1,4 +1,4 @@
-// WalletScreen.js - محسن مع تأثير النسخ البصري ودالة الأرصدة المحسّنة
+// WalletScreen.js
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
@@ -12,7 +12,7 @@ import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { getSolBalance, getTokenAccounts, getTokenBalance } from '../services/heliusService';
-import { CORE_TOKENS, getJupiterMarketData } from '../services/jupiterMarketService'; // ✅ إضافة getJupiterMarketData
+import { CORE_TOKENS, getJupiterMarketData, getCustomTokens } from '../services/jupiterMarketService'; // ✅ إضافة getCustomTokens
 import * as LocalAuthentication from 'expo-local-authentication';
 
 const { width, height } = Dimensions.get('window');
@@ -80,7 +80,6 @@ export default function WalletScreen() {
     }
   }, [accounts, activeAccountIndex]);
 
-  // ✅ جلب أسعار جميع العملات من Jupiter دفعة واحدة
   const loadWalletData = useCallback(async (publicKey) => {
     try {
       if (!publicKey) {
@@ -92,43 +91,50 @@ export default function WalletScreen() {
       setIsSwitchingAccount(true);
       const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
 
-      // جلب الأرصدة والأسعار بالتوازي
-      const [solBal, tokenAccounts, marketData] = await Promise.all([
+      // ✅ جلب الأرصدة والأسعار والرموز المخصصة بالتوازي
+      const [solBal, tokenAccounts, marketData, customTokensList] = await Promise.all([
         getSolBalance(true, addr).catch(() => 0),
         getTokenAccounts(addr).catch(() => []),
-        getJupiterMarketData().catch(() => []), // ✅ أسعار جميع العملات الـ 16
+        getJupiterMarketData().catch(() => []),
+        getCustomTokens().catch(() => []),
       ]);
 
-      // ✅ بناء price map من Jupiter — يشمل كل العملات
       const priceMap = {};
-      marketData.forEach(tk => {
-        priceMap[tk.symbol] = tk.current_price || 0;
-      });
+      marketData.forEach(tk => { priceMap[tk.symbol] = tk.current_price || 0; });
 
       let calculatedTotalUSD = 0;
 
+      // ── CORE_TOKENS ───────────────────────────────────────────────────────
       const allAssets = CORE_TOKENS.map(asset => {
         let amount = 0;
         if (asset.symbol === 'SOL') {
           amount = solBal || 0;
         } else {
-          // ✅ إصلاح تعارض اسم t — تغيير parameter إلى tk
           const tokenData = tokenAccounts.find(tk => tk.mint === asset.mint);
           if (tokenData) amount = tokenData.amount || 0;
         }
-
-        // ✅ السعر من Jupiter لكل العملات وليس 4 فقط
         const price    = priceMap[asset.symbol] || 0;
         const valueUSD = amount * price;
         calculatedTotalUSD += valueUSD;
-
         return { ...asset, amount, price, valueUSD };
       });
 
-      // عرض SOL و MECO دائماً + أي عملة فيها رصيد
       const filteredAssets = allAssets.filter(
         asset => asset.symbol === 'SOL' || asset.symbol === 'MECO' || asset.amount > 0
       );
+
+      // ✅ إضافة الرموز المخصصة — تظهر فقط إذا كان فيها رصيد فعلي
+      for (const customToken of customTokensList) {
+        const tokenData = tokenAccounts.find(tk => tk.mint === customToken.mint);
+        const amount    = tokenData?.amount || 0;
+        if (amount > 0) {
+          const price    = priceMap[customToken.symbol] || customToken.current_price || 0;
+          const valueUSD = amount * price;
+          calculatedTotalUSD += valueUSD;
+          filteredAssets.push({ ...customToken, amount, price, valueUSD });
+        }
+      }
+
       filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
 
       setAssets(filteredAssets);
@@ -145,21 +151,18 @@ export default function WalletScreen() {
     if (walletPublicKey) loadWalletData(walletPublicKey);
   }, [walletPublicKey, loadWalletData]);
 
-  // ✅ أرصدة الحسابات في الـ modal — أسعار من Jupiter أيضاً
   const fetchAccountUsdBalances = useCallback(async () => {
     if (loadingAccountBalances) return;
     setLoadingAccountBalances(true);
 
     const balances = {};
     try {
-      // ✅ جلب أسعار جميع العملات من Jupiter مرة واحدة
       const marketData = await getJupiterMarketData().catch(() => []);
       const priceMap   = {};
       marketData.forEach(tk => { priceMap[tk.symbol] = tk.current_price || 0; });
 
       for (const acc of accounts) {
         try {
-          // الحساب النشط — استخدام الرصيد المحسوب مسبقاً
           if (acc.index === activeAccountIndex && totalBalanceUSD > 0) {
             balances[acc.publicKey] = totalBalanceUSD;
             continue;
@@ -168,8 +171,6 @@ export default function WalletScreen() {
           const addr   = acc.publicKey;
           const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
 
-          // جلب أرصدة العملات الرئيسية للحساب (SOL + MECO + USDC + USDT)
-          // للأداء: نكتفي بالعملات الرئيسية في عرض الـ modal
           let mecoAmount = 0, usdcAmount = 0, usdtAmount = 0;
           try { mecoAmount = await getTokenBalance('7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i', true, addr); } catch (_) {}
           await new Promise(r => setTimeout(r, 200));
@@ -177,12 +178,11 @@ export default function WalletScreen() {
           await new Promise(r => setTimeout(r, 200));
           try { usdtAmount = await getTokenBalance('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', true, addr); } catch (_) {}
 
-          // ✅ أسعار من Jupiter لكل العملات
           const accUsd =
-            (solBal    * (priceMap['SOL']  || 0)) +
-            (mecoAmount* (priceMap['MECO'] || 0)) +
-            (usdcAmount* (priceMap['USDC'] || 0)) +
-            (usdtAmount* (priceMap['USDT'] || 0));
+            (solBal     * (priceMap['SOL']  || 0)) +
+            (mecoAmount * (priceMap['MECO'] || 0)) +
+            (usdcAmount * (priceMap['USDC'] || 0)) +
+            (usdtAmount * (priceMap['USDT'] || 0));
 
           balances[acc.publicKey] = accUsd;
         } catch (_) {
@@ -418,9 +418,9 @@ export default function WalletScreen() {
   );
 
   const renderAccountItem = ({ item }) => {
-    const isActive  = item.index === activeAccountIndex;
-    const usdBalance= accountUsdBalances[item.publicKey];
-    const isLoading = loadingAccountBalances && usdBalance === undefined;
+    const isActive   = item.index === activeAccountIndex;
+    const usdBalance = accountUsdBalances[item.publicKey];
+    const isLoading  = loadingAccountBalances && usdBalance === undefined;
 
     return (
       <View style={{ marginBottom: 8 }}>
@@ -508,10 +508,10 @@ export default function WalletScreen() {
 
           <View style={styles.actionsGrid}>
             {[
-              { icon: 'arrow-up',        color: '#10B981', screen: 'Send',     label: t('send')         },
-              { icon: 'arrow-down',      color: '#6366F1', screen: 'Receive',  label: t('receive')      },
-              { icon: 'swap-horizontal', color: '#F59E0B', screen: 'Swap',     label: t('swap_title')   },
-              { icon: 'trending-up',     color: '#EC4899', screen: 'Staking',  label: t('staking.stake_tab') },
+              { icon: 'arrow-up',        color: '#10B981', screen: 'Send',    label: t('send')              },
+              { icon: 'arrow-down',      color: '#6366F1', screen: 'Receive', label: t('receive')           },
+              { icon: 'swap-horizontal', color: '#F59E0B', screen: 'Swap',    label: t('swap_title')        },
+              { icon: 'trending-up',     color: '#EC4899', screen: 'Staking', label: t('staking.stake_tab') },
             ].map(btn => (
               <TouchableOpacity key={btn.screen} style={styles.actionBtn} onPress={() => navigation.navigate(btn.screen)}>
                 <View style={[styles.actionCircle, { backgroundColor: btn.color + '20' }]}>
@@ -534,7 +534,7 @@ export default function WalletScreen() {
           <FlatList
             data={assets}
             renderItem={renderAssetItem}
-            keyExtractor={item => item.symbol}
+            keyExtractor={item => item.mint || item.symbol}
             contentContainerStyle={{ paddingBottom: 120 }}
             showsVerticalScrollIndicator={false}
             refreshControl={
@@ -632,72 +632,72 @@ export default function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1 },
-  headerCard:  { borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 24, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 10, zIndex: 10 },
-  topBar:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  walletInfoRow:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  container:    { flex: 1 },
+  headerCard:   { borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 24, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 10, zIndex: 10 },
+  topBar:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  walletInfoRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
   walletIconWrapper:{ width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  walletName:      { fontSize: 20, fontWeight: '800' },
-  accountsTrigger: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  accountsCount:   { fontSize: 12, fontWeight: '600' },
-  copyButton:      { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  balanceSection:  { alignItems: 'center', marginBottom: 28 },
-  balanceLabel:    { fontSize: 14, fontWeight: '500', marginBottom: 8 },
-  balanceAmount:   { fontSize: 42, fontWeight: '800', letterSpacing: -1 },
-  loadingBalance:  { height: 50, justifyContent: 'center' },
-  actionsGrid:     { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 },
-  actionBtn:       { alignItems: 'center', gap: 8 },
-  actionCircle:    { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
-  actionLabel:     { fontSize: 12, fontWeight: '600' },
-  assetsSection:   { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
-  assetsHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle:    { fontSize: 18, fontWeight: '700' },
-  refreshBtn:      { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  assetItemWrapper:{ marginBottom: 12 },
-  assetItem:       { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
-  assetLeft:       { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
+  walletName:       { fontSize: 20, fontWeight: '800' },
+  accountsTrigger:  { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  accountsCount:    { fontSize: 12, fontWeight: '600' },
+  copyButton:       { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  balanceSection:   { alignItems: 'center', marginBottom: 28 },
+  balanceLabel:     { fontSize: 14, fontWeight: '500', marginBottom: 8 },
+  balanceAmount:    { fontSize: 42, fontWeight: '800', letterSpacing: -1 },
+  loadingBalance:   { height: 50, justifyContent: 'center' },
+  actionsGrid:      { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 16 },
+  actionBtn:        { alignItems: 'center', gap: 8 },
+  actionCircle:     { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  actionLabel:      { fontSize: 12, fontWeight: '600' },
+  assetsSection:    { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
+  assetsHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionTitle:     { fontSize: 18, fontWeight: '700' },
+  refreshBtn:       { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  assetItemWrapper: { marginBottom: 12 },
+  assetItem:        { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+  assetLeft:        { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
   assetIconContainer: { position: 'relative', width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  assetIcon:       { width: 32, height: 32, borderRadius: 16 },
-  badgeDot:        { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
-  assetInfo:       { flex: 1 },
-  assetSymbol:     { fontSize: 16, fontWeight: '700' },
-  assetName:       { fontSize: 12, marginTop: 2 },
-  assetRight:      { alignItems: 'flex-end', marginLeft: 8 },
-  assetBalance:    { fontSize: 16, fontWeight: '700' },
-  assetValue:      { fontSize: 12, marginTop: 2 },
-  assetChevron:    { marginLeft: 8 },
-  leftAction:      { justifyContent: 'center', marginBottom: 12 },
-  rightAction:     { justifyContent: 'center', marginBottom: 12 },
-  swipeActionBtn:  { width: 80, height: '100%', justifyContent: 'center', alignItems: 'center', borderRadius: 18 },
-  swipeActionLabel:{ color: '#FFF', fontSize: 12, fontWeight: '600', marginTop: 4 },
-  emptyContainer:  { alignItems: 'center', paddingVertical: 60, gap: 12 },
-  emptyText:       { fontSize: 14, marginTop: 8 },
-  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  assetIcon:        { width: 32, height: 32, borderRadius: 16 },
+  badgeDot:         { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
+  assetInfo:        { flex: 1 },
+  assetSymbol:      { fontSize: 16, fontWeight: '700' },
+  assetName:        { fontSize: 12, marginTop: 2 },
+  assetRight:       { alignItems: 'flex-end', marginLeft: 8 },
+  assetBalance:     { fontSize: 16, fontWeight: '700' },
+  assetValue:       { fontSize: 12, marginTop: 2 },
+  assetChevron:     { marginLeft: 8 },
+  leftAction:       { justifyContent: 'center', marginBottom: 12 },
+  rightAction:      { justifyContent: 'center', marginBottom: 12 },
+  swipeActionBtn:   { width: 80, height: '100%', justifyContent: 'center', alignItems: 'center', borderRadius: 18 },
+  swipeActionLabel: { color: '#FFF', fontSize: 12, fontWeight: '600', marginTop: 4 },
+  emptyContainer:   { alignItems: 'center', paddingVertical: 60, gap: 12 },
+  emptyText:        { fontSize: 14, marginTop: 8 },
+  modalOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalOverlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 20 },
-  modalContent:    { width: '100%', padding: 28, borderRadius: 24, alignItems: 'center' },
-  modalHeader:     { marginBottom: 16 },
-  modalTitle:      { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  input:           { width: '100%', borderWidth: 1.5, borderRadius: 14, padding: 16, fontSize: 16, marginBottom: 20, textAlign: 'center' },
-  modalButtons:    { flexDirection: 'row', gap: 12, width: '100%' },
-  modalBtn:        { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1.5 },
-  modalBtnPrimary: { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center' },
+  modalContent:     { width: '100%', padding: 28, borderRadius: 24, alignItems: 'center' },
+  modalHeader:      { marginBottom: 16 },
+  modalTitle:       { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  input:            { width: '100%', borderWidth: 1.5, borderRadius: 14, padding: 16, fontSize: 16, marginBottom: 20, textAlign: 'center' },
+  modalButtons:     { flexDirection: 'row', gap: 12, width: '100%' },
+  modalBtn:         { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center', borderWidth: 1.5 },
+  modalBtnPrimary:  { flex: 1, padding: 16, borderRadius: 14, alignItems: 'center' },
   accountsModalContent: { width: '100%', maxHeight: height * 0.85, padding: 24, paddingTop: 12, borderTopLeftRadius: 28, borderTopRightRadius: 28, flex: 1 },
-  modalHandle:     { width: 40, height: 5, backgroundColor: '#E5E5EA', borderRadius: 3, alignSelf: 'center', marginBottom: 16 },
+  modalHandle:      { width: 40, height: 5, backgroundColor: '#E5E5EA', borderRadius: 3, alignSelf: 'center', marginBottom: 16 },
   accountsModalHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   accountsHeaderLeft:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  closeBtn:        { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  accountItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16 },
+  closeBtn:         { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  accountItem:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16 },
   accountActionContainer: { flexDirection: 'row', height: '100%' },
-  accountActionBtn:{ justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
-  accountInfo:     { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
-  accountAvatar:   { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  accountAvatarText: { fontSize: 20, fontWeight: '800' },
-  accountName:     { fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  accountAddress:  { fontSize: 12 },
+  accountActionBtn: { justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
+  accountInfo:      { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
+  accountAvatar:    { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  accountAvatarText:{ fontSize: 20, fontWeight: '800' },
+  accountName:      { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  accountAddress:   { fontSize: 12 },
   accountBalanceContainer: { flexDirection: 'row', alignItems: 'center' },
-  accountBalance:  { fontSize: 16, fontWeight: '600' },
-  addAccountButtons: { gap: 8, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(128,128,128,0.2)' },
-  addAccountBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderWidth: 1.5, borderRadius: 16, gap: 10, marginBottom: 4 },
-  addAccountText:  { fontSize: 16, fontWeight: '600' },
-  actionText:      { color: '#FFF', fontSize: 11, fontWeight: '600', marginTop: 4 },
+  accountBalance:   { fontSize: 16, fontWeight: '600' },
+  addAccountButtons:{ gap: 8, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(128,128,128,0.2)' },
+  addAccountBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderWidth: 1.5, borderRadius: 16, gap: 10, marginBottom: 4 },
+  addAccountText:   { fontSize: 16, fontWeight: '600' },
+  actionText:       { color: '#FFF', fontSize: 11, fontWeight: '600', marginTop: 4 },
 });
