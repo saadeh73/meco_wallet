@@ -5,11 +5,13 @@ import {
   Modal, TextInput, Keyboard, TouchableWithoutFeedback,
   Animated,
 } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native'; // ✅ إضافة
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
+import { pairWalletConnect, initWalletConnect } from '../services/walletConnectService'; // ✅ إضافة
 
 const { width } = Dimensions.get('window');
 const BOOKMARKS_KEY = '@meco_bookmarks';
@@ -27,7 +29,6 @@ const EARNING_OPPORTUNITIES = [
   { id: 'orca-meco',      protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',asset: 'MECO-USDT', apy: 12.0, url: 'https://www.orca.so/pools/EEPP9R7nHgMX1hC4s9NgLGXsyXYm7BzXuicwdRtjLCLC', category: 'pools',   featured: false, descKey: 'desc_orca',    requiresVpn: true },
 ];
 
-// Per-category colour palette
 const CAT = {
   staking: { accent: '#3B82F6', bg: 'rgba(59,130,246,0.13)',  icon: 'layers-outline'          },
   defi:    { accent: '#8B5CF6', bg: 'rgba(139,92,246,0.13)',  icon: 'trending-up-outline'     },
@@ -90,7 +91,9 @@ const TickerStrip = ({ items, C }) => {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
-  const { t } = useTranslation();
+  const { t }        = useTranslation();
+  const navigation   = useNavigation(); // ✅ إضافة
+  const route        = useRoute();      // ✅ إضافة
   const theme        = useAppStore(s => s.theme);
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
@@ -123,7 +126,6 @@ export default function AppPortalScreen() {
 
   const webviewRefs = useRef({});
 
-  // entrance anims
   const headerY  = useRef(new Animated.Value(-18)).current;
   const headerOp = useRef(new Animated.Value(0)).current;
   const bodyOp   = useRef(new Animated.Value(0)).current;
@@ -145,7 +147,20 @@ export default function AppPortalScreen() {
 
   useEffect(() => { loadBookmarks(); }, []);
 
-  // bookmarks
+  // ✅ تهيئة WalletConnect عند فتح الشاشة
+  useEffect(() => {
+    initWalletConnect().catch(err => console.warn('WalletConnect init:', err.message));
+  }, []);
+
+  // ✅ معالجة نتيجة QR Scanner — إذا كان URI يبدأ بـ wc: يتم الربط مباشرة
+  useEffect(() => {
+    const scanned = route.params?.scannedAddress;
+    if (scanned && scanned.startsWith('wc:')) {
+      navigation.setParams({ scannedAddress: undefined });
+      pairWalletConnect(scanned);
+    }
+  }, [route.params?.scannedAddress]);
+
   const loadBookmarks = async () => {
     try { const s = await AsyncStorage.getItem(BOOKMARKS_KEY); if (s) setBookmarks(JSON.parse(s)); }
     catch (_) {} finally { setLoadingBookmarks(false); }
@@ -163,7 +178,6 @@ export default function AppPortalScreen() {
   };
   const handleDeleteBookmark = id => saveBookmarks(bookmarks.filter(b => b.id !== id));
 
-  // tabs
   const openNewTab = url => {
     const id = Date.now().toString();
     setTabs(prev => [...prev, { id, url, title: t('loading_page'), canGoBack: false, canGoForward: false }]);
@@ -320,6 +334,14 @@ export default function AppPortalScreen() {
           )}
         </View>
 
+        {/* ✅ زر QR لمسح WalletConnect URI */}
+        <TouchableOpacity
+          style={[S.qrBtn, { backgroundColor: C.accent + '20', borderColor: C.accent + '50' }]}
+          onPress={() => navigation.navigate('QRScanner')}
+        >
+          <Ionicons name="qr-code-outline" size={20} color={C.accent} />
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[S.tabsBtn, { backgroundColor: tabs.length ? C.accent + '20' : C.inputBg, borderColor: tabs.length ? C.accent + '55' : C.border }]}
           onPress={() => tabs.length && setTabsOvVisible(true)}
@@ -444,8 +466,8 @@ export default function AppPortalScreen() {
                 transform: [{ translateX: switchX.interpolate({ inputRange: [0, 1], outputRange: [3, (width - 62) / 2 + 3] }) }],
               }]} />
               {[
-                { id: 'explore',   activeIcon: 'compass',          idleIcon: 'compass-outline',   key: 'discover'   },
-                { id: 'bookmarks', activeIcon: 'bookmark',         idleIcon: 'bookmark-outline',  key: 'bookmarks'  },
+                { id: 'explore',   activeIcon: 'compass',    idleIcon: 'compass-outline',  key: 'discover'  },
+                { id: 'bookmarks', activeIcon: 'bookmark',   idleIcon: 'bookmark-outline', key: 'bookmarks' },
               ].map(tab => {
                 const active = activeView === tab.id;
                 return (
@@ -524,8 +546,8 @@ export default function AppPortalScreen() {
               <View style={[S.sheetHandle, { backgroundColor: C.border2 }]} />
               <Text style={[S.sheetTitle, { color: C.text }]}>{t('add_bookmark')}</Text>
               {[
-                { field: 'name', icon: 'text-outline',  placeholderKey: 'bookmark_name_placeholder', kbType: 'default' },
-                { field: 'url',  icon: 'link-outline',   placeholderKey: 'bookmark_url_placeholder',  kbType: 'url'     },
+                { field: 'name', icon: 'text-outline', placeholderKey: 'bookmark_name_placeholder', kbType: 'default' },
+                { field: 'url',  icon: 'link-outline', placeholderKey: 'bookmark_url_placeholder',  kbType: 'url'     },
               ].map(f => (
                 <View key={f.field} style={[S.inputRow, { backgroundColor: C.inputBg, borderColor: C.border }]}>
                   <Ionicons name={f.icon} size={16} color={C.muted} style={{ marginLeft: 14 }} />
@@ -558,23 +580,21 @@ export default function AppPortalScreen() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STYLES
-// ═══════════════════════════════════════════════════════════════════════════════
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
 const S = StyleSheet.create({
   root: { flex: 1 },
 
-  // Address bar
-  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 10 },
+  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
   homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
   urlInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
   dotsBtn:  { paddingHorizontal: 11, height: '100%', justifyContent: 'center' },
+  // ✅ زر QR الجديد
+  qrBtn:    { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   tabsBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
   tabsBadge:{ fontSize: 14, fontWeight: '800' },
 
-  // Hero
   hero:        { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 16 },
   heroBadge:   { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, gap: 7, marginBottom: 14 },
   heroPulse:   { width: 7, height: 7, borderRadius: 4 },
@@ -582,7 +602,6 @@ const S = StyleSheet.create({
   heroTitle:   { fontSize: 32, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6, lineHeight: 38 },
   heroSub:     { fontSize: 14, fontWeight: '500', lineHeight: 20 },
 
-  // Ticker
   tickerWrap:  { borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10, overflow: 'hidden', marginBottom: 2 },
   tickerTrack: { flexDirection: 'row' },
   tickerItem:  { width: 140, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16 },
@@ -590,24 +609,17 @@ const S = StyleSheet.create({
   tickerDot:   { width: 3, height: 3, borderRadius: 2 },
   tickerApy:   { fontFamily: MONO, fontSize: 11, fontWeight: '700' },
 
-  // Tab switcher
   switcher:    { flexDirection: 'row', marginHorizontal: 20, borderRadius: 18, borderWidth: 1, padding: 3, marginTop: 18, marginBottom: 24, height: 50, position: 'relative' },
   switchThumb: { position: 'absolute', top: 3, bottom: 3, borderRadius: 14, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
   switchBtn:   { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
   switchTxt:   { fontSize: 14, fontWeight: '700' },
 
-  // Section
   section:  { marginBottom: 28 },
   secHead:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, marginBottom: 14, gap: 9 },
   secDot:   { width: 9, height: 9, borderRadius: 5, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6, elevation: 3 },
   secTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
 
-  // Featured card
-  featCard: {
-    width: width * 0.75, borderRadius: 26, padding: 20, marginRight: 16,
-    overflow: 'hidden', elevation: 5,
-    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 16,
-  },
+  featCard: { width: width * 0.75, borderRadius: 26, padding: 20, marginRight: 16, overflow: 'hidden', elevation: 5, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 16 },
   featBlob:     { position: 'absolute', width: 200, height: 200, borderRadius: 100, top: -60, right: -50 },
   featTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, zIndex: 1 },
   featIconWrap: { width: 60, height: 60, borderRadius: 20, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
@@ -622,11 +634,7 @@ const S = StyleSheet.create({
   openLabel:    { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
   openArrow:    { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
 
-  // App card
-  appCard: {
-    width: 114, padding: 14, borderRadius: 22, marginRight: 12, alignItems: 'center', borderWidth: 1,
-    elevation: 2, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 6,
-  },
+  appCard: { width: 114, padding: 14, borderRadius: 22, marginRight: 12, alignItems: 'center', borderWidth: 1, elevation: 2, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 6 },
   appIconWrap: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10, overflow: 'hidden' },
   appIcon:     { width: 38, height: 38, borderRadius: 11 },
   appName:     { fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 3 },
@@ -635,7 +643,6 @@ const S = StyleSheet.create({
   appApyTxt:   { fontSize: 11, fontWeight: '800', fontFamily: MONO },
   vpnBadge:    { position: 'absolute', top: 9, right: 9, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(245,158,11,0.18)', justifyContent: 'center', alignItems: 'center' },
 
-  // Bookmark
   bmCard:    { borderRadius: 18, marginBottom: 10, borderWidth: 1, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 },
   bmInner:   { flexDirection: 'row', alignItems: 'center', padding: 14 },
   bmIconWrap:{ width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
@@ -649,16 +656,13 @@ const S = StyleSheet.create({
   addBmIcon: { width: 36, height: 36, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
   addBmTxt:  { fontSize: 15, fontWeight: '700' },
 
-  // Empty state
   emptyState: { padding: 36, borderRadius: 24, alignItems: 'center', marginTop: 6, borderWidth: 1, gap: 10 },
   emptyIcon:  { width: 62, height: 62, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 17, fontWeight: '800' },
   emptySub:   { fontSize: 13, textAlign: 'center', lineHeight: 18 },
 
-  // WebView
   webLoader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
 
-  // Tabs overview
   tabsOvRoot:      { flex: 1, paddingTop: Platform.OS === 'ios' ? 52 : 20 },
   tabsOvHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
   tabsOvTitle:     { fontSize: 22, fontWeight: '800', marginBottom: 2 },
@@ -674,13 +678,11 @@ const S = StyleSheet.create({
   newTabBtn:       { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 30, elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10 },
   newTabTxt:       { color: '#FFF', fontWeight: '800', fontSize: 16, marginLeft: 8 },
 
-  // Menu
   menu:       { position: 'absolute', right: 62, width: 188, borderRadius: 18, borderWidth: 1, elevation: 10, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14 },
   menuRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
   menuTxt:    { fontSize: 14, fontWeight: '600' },
   menuDivider:{ height: 1, marginHorizontal: 10 },
 
-  // Sheet
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   sheet:        { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
   sheetHandle:  { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
