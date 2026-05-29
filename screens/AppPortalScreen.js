@@ -5,28 +5,29 @@ import {
   Modal, TextInput, Keyboard, TouchableWithoutFeedback,
   Animated,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native'; // ✅ إضافة
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
-import { pairWalletConnect, initWalletConnect } from '../services/walletConnectService'; // ✅ إضافة
+import { pairWalletConnect, initWalletConnect } from '../services/walletConnectService';
 
 const { width } = Dimensions.get('window');
 const BOOKMARKS_KEY = '@meco_bookmarks';
 
 // ─── Protocol data ────────────────────────────────────────────────────────────
 const EARNING_OPPORTUNITIES = [
-  { id: 'marinade-sol',   protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png',    asset: 'SOL',       apy: 8.5,  url: 'https://marinade.finance/app/staking',                                          category: 'staking', featured: true,  descKey: 'desc_marinade' },
-  { id: 'jito-sol',       protocol: 'Jito',             protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png',     asset: 'SOL',       apy: 9.2,  url: 'https://jito.network/staking',                                                  category: 'staking', featured: true,  descKey: 'desc_jito'     },
-  { id: 'meteora-lp',     protocol: 'Meteora',          protocolIcon: 'https://meteora.ag/favicon.ico',                                    asset: 'SOL/USDC',  apy: 20.0, url: 'https://app.meteora.ag',                                                        category: 'defi',    featured: true,  descKey: 'desc_meteora'  },
-  { id: 'jupiter-swap',   protocol: 'Jupiter',          protocolIcon: 'https://jup.ag/favicon.ico',                                        asset: 'SOL',       apy: 0,    url: 'https://jup.ag',                                                                category: 'trading', featured: true,  descKey: 'desc_jupiter'  },
-  { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                            asset: 'USDC',      apy: 8.0,  url: 'https://app.kamino.finance/lend',                                               category: 'defi',    featured: false, descKey: 'desc_kamino'   },
-  { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                              asset: 'SOL/USDC',  apy: 12.0, url: 'https://app.drift.trade',                                                       category: 'trading', featured: false, descKey: 'desc_drift'    },
-  { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                     asset: 'USDC',      apy: 5.0,  url: 'https://solend.fi/dashboard',                                                   category: 'defi',    featured: false, descKey: 'desc_solend'   },
-  { id: 'raydium-meco',   protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'MECO-USDT', apy: 15.5, url: 'https://raydium.io/liquidity/',                                                 category: 'pools',   featured: false, descKey: 'desc_raydium', requiresVpn: true },
-  { id: 'orca-meco',      protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',asset: 'MECO-USDT', apy: 12.0, url: 'https://www.orca.so/pools/EEPP9R7nHgMX1hC4s9NgLGXsyXYm7BzXuicwdRtjLCLC', category: 'pools',   featured: false, descKey: 'desc_orca',    requiresVpn: true },
+  { id: 'marinade-sol',   protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png',    asset: 'SOL',      apy: 8.5,  url: 'https://marinade.finance/app/staking', category: 'staking', featured: true,  descKey: 'desc_marinade' },
+  { id: 'jito-sol',       protocol: 'Jito',             protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png',     asset: 'SOL',      apy: 9.2,  url: 'https://jito.network/staking',         category: 'staking', featured: true,  descKey: 'desc_jito'     },
+  { id: 'meteora-lp',     protocol: 'Meteora',          protocolIcon: 'https://meteora.ag/favicon.ico',                                    asset: 'SOL/USDC', apy: 20.0, url: 'https://app.meteora.ag',               category: 'defi',    featured: true,  descKey: 'desc_meteora'  },
+  { id: 'jupiter-swap',   protocol: 'Jupiter',          protocolIcon: 'https://jup.ag/favicon.ico',                                        asset: 'SOL',      apy: 0,    url: 'https://jup.ag',                       category: 'trading', featured: true,  descKey: 'desc_jupiter'  },
+  { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                            asset: 'USDC',     apy: 8.0,  url: 'https://app.kamino.finance/lend',      category: 'defi',    featured: false, descKey: 'desc_kamino'   },
+  { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                              asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade',              category: 'trading', featured: false, descKey: 'desc_drift'    },
+  { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                     asset: 'USDC',     apy: 5.0,  url: 'https://solend.fi/dashboard',          category: 'defi',    featured: false, descKey: 'desc_solend'   },
+  // ✅ إصلاح: روابط Raydium و Orca الطبيعية بدون تثبيت رمز MECO
+  { id: 'raydium-meco',   protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'MECO-USDT',apy: 15.5, url: 'https://raydium.io',                  category: 'pools',   featured: false, descKey: 'desc_raydium'  },
+  { id: 'orca-meco',      protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',asset:'MECO-USDT',apy: 12.0, url: 'https://www.orca.so',                 category: 'pools',   featured: false, descKey: 'desc_orca'     },
 ];
 
 const CAT = {
@@ -92,8 +93,8 @@ const TickerStrip = ({ items, C }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
   const { t }        = useTranslation();
-  const navigation   = useNavigation(); // ✅ إضافة
-  const route        = useRoute();      // ✅ إضافة
+  const navigation   = useNavigation();
+  const route        = useRoute();
   const theme        = useAppStore(s => s.theme);
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
@@ -112,24 +113,23 @@ export default function AppPortalScreen() {
     shadow:   isDark ? '#000'    : '#C0C0D8',
   };
 
-  const [bookmarks,         setBookmarks]         = useState([]);
-  const [loadingBookmarks,  setLoadingBookmarks]  = useState(true);
-  const [addModalVisible,   setAddModalVisible]   = useState(false);
-  const [newBookmark,       setNewBookmark]        = useState({ name: '', url: '', iconUrl: '' });
-  const [activeView,        setActiveView]         = useState('explore');
-  const [tabs,              setTabs]               = useState([]);
-  const [activeTabId,       setActiveTabId]        = useState(null);
-  const [inputUrl,          setInputUrl]           = useState('');
-  const [loadingWeb,        setLoadingWeb]         = useState(false);
-  const [menuVisible,       setMenuVisible]        = useState(false);
-  const [tabsOvVisible,     setTabsOvVisible]      = useState(false);
+  const [bookmarks,        setBookmarks]        = useState([]);
+  const [loadingBookmarks, setLoadingBookmarks] = useState(true);
+  const [addModalVisible,  setAddModalVisible]  = useState(false);
+  const [newBookmark,      setNewBookmark]       = useState({ name: '', url: '', iconUrl: '' });
+  const [activeView,       setActiveView]        = useState('explore');
+  const [tabs,             setTabs]              = useState([]);
+  const [activeTabId,      setActiveTabId]       = useState(null);
+  const [inputUrl,         setInputUrl]          = useState('');
+  const [loadingWeb,       setLoadingWeb]        = useState(false);
+  const [menuVisible,      setMenuVisible]       = useState(false);
+  const [tabsOvVisible,    setTabsOvVisible]     = useState(false);
 
   const webviewRefs = useRef({});
-
-  const headerY  = useRef(new Animated.Value(-18)).current;
-  const headerOp = useRef(new Animated.Value(0)).current;
-  const bodyOp   = useRef(new Animated.Value(0)).current;
-  const switchX  = useRef(new Animated.Value(0)).current;
+  const headerY     = useRef(new Animated.Value(-18)).current;
+  const headerOp    = useRef(new Animated.Value(0)).current;
+  const bodyOp      = useRef(new Animated.Value(0)).current;
+  const switchX     = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.stagger(70, [
@@ -147,12 +147,10 @@ export default function AppPortalScreen() {
 
   useEffect(() => { loadBookmarks(); }, []);
 
-  // ✅ تهيئة WalletConnect عند فتح الشاشة
   useEffect(() => {
     initWalletConnect().catch(err => console.warn('WalletConnect init:', err.message));
   }, []);
 
-  // ✅ معالجة نتيجة QR Scanner — إذا كان URI يبدأ بـ wc: يتم الربط مباشرة
   useEffect(() => {
     const scanned = route.params?.scannedAddress;
     if (scanned && scanned.startsWith('wc:')) {
@@ -214,7 +212,6 @@ export default function AppPortalScreen() {
     { id: 'pools',   titleKey: 'category_pools'    },
   ].map(c => ({ ...c, data: EARNING_OPPORTUNITIES.filter(a => a.category === c.id) })).filter(c => c.data.length);
 
-  // ── Featured card ───────────────────────────────────────────────────────────
   const FeaturedCard = ({ item }) => {
     const cat = CAT[item.category] || CAT.staking;
     return (
@@ -250,7 +247,6 @@ export default function AppPortalScreen() {
     );
   };
 
-  // ── Grid app card ───────────────────────────────────────────────────────────
   const AppCard = ({ item }) => {
     const cat = CAT[item.category] || CAT.staking;
     return (
@@ -272,10 +268,16 @@ export default function AppPortalScreen() {
     );
   };
 
-  // ── Bookmark row ────────────────────────────────────────────────────────────
+  // ✅ إصلاح: توحيد onPress و onLongPress في TouchableOpacity واحد
   const BookmarkRow = ({ item }) => (
-    <Pressable onPress={() => openNewTab(item.url)} style={[S.bmCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-      <TouchableOpacity onLongPress={() => handleDeleteBookmark(item.id)} delayLongPress={500} style={S.bmInner} activeOpacity={0.9}>
+    <View style={[S.bmCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+      <TouchableOpacity
+        onPress={() => openNewTab(item.url)}
+        onLongPress={() => handleDeleteBookmark(item.id)}
+        delayLongPress={600}
+        style={S.bmInner}
+        activeOpacity={0.7}
+      >
         <View style={[S.bmIconWrap, { backgroundColor: C.accent + '18' }]}>
           <SafeImage uri={item.iconUrl} style={S.bmIcon} fallbackIcon="link-outline" fallbackColor={C.accent} />
         </View>
@@ -287,10 +289,9 @@ export default function AppPortalScreen() {
           <Ionicons name="chevron-forward" size={13} color={C.muted} />
         </View>
       </TouchableOpacity>
-    </Pressable>
+    </View>
   );
 
-  // ── Section header ──────────────────────────────────────────────────────────
   const SectionHead = ({ titleKey, catId }) => {
     const cat = catId ? CAT[catId] : null;
     return (
@@ -301,7 +302,6 @@ export default function AppPortalScreen() {
     );
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <View style={[S.root, { backgroundColor: C.bg, paddingTop: Platform.OS === 'ios' ? 52 : 30 }]}>
 
@@ -443,8 +443,6 @@ export default function AppPortalScreen() {
           ))
         ) : (
           <Animated.ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} style={{ opacity: bodyOp }}>
-
-            {/* Hero */}
             <View style={S.hero}>
               <View style={[S.heroBadge, { backgroundColor: C.accent + '18', borderColor: C.accent + '40' }]}>
                 <View style={[S.heroPulse, { backgroundColor: C.accent }]} />
@@ -454,10 +452,8 @@ export default function AppPortalScreen() {
               <Text style={[S.heroSub,   { color: C.muted }]}>{t('explore_desc')}</Text>
             </View>
 
-            {/* Live ticker */}
             <TickerStrip items={EARNING_OPPORTUNITIES} C={C} />
 
-            {/* Tab switcher */}
             <View style={[S.switcher, { backgroundColor: C.surface, borderColor: C.border }]}>
               <Animated.View style={[S.switchThumb, {
                 backgroundColor: C.accent,
@@ -466,8 +462,8 @@ export default function AppPortalScreen() {
                 transform: [{ translateX: switchX.interpolate({ inputRange: [0, 1], outputRange: [3, (width - 62) / 2 + 3] }) }],
               }]} />
               {[
-                { id: 'explore',   activeIcon: 'compass',    idleIcon: 'compass-outline',  key: 'discover'  },
-                { id: 'bookmarks', activeIcon: 'bookmark',   idleIcon: 'bookmark-outline', key: 'bookmarks' },
+                { id: 'explore',   activeIcon: 'compass',   idleIcon: 'compass-outline',  key: 'discover'  },
+                { id: 'bookmarks', activeIcon: 'bookmark',  idleIcon: 'bookmark-outline', key: 'bookmarks' },
               ].map(tab => {
                 const active = activeView === tab.id;
                 return (
@@ -479,7 +475,6 @@ export default function AppPortalScreen() {
               })}
             </View>
 
-            {/* ── Explore ── */}
             {activeView === 'explore' ? (
               <>
                 <View style={S.section}>
@@ -507,7 +502,6 @@ export default function AppPortalScreen() {
                 ))}
               </>
             ) : (
-              /* ── Bookmarks ── */
               <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
                 <TouchableOpacity
                   style={[S.addBmBtn, { backgroundColor: C.surface, borderColor: C.accent + '45' }]}
@@ -579,46 +573,38 @@ export default function AppPortalScreen() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
 const S = StyleSheet.create({
   root: { flex: 1 },
-
   addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
   homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
   urlInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
   dotsBtn:  { paddingHorizontal: 11, height: '100%', justifyContent: 'center' },
-  // ✅ زر QR الجديد
   qrBtn:    { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   tabsBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
   tabsBadge:{ fontSize: 14, fontWeight: '800' },
-
   hero:        { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 16 },
   heroBadge:   { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, gap: 7, marginBottom: 14 },
   heroPulse:   { width: 7, height: 7, borderRadius: 4 },
   heroBadgeTxt:{ fontSize: 11, fontWeight: '800', letterSpacing: 0.6, fontFamily: MONO },
   heroTitle:   { fontSize: 32, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6, lineHeight: 38 },
   heroSub:     { fontSize: 14, fontWeight: '500', lineHeight: 20 },
-
   tickerWrap:  { borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10, overflow: 'hidden', marginBottom: 2 },
   tickerTrack: { flexDirection: 'row' },
   tickerItem:  { width: 140, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16 },
   tickerName:  { fontFamily: MONO, fontSize: 11, fontWeight: '600' },
   tickerDot:   { width: 3, height: 3, borderRadius: 2 },
   tickerApy:   { fontFamily: MONO, fontSize: 11, fontWeight: '700' },
-
   switcher:    { flexDirection: 'row', marginHorizontal: 20, borderRadius: 18, borderWidth: 1, padding: 3, marginTop: 18, marginBottom: 24, height: 50, position: 'relative' },
   switchThumb: { position: 'absolute', top: 3, bottom: 3, borderRadius: 14, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
   switchBtn:   { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
   switchTxt:   { fontSize: 14, fontWeight: '700' },
-
   section:  { marginBottom: 28 },
   secHead:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, marginBottom: 14, gap: 9 },
   secDot:   { width: 9, height: 9, borderRadius: 5, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6, elevation: 3 },
   secTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-
   featCard: { width: width * 0.75, borderRadius: 26, padding: 20, marginRight: 16, overflow: 'hidden', elevation: 5, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 16 },
   featBlob:     { position: 'absolute', width: 200, height: 200, borderRadius: 100, top: -60, right: -50 },
   featTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, zIndex: 1 },
@@ -633,7 +619,6 @@ const S = StyleSheet.create({
   featFooter:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, paddingTop: 14 },
   openLabel:    { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
   openArrow:    { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-
   appCard: { width: 114, padding: 14, borderRadius: 22, marginRight: 12, alignItems: 'center', borderWidth: 1, elevation: 2, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 6 },
   appIconWrap: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10, overflow: 'hidden' },
   appIcon:     { width: 38, height: 38, borderRadius: 11 },
@@ -642,7 +627,6 @@ const S = StyleSheet.create({
   appApy:      { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 9 },
   appApyTxt:   { fontSize: 11, fontWeight: '800', fontFamily: MONO },
   vpnBadge:    { position: 'absolute', top: 9, right: 9, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(245,158,11,0.18)', justifyContent: 'center', alignItems: 'center' },
-
   bmCard:    { borderRadius: 18, marginBottom: 10, borderWidth: 1, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 },
   bmInner:   { flexDirection: 'row', alignItems: 'center', padding: 14 },
   bmIconWrap:{ width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
@@ -651,18 +635,14 @@ const S = StyleSheet.create({
   bmName:    { fontSize: 15, fontWeight: '700', marginBottom: 3 },
   bmUrl:     { fontSize: 12 },
   bmChevron: { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-
   addBmBtn:  { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 18, marginBottom: 16, borderWidth: 1.5, borderStyle: 'dashed', gap: 12 },
   addBmIcon: { width: 36, height: 36, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
   addBmTxt:  { fontSize: 15, fontWeight: '700' },
-
   emptyState: { padding: 36, borderRadius: 24, alignItems: 'center', marginTop: 6, borderWidth: 1, gap: 10 },
   emptyIcon:  { width: 62, height: 62, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 17, fontWeight: '800' },
   emptySub:   { fontSize: 13, textAlign: 'center', lineHeight: 18 },
-
   webLoader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-
   tabsOvRoot:      { flex: 1, paddingTop: Platform.OS === 'ios' ? 52 : 20 },
   tabsOvHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
   tabsOvTitle:     { fontSize: 22, fontWeight: '800', marginBottom: 2 },
@@ -677,12 +657,10 @@ const S = StyleSheet.create({
   tabPreviewUrl:   { fontSize: 11, textAlign: 'center', paddingHorizontal: 8 },
   newTabBtn:       { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 30, elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10 },
   newTabTxt:       { color: '#FFF', fontWeight: '800', fontSize: 16, marginLeft: 8 },
-
   menu:       { position: 'absolute', right: 62, width: 188, borderRadius: 18, borderWidth: 1, elevation: 10, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14 },
   menuRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
   menuTxt:    { fontSize: 14, fontWeight: '600' },
   menuDivider:{ height: 1, marginHorizontal: 10 },
-
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   sheet:        { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
   sheetHandle:  { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },

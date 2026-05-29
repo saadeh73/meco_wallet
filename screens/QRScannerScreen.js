@@ -1,21 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  SafeAreaView,
-  Dimensions,
+  View, Text, StyleSheet, TouchableOpacity, Alert,
+  SafeAreaView, Dimensions, ActivityIndicator, Image
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import jsQR from 'jsqr';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store';
-
-// استدعاء دالة الربط
-import { pairWalletConnect } from '../services/walletConnectService'; 
+import { pairWalletConnect } from '../services/walletConnectService';
 
 const { width } = Dimensions.get('window');
 
@@ -27,8 +23,9 @@ export default function QRScannerScreen() {
   const isDark = theme === 'dark';
 
   const [permission, requestPermission] = useCameraPermissions();
-  const[scanned, setScanned] = useState(false);
+  const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
+  const [processingImage, setProcessingImage] = useState(false);
 
   const colors = {
     background: isDark ? '#0A0A0F' : '#F8FAFD',
@@ -45,62 +42,105 @@ export default function QRScannerScreen() {
   }, [permission]);
 
   const handleBarCodeScanned = async ({ data }) => {
-    if (scanned) return;
+    if (scanned || processingImage) return;
     setScanned(true);
+    await processScannedData(data);
+  };
 
-    // ==========================================
-    // 1. منطق الربط مع WalletConnect
-    // ==========================================
+  const processScannedData = async (data) => {
     if (data && data.startsWith('wc:')) {
-      console.log("🔗 تم اكتشاف كود WalletConnect");
       Alert.alert(
         t('web3.connecting', 'جاري الاتصال 🌐'),
-        t('web3.wait_secure_session', 'برجاء الانتظار لحظات لإنشاء جلسة آمنة...'),[
-          {
-            text: t('ok', 'حسناً'),
-            onPress: async () => {
-              try {
-                // استدعاء دالة الربط الموجودة في ملف الخدمة
-                await pairWalletConnect(data);
-                
-                // نعود للشاشة السابقة لأن التنبيه الخاص بالموافقة سيظهر تلقائياً
-                navigation.goBack();
-              } catch (error) {
-                setScanned(false);
-              }
+        t('web3.wait_secure_session', 'برجاء الانتظار لحظات لإنشاء جلسة آمنة...'),
+        [{
+          text: t('ok', 'حسناً'),
+          onPress: async () => {
+            try {
+              await pairWalletConnect(data);
+              navigation.goBack();
+            } catch (error) {
+              setScanned(false);
             }
           }
-        ]
+        }]
       );
-      return; 
+      return;
     }
-    
-    // ==========================================
-    // 2. منطق إرسال عملات Solana (عنوان عادي)
-    // ==========================================
+
     const isValidAddress = data && data.length >= 32 && data.length <= 44;
-    
     if (isValidAddress) {
-      Alert.alert(
-        t('qr_scanner.success'),
-        t('qr_scanner.address_found'),[
-          {
-            text: t('cancel'),
-            style: 'cancel',
-            onPress: () => setScanned(false)
-          },
-          {
-            text: t('qr_scanner.use_address'),
-            onPress: () => navigation.navigate('Send', { scannedAddress: data })
-          }
-        ]
-      );
+      Alert.alert(t('qr_scanner.success'), t('qr_scanner.address_found'), [
+        { text: t('cancel'), style: 'cancel', onPress: () => setScanned(false) },
+        { text: t('qr_scanner.use_address'), onPress: () => navigation.navigate('Send', { scannedAddress: data }) }
+      ]);
     } else {
-      Alert.alert(
-        t('qr_scanner.invalid'),
-        t('qr_scanner.invalid_address'),
-        [{ text: t('ok'), onPress: () => setScanned(false) }]
-      );
+      Alert.alert(t('qr_scanner.invalid'), t('qr_scanner.invalid_address'), [
+        { text: t('ok'), onPress: () => setScanned(false) }
+      ]);
+    }
+  };
+
+  const base64ToUint8Array = (base64) => {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  };
+
+  const readQRFromImage = async (imageUri) => {
+    return new Promise((resolve) => {
+      Image.getSize(imageUri, async (imgWidth, imgHeight) => {
+        try {
+          const base64 = await FileSystem.readAsStringAsync(imageUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const pixelData = base64ToUint8Array(base64);
+          const code = jsQR(pixelData, imgWidth, imgHeight, {
+            inversionAttempts: 'attemptBoth',
+          });
+          resolve(code);
+        } catch (error) {
+          resolve(null);
+        }
+      }, () => {
+        resolve(null);
+      });
+    });
+  };
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(t('qr_scanner.no_permission'));
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        setProcessingImage(true);
+        const imageUri = result.assets[0].uri;
+
+        const qrCode = await readQRFromImage(imageUri);
+        if (qrCode && qrCode.data) {
+          await processScannedData(qrCode.data);
+        } else {
+          Alert.alert(t('qr_scanner.invalid'), t('qr_scanner.invalid_address'));
+        }
+      }
+    } catch (error) {
+      console.warn('Image pick error:', error);
+    } finally {
+      setProcessingImage(false);
+      setScanned(false);
     }
   };
 
@@ -135,9 +175,22 @@ export default function QRScannerScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>{t('qr_scanner.title')}</Text>
-        <TouchableOpacity onPress={() => setTorch(!torch)} style={[styles.torchButton, { backgroundColor: colors.card }]}>
-          <Ionicons name={torch ? 'flash' : 'flash-off'} size={24} color={torch ? primaryColor : colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={pickImage}
+            style={[styles.torchButton, { backgroundColor: colors.card }]}
+            disabled={processingImage}
+          >
+            {processingImage ? (
+              <ActivityIndicator size="small" color={primaryColor} />
+            ) : (
+              <Ionicons name="image-outline" size={24} color={colors.text} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setTorch(!torch)} style={[styles.torchButton, { backgroundColor: colors.card }]}>
+            <Ionicons name={torch ? 'flash' : 'flash-off'} size={24} color={torch ? primaryColor : colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.cameraContainer}>
@@ -146,7 +199,7 @@ export default function QRScannerScreen() {
           facing="back"
           enableTorch={torch}
           barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          onBarcodeScanned={scanned || processingImage ? undefined : handleBarCodeScanned}
         >
           <View style={styles.overlay}>
             <View style={styles.scanArea}>
@@ -164,7 +217,7 @@ export default function QRScannerScreen() {
         <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>{t('qr_scanner.instructions')}</Text>
       </View>
 
-      {scanned && (
+      {scanned && !processingImage && (
         <TouchableOpacity style={[styles.rescanButton, { backgroundColor: primaryColor }]} onPress={() => setScanned(false)}>
           <Text style={styles.rescanButtonText}>{t('qr_scanner.rescan')}</Text>
         </TouchableOpacity>
@@ -178,6 +231,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 18, fontWeight: 'bold' },
+  headerActions: { flexDirection: 'row', gap: 8 },
   torchButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   text: { fontSize: 16, textAlign: 'center' },

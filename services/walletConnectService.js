@@ -77,7 +77,7 @@ function setupEventListeners() {
 
 export async function approveSession(proposalId) {
   try {
-    const pubKey = await SecureStore.getItemAsync('wallet_public_key');
+    const pubKey = useAppStore.getState().walletPublicKey;
     if (!pubKey) return;
 
     const namespace = {

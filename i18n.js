@@ -89,6 +89,7 @@ const resources = {
       swipe_hint: 'اضغط على الأيقونة لنسخ العنوان',
       edit: 'تعديل',
       copy: 'نسخ',
+      choose_account_icon: 'اختيار أيقونة الحساب',
 
       // ========== Web3 (WalletConnect) ==========
       web3: {
@@ -97,6 +98,8 @@ const resources = {
         disconnect: 'قطع الاتصال',
         no_active_sessions: 'لا توجد اتصالات نشطة',
         connect_new_dapp: 'ربط تطبيق جديد',
+        connecting: 'جاري الاتصال 🌐',
+        wait_secure_session: 'برجاء الانتظار لإنشاء جلسة آمنة...',
       },
 
       walletConnect: {
@@ -522,6 +525,8 @@ const resources = {
         invalid: 'رمز غير صالح',
         invalid_address: 'هذا الرمز لا يحتوي على عنوان محفظة صالح',
         rescan: 'مسح مرة أخرى',
+        scan_from_gallery: 'مسح من معرض الصور',
+        no_qr_found: 'لم يتم العثور على رمز QR في الصورة',
       },
 
       // ========== رسائل الخطأ العامة ==========
@@ -670,10 +675,11 @@ const resources = {
       account_added: '{{name}} added successfully',
       account_add_failed: 'Failed to add account',
       delete_account: 'Delete Account',
-      delete_account_confirmation: 'Are you sure you want to delete "{{name}}" This cannot be undone.',
+      delete_account_confirmation: 'Are you sure you want to delete "{{name}}"? This cannot be undone.',
       swipe_hint: 'Swipe left to edit, right to copy address',
       edit: 'Edit',
       copy: 'Copy',
+      choose_account_icon: 'Choose Account Icon',
 
       // ========== Web3 (WalletConnect) keys ==========
       web3: {
@@ -682,6 +688,8 @@ const resources = {
         disconnect: 'Disconnect',
         no_active_sessions: 'No active connections',
         connect_new_dapp: 'Connect New DApp',
+        connecting: 'Connecting 🌐',
+        wait_secure_session: 'Please wait to establish a secure session...',
       },
 
       walletConnect: {
@@ -1107,6 +1115,8 @@ const resources = {
         invalid: 'Invalid QR',
         invalid_address: 'This QR does not contain a valid wallet address',
         rescan: 'Scan again',
+        scan_from_gallery: 'Scan from Gallery',
+        no_qr_found: 'No QR code found in the image',
       },
 
       // ========== General Error Messages ==========
