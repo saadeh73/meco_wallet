@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
-  SafeAreaView, Dimensions, ActivityIndicator, Image
+  SafeAreaView, Dimensions, ActivityIndicator
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import jsQR from 'jsqr';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,8 +45,11 @@ export default function QRScannerScreen() {
     await processScannedData(data);
   };
 
+  // ✅ الموجّه الذكي: يفرق بين ربط Web3 وإرسال الأموال
   const processScannedData = async (data) => {
-    if (data && data.startsWith('wc:')) {
+    if (!data) return;
+
+    if (data.startsWith('wc:')) {
       Alert.alert(
         t('web3.connecting', 'جاري الاتصال 🌐'),
         t('web3.wait_secure_session', 'برجاء الانتظار لحظات لإنشاء جلسة آمنة...'),
@@ -67,77 +68,83 @@ export default function QRScannerScreen() {
       return;
     }
 
-    const isValidAddress = data && data.length >= 32 && data.length <= 44;
+    const isValidAddress = data.length >= 32 && data.length <= 44 && !data.includes(' ');
     if (isValidAddress) {
-      Alert.alert(t('qr_scanner.success'), t('qr_scanner.address_found'), [
-        { text: t('cancel'), style: 'cancel', onPress: () => setScanned(false) },
-        { text: t('qr_scanner.use_address'), onPress: () => navigation.navigate('Send', { scannedAddress: data }) }
+      Alert.alert(t('qr_scanner.success', 'تم المسح بنجاح'), t('qr_scanner.address_found', 'تم العثور على عنوان محفظة'), [
+        { text: t('cancel', 'إلغاء'), style: 'cancel', onPress: () => setScanned(false) },
+        { text: t('qr_scanner.use_address', 'استخدام العنوان'), onPress: () => navigation.navigate('Send', { scannedAddress: data }) }
       ]);
-    } else {
-      Alert.alert(t('qr_scanner.invalid'), t('qr_scanner.invalid_address'), [
-        { text: t('ok'), onPress: () => setScanned(false) }
-      ]);
-    }
+      return;
+    } 
+    
+    Alert.alert(t('error', 'خطأ'), t('qr_scanner.invalid_address', 'هذا الرمز لا يحتوي على عنوان محفظة أو رابط ربط صالح.'));
+    setScanned(false);
   };
 
-  const base64ToUint8Array = (base64) => {
-    const binaryString = atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
-  };
-
-  const readQRFromImage = async (imageUri) => {
-    return new Promise((resolve) => {
-      Image.getSize(imageUri, async (imgWidth, imgHeight) => {
-        try {
-          const base64 = await FileSystem.readAsStringAsync(imageUri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          const pixelData = base64ToUint8Array(base64);
-          const code = jsQR(pixelData, imgWidth, imgHeight, {
-            inversionAttempts: 'attemptBoth',
-          });
-          resolve(code);
-        } catch (error) {
-          resolve(null);
-        }
-      }, () => {
-        resolve(null);
+  // ✅ دالة قراءة الـ QR من الصورة باستخدام خدمة سحابية (بدون الحاجة لمكتبات Native معقدة)
+  const decodeQRFromImage = async (imageUri) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'qr_code.jpg',
       });
-    });
+
+      // استخدام API مجاني وسريع جداً لقراءة الباركود من الصور
+      const response = await fetch('https://api.qrserver.com/v1/read-qr-code/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const data = await response.json();
+      
+      // التحقق من نجاح القراءة
+      if (data && data[0] && data[0].symbol && data[0].symbol[0].data) {
+        return data[0].symbol[0].data; // إرجاع النص الموجود في الـ QR
+      }
+      return null;
+    } catch (error) {
+      console.warn('QR Decode Error:', error);
+      return null;
+    }
   };
 
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('qr_scanner.no_permission'));
+        Alert.alert(t('error', 'خطأ'), t('qr_scanner.no_permission', 'لا يوجد إذن للوصول إلى الصور'));
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
-        quality: 0.8,
+        quality: 0.8, // تقليل الجودة قليلاً لسرعة الرفع
       });
 
       if (!result.canceled && result.assets?.length > 0) {
         setProcessingImage(true);
         const imageUri = result.assets[0].uri;
 
-        const qrCode = await readQRFromImage(imageUri);
-        if (qrCode && qrCode.data) {
-          await processScannedData(qrCode.data);
+        // إرسال الصورة لفك التشفير
+        const qrText = await decodeQRFromImage(imageUri);
+
+        if (qrText) {
+          // تم العثور على QR Code في الصورة
+          await processScannedData(qrText);
         } else {
-          Alert.alert(t('qr_scanner.invalid'), t('qr_scanner.invalid_address'));
+          // لم يتعرف النظام على أي QR في الصورة
+          Alert.alert(t('error', 'تنبيه'), 'لم يتم العثور على رمز QR واضح في هذه الصورة. يرجى التأكد من وضوح الصورة والمحاولة مجدداً.');
         }
       }
     } catch (error) {
       console.warn('Image pick error:', error);
+      Alert.alert(t('error', 'خطأ'), 'حدث خطأ غير متوقع أثناء معالجة الصورة.');
     } finally {
       setProcessingImage(false);
       setScanned(false);
@@ -148,7 +155,7 @@ export default function QRScannerScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={[styles.text, { color: colors.text }]}>{t('qr_scanner.requesting')}</Text>
+          <Text style={[styles.text, { color: colors.text }]}>{t('qr_scanner.requesting', 'جاري طلب الإذن...')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -159,9 +166,9 @@ export default function QRScannerScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
           <Ionicons name="camera-off" size={64} color={colors.textSecondary} />
-          <Text style={[styles.text, { color: colors.text, marginTop: 16 }]}>{t('qr_scanner.no_permission')}</Text>
+          <Text style={[styles.text, { color: colors.text, marginTop: 16 }]}>{t('qr_scanner.no_permission', 'لا يوجد إذن للكاميرا')}</Text>
           <TouchableOpacity style={[styles.button, { backgroundColor: primaryColor, marginTop: 20 }]} onPress={requestPermission}>
-            <Text style={styles.buttonText}>{t('qr_scanner.grant')}</Text>
+            <Text style={styles.buttonText}>{t('qr_scanner.grant', 'منح الإذن')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -174,7 +181,7 @@ export default function QRScannerScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.card }]}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>{t('qr_scanner.title')}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('qr_scanner.title', 'مسح رمز QR')}</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             onPress={pickImage}
@@ -214,12 +221,14 @@ export default function QRScannerScreen() {
 
       <View style={[styles.instructions, { backgroundColor: colors.card }]}>
         <Ionicons name="qr-code" size={20} color={primaryColor} />
-        <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>{t('qr_scanner.instructions')}</Text>
+        <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
+          {t('qr_scanner.instructions', 'ضع رمز QR داخل الإطار للمسح، أو اختر صورة من الألبوم')}
+        </Text>
       </View>
 
       {scanned && !processingImage && (
         <TouchableOpacity style={[styles.rescanButton, { backgroundColor: primaryColor }]} onPress={() => setScanned(false)}>
-          <Text style={styles.rescanButtonText}>{t('qr_scanner.rescan')}</Text>
+          <Text style={styles.rescanButtonText}>{t('qr_scanner.rescan', 'مسح مرة أخرى')}</Text>
         </TouchableOpacity>
       )}
     </SafeAreaView>

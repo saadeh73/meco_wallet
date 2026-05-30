@@ -3,6 +3,8 @@ import { Web3Wallet } from '@walletconnect/web3wallet';
 import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
 import i18n from '../i18n';
+// ✅ هذا هو السطر المفقود الذي كان يسبب انهيار التطبيق
+import { useAppStore } from '../store';
 
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
 
@@ -20,13 +22,13 @@ export async function initWalletConnect() {
     });
 
     const metadata = {
-      name: 'MECO Wallet', // ✅ تم التصحيح
+      name: 'MECO Wallet', 
       description: 'The First Arab Crypto Wallet on Solana',
-      url: 'https://monycoin.github.io/meco_wallet-app/', // ✅ تم التصحيح
+      url: 'https://monycoin.github.io/meco_wallet-app/', 
       icons: ['https://raw.githubusercontent.com/MonyCoin/meco_wallet/refs/heads/main/assets/logo.png'],
       redirect: {
         native: 'meco-wallet://',
-        universal: 'https://monycoin.github.io/meco_wallet-app/', // ✅ أضفنا universal
+        universal: 'https://monycoin.github.io/meco_wallet-app/', 
       },
     };
 
@@ -77,8 +79,11 @@ function setupEventListeners() {
 
 export async function approveSession(proposalId) {
   try {
+    // ✅ الآن أصبح useAppStore معرّفاً ويمكنه جلب بيانات الحساب النشط بأمان
     const pubKey = useAppStore.getState().walletPublicKey;
-    if (!pubKey) return;
+    if (!pubKey) {
+      throw new Error('لم يتم العثور على محفظة نشطة للربط');
+    }
 
     const namespace = {
       methods: ['solana_signTransaction', 'solana_signMessage'],
