@@ -25,8 +25,8 @@ const EARNING_OPPORTUNITIES = [
   { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                            asset: 'USDC',     apy: 8.0,  url: 'https://app.kamino.finance/lend',      category: 'defi',    featured: false, descKey: 'desc_kamino'   },
   { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                              asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade',              category: 'trading', featured: false, descKey: 'desc_drift'    },
   { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                     asset: 'USDC',     apy: 5.0,  url: 'https://solend.fi/dashboard',          category: 'defi',    featured: false, descKey: 'desc_solend'   },
-  { id: 'raydium',   protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io',                category: 'pools',   featured: false, descKey: 'desc_raydium'  },
-  { id: 'orca',      protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'SOL-USDC', apy: 12.0, url: 'https://www.orca.so',               category: 'pools',   featured: false, descKey: 'desc_orca'     },
+  { id: 'raydium',   protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',                category: 'pools',   featured: false, descKey: 'desc_raydium'  },
+  { id: 'orca',      protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'SOL-USDC', apy: 12.0, url: 'https://www.orca.so/pools',               category: 'pools',   featured: false, descKey: 'desc_orca'     },
 ];
 
 const CAT = {
