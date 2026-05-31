@@ -1,15 +1,44 @@
 import { Core } from '@walletconnect/core';
 import { Web3Wallet } from '@walletconnect/web3wallet';
+import { buildApprovedNamespaces, getSdkError } from '@walletconnect/utils';
 import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
 import i18n from '../i18n';
-// ✅ هذا هو السطر المفقود الذي كان يسبب انهيار التطبيق
 import { useAppStore } from '../store';
+import * as web3 from '@solana/web3.js';
+import bs58 from 'bs58';
 
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
 
 export let web3wallet;
 
+// ─── Helper: استخراج المفتاح الخاص للعمليات ───────────────────────────────────
+async function getWalletKeypair() {
+  try {
+    const activeIndex = useAppStore.getState().activeAccountIndex;
+    let privateKeyStr = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
+    
+    // Fallback للحساب الرئيسي إذا كان هو النشط ولم نجد المفتاح بالصيغة الجديدة
+    if (!privateKeyStr && activeIndex === 0) {
+      privateKeyStr = await SecureStore.getItemAsync('wallet_private_key');
+    }
+
+    if (!privateKeyStr) throw new Error('المفتاح الخاص غير موجود');
+
+    let secretKey;
+    if (privateKeyStr.startsWith('[')) {
+      secretKey = new Uint8Array(JSON.parse(privateKeyStr));
+    } else {
+      secretKey = bs58.decode(privateKeyStr);
+    }
+    return web3.Keypair.fromSecretKey(secretKey);
+  } catch (error) {
+    console.error('❌ Error getting keypair for WalletConnect:', error);
+    throw error;
+  }
+}
+
+// ─── تهيئة WalletConnect ──────────────────────────────────────────────────────
 export async function initWalletConnect() {
   try {
     if (web3wallet) {
@@ -46,83 +75,186 @@ export async function initWalletConnect() {
   }
 }
 
+// ─── إعداد مستمعي الأحداث (Event Listeners) ──────────────────────────────────
 function setupEventListeners() {
   if (!web3wallet) return;
 
+  // 1. معالجة طلبات الربط الجديدة
   web3wallet.on('session_proposal', async (proposal) => {
     const { name, url } = proposal.params.proposer.metadata;
 
     Alert.alert(
-      i18n.t('walletConnect.connection_request'),
-      i18n.t('walletConnect.connection_request_message', { name, url }),
+      i18n.t('walletConnect.connection_request', 'طلب اتصال 🔗'),
+      i18n.t('walletConnect.connection_request_message', `يرغب موقع "${name}" (${url}) في الاتصال بمحفظتك (Solana).`, { name, url }),
       [
         {
-          text: i18n.t('walletConnect.reject'),
-          onPress: () => rejectSession(proposal.id),
+          text: i18n.t('walletConnect.reject', 'رفض'),
+          onPress: () => rejectSession(proposal),
           style: 'cancel',
         },
         {
-          text: i18n.t('walletConnect.approve'),
-          onPress: () => approveSession(proposal.id),
+          text: i18n.t('walletConnect.approve', 'موافقة'),
+          onPress: () => approveSession(proposal),
         },
       ]
     );
   });
 
+  // 2. ✅ معالجة طلبات التوقيع والمعاملات (السبب الرئيسي للفشل السابق)
   web3wallet.on('session_request', async (event) => {
+    const { topic, params, id } = event;
+    const { request } = params;
+
     Alert.alert(
-      i18n.t('walletConnect.sign_request'),
-      i18n.t('walletConnect.sign_request_message')
+      i18n.t('walletConnect.sign_request', 'طلب توقيع ✍️'),
+      i18n.t('walletConnect.sign_request_message', `الموقع يطلب منك توقيع معاملة. هل توافق؟\n\nنوع الطلب: ${request.method}`),
+      [
+        {
+          text: i18n.t('walletConnect.reject', 'رفض'),
+          onPress: () => handleRequestRejection(topic, id),
+          style: 'cancel',
+        },
+        {
+          text: i18n.t('walletConnect.approve', 'موافقة'),
+          onPress: () => handleRequestApproval(event),
+        },
+      ]
     );
+  });
+
+  // 3. معالجة الحذف
+  web3wallet.on('session_delete', () => {
+    console.log('ℹ️ WalletConnect session deleted.');
   });
 }
 
-export async function approveSession(proposalId) {
+// ─── دوال التعامل مع الجلسات (Sessions) ──────────────────────────────────────
+export async function approveSession(proposal) {
   try {
-    // ✅ الآن أصبح useAppStore معرّفاً ويمكنه جلب بيانات الحساب النشط بأمان
     const pubKey = useAppStore.getState().walletPublicKey;
     if (!pubKey) {
       throw new Error('لم يتم العثور على محفظة نشطة للربط');
     }
 
-    const namespace = {
-      methods: ['solana_signTransaction', 'solana_signMessage'],
-      chains: ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'],
-      events: [],
-      accounts: [`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${pubKey}`],
-    };
+    const solanaAddress = `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${pubKey}`;
+
+    // بناء المساحات (Namespaces) المطلوبة بشكل صحيح وفقاً لمعايير V2
+    const namespaces = buildApprovedNamespaces({
+      proposal: proposal.params,
+      supportedNamespaces: {
+        solana: {
+          chains: ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'],
+          methods: ['solana_signTransaction', 'solana_signMessage'],
+          events: [],
+          accounts: [solanaAddress],
+        },
+      },
+    });
 
     await web3wallet.approveSession({
-      id: proposalId,
-      namespaces: {
-        solana: namespace,
-      },
+      id: proposal.id,
+      namespaces,
     });
 
     Alert.alert(
-      i18n.t('walletConnect.connection_success'),
-      i18n.t('walletConnect.connection_success_message')
+      i18n.t('walletConnect.connection_success', 'نجاح ✅'),
+      i18n.t('walletConnect.connection_success_message', 'تم الاتصال بالشبكة بنجاح. يمكنك الآن التفاعل مع الموقع.')
     );
   } catch (error) {
-    console.log('Approve Error:', error);
-    Alert.alert(i18n.t('error'), i18n.t('walletConnect.connection_failed'));
+    console.log('Approve Session Error:', error);
+    Alert.alert(i18n.t('error', 'خطأ'), i18n.t('walletConnect.connection_failed', 'فشل الاتصال بالموقع.'));
+    await rejectSession(proposal);
   }
 }
 
-export async function rejectSession(proposalId) {
+export async function rejectSession(proposal) {
   try {
     await web3wallet.rejectSession({
-      id: proposalId,
-      reason: {
-        code: 5000,
-        message: 'User rejected.',
+      id: proposal.id,
+      reason: getSdkError('USER_REJECTED'),
+    });
+  } catch (error) {
+    console.log('Reject Session Error:', error);
+  }
+}
+
+// ─── ✅ دوال معالجة التوقيع الفعلي للمعاملات (القلب النابض) ─────────────────
+async function handleRequestApproval(event) {
+  const { topic, params, id } = event;
+  const { request } = params;
+
+  try {
+    const keypair = await getWalletKeypair();
+
+    let result;
+
+    // 1. معالجة توقيع رسالة (Sign Message)
+    if (request.method === 'solana_signMessage') {
+      const messageToSign = request.params.message || request.params.pubkey; // يختلف حسب إصدار DApp
+      const messageBytes = bs58.decode(messageToSign);
+      // التوقيع على الرسالة
+      const signatureBytes = require('tweetnacl').sign.detached(messageBytes, keypair.secretKey);
+      result = { signature: bs58.encode(signatureBytes) };
+    } 
+    // 2. ✅ معالجة توقيع معاملة (Sign Transaction) - (هذا ما يحتاجه Orca للحصاد)
+    else if (request.method === 'solana_signTransaction') {
+      const transactionStr = request.params.transaction;
+      const transactionBuffer = Buffer.from(transactionStr, 'base64');
+      
+      let signedTransactionBase64;
+
+      try {
+        // محاولة فك التشفير كمعاملة حديثة (VersionedTransaction)
+        const versionedTx = web3.VersionedTransaction.deserialize(transactionBuffer);
+        versionedTx.sign([keypair]);
+        signedTransactionBase64 = Buffer.from(versionedTx.serialize()).toString('base64');
+      } catch (e) {
+        // إذا فشلت، نحاول فك التشفير كمعاملة تقليدية (Legacy Transaction)
+        const legacyTx = web3.Transaction.from(transactionBuffer);
+        legacyTx.partialSign(keypair);
+        signedTransactionBase64 = legacyTx.serialize({ requireAllSignatures: false }).toString('base64');
+      }
+
+      result = { signature: signedTransactionBase64 };
+    } else {
+      throw new Error(`طريقة غير مدعومة: ${request.method}`);
+    }
+
+    // إرسال الرد بنجاح إلى الموقع (DApp)
+    await web3wallet.respondSessionRequest({
+      topic,
+      response: {
+        id,
+        jsonrpc: '2.0',
+        result,
+      },
+    });
+
+    console.log(`✅ [WalletConnect] تم توقيع المعاملة (${request.method}) بنجاح.`);
+
+  } catch (error) {
+    console.error('❌ [WalletConnect] خطأ أثناء التوقيع:', error);
+    Alert.alert(i18n.t('error', 'خطأ'), `فشل التوقيع: ${error.message}`);
+    await handleRequestRejection(topic, id);
+  }
+}
+
+async function handleRequestRejection(topic, id) {
+  try {
+    await web3wallet.respondSessionRequest({
+      topic,
+      response: {
+        id,
+        jsonrpc: '2.0',
+        error: getSdkError('USER_REJECTED'),
       },
     });
   } catch (error) {
-    console.log('Reject Error:', error);
+    console.error('Error rejecting request:', error);
   }
 }
 
+// ─── دالة ربط الـ URI ────────────────────────────────────────────────────────
 export async function pairWalletConnect(uri) {
   try {
     if (!web3wallet) {
@@ -135,8 +267,8 @@ export async function pairWalletConnect(uri) {
   } catch (error) {
     console.log('❌ خطأ في عملية الربط (Pairing):', error.message);
     Alert.alert(
-      i18n.t('walletConnect.pairing_error'),
-      i18n.t('walletConnect.pairing_error_message')
+      i18n.t('walletConnect.pairing_error', 'خطأ في الربط'),
+      i18n.t('walletConnect.pairing_error_message', 'فشل الربط، يرجى التأكد من صلاحية الكود.')
     );
   }
 }
