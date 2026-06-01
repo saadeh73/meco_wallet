@@ -9,6 +9,9 @@ import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 
+// ✅ استخدام المحرك القوي للاتصال بالشبكة
+import { default as heliusService } from './heliusService';
+
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
 
 export let web3wallet;
@@ -63,7 +66,7 @@ export async function initWalletConnect() {
   }
 }
 
-// ─── الاستماع للأحداث (هنا كان الخطأ وتم إصلاحه) ──────────────────────────────
+// ─── الاستماع للأحداث (معالجة حقيقية) ──────────────────────────────────────────
 function setupEventListeners() {
   if (!web3wallet) return;
 
@@ -80,7 +83,7 @@ function setupEventListeners() {
     );
   });
 
-  // 2. ✅ طلب التوقيع (تم إصلاحه ليوجه للمعالجة الحقيقية)
+  // 2. طلب التوقيع (تم إصلاحه ليوجه للمعالجة الحقيقية)
   web3wallet.on('session_request', async (event) => {
     const { topic, params, id } = event;
     const { request } = params;
@@ -108,7 +111,7 @@ export async function approveSession(proposal) {
       supportedNamespaces: {
         solana: {
           chains: ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'],
-          // ✅ إضافة جميع أنواع التوقيع التي تطلبها المواقع
+          // دعم شامل لكل طلبات المنصات الكبرى
           methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAndSendTransaction'],
           events: [],
           accounts: [solanaAddress],
@@ -130,7 +133,7 @@ export async function rejectSession(proposal) {
   } catch (e) {}
 }
 
-// ─── ✅ المعالجة الحقيقية للتوقيع (The Engine) ────────────────────────────────
+// ─── المعالجة الحقيقية للتوقيع (The Engine) ───────────────────────────────────
 async function handleRequestApproval(event) {
   const { topic, params, id } = event;
   const { request } = params;
@@ -162,7 +165,10 @@ async function handleRequestApproval(event) {
     
     else if (request.method === 'solana_signAndSendTransaction') {
       const transactionBuffer = Buffer.from(request.params.transaction, 'base64');
-      const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      
+      // ✅ التعديل الذهبي: استخدام المحرك القوي بدلاً من الرابط الثابت
+      const connection = await heliusService.getConnection();
+      
       let signature;
       try {
         const versionedTx = web3.VersionedTransaction.deserialize(transactionBuffer);
@@ -175,6 +181,7 @@ async function handleRequestApproval(event) {
         signature = await connection.sendRawTransaction(serializedTx, { skipPreflight: false });
       }
       result = { signature };
+      console.log(`✅ [WalletConnect] تم الإرسال للبلوكشين: ${signature}`);
     } 
     
     else {
@@ -189,7 +196,7 @@ async function handleRequestApproval(event) {
     console.log(`✅ [WalletConnect] تم الرد بنجاح.`);
 
   } catch (error) {
-    console.error('❌ [WalletConnect] خطأ:', error);
+    console.error('❌ [WalletConnect] خطأ أثناء التوقيع:', error);
     Alert.alert(i18n.t('error', 'خطأ'), `فشل التوقيع: ${error.message}`);
     await handleRequestRejection(topic, id);
   }
@@ -209,6 +216,6 @@ export async function pairWalletConnect(uri) {
     if (!web3wallet) await initWalletConnect();
     await web3wallet.core.pairing.pair({ uri });
   } catch (error) {
-    Alert.alert(i18n.t('error'), 'فشل الربط.');
+    Alert.alert(i18n.t('error', 'خطأ'), 'فشل الربط.');
   }
 }
