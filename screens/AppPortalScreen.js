@@ -427,14 +427,26 @@ export default function AppPortalScreen() {
                 </View>
               )}
               <WebView
-                ref={el => (webviewRefs.current[tab.id] = el)}
-                source={{ uri: tab.url }}
-                style={{ flex: 1 }}
-                onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
-                onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
-                onNavigationStateChange={nav => {
-                  setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
-                  if (tab.id === activeTabId) setInputUrl(nav.url);
+                    ref={el => (webviewRefs.current[tab.id] = el)}
+                    source={{ uri: tab.url }}
+                    style={{ flex: 1, width: '100%', height: '100%' }}
+                                                             // ✅ حقن كود لإجبار الموقع على التوافق مع شاشة الجوال (Responsive viewport)                   
+                    injectedJavaScript={`
+                    const meta = document.createElement('meta'); 
+                    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0'); 
+                    meta.setAttribute('name', 'viewport'); 
+                    document.getElementsByTagName('head')[0].appendChild(meta);
+                    true;
+                    `}
+                    scalesPageToFit={true}
+                     bounces={false}
+                     javaScriptEnabled={true}
+                     domStorageEnabled={true}
+                     onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
+                      onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
+                      onNavigationStateChange={nav => {
+                           setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
+                            if (tab.id === activeTabId) setInputUrl(nav.url);
                 }}
                 javaScriptEnabled domStorageEnabled
               />

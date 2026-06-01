@@ -7,6 +7,7 @@ import i18n from '../i18n';
 import { useAppStore } from '../store';
 import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
+import { Buffer } from 'buffer'; // ضروري لفك تشفير المعاملات
 
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
 
@@ -18,7 +19,6 @@ async function getWalletKeypair() {
     const activeIndex = useAppStore.getState().activeAccountIndex;
     let privateKeyStr = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
     
-    // Fallback للحساب الرئيسي إذا كان هو النشط ولم نجد المفتاح بالصيغة الجديدة
     if (!privateKeyStr && activeIndex === 0) {
       privateKeyStr = await SecureStore.getItemAsync('wallet_private_key');
     }
@@ -79,7 +79,6 @@ export async function initWalletConnect() {
 function setupEventListeners() {
   if (!web3wallet) return;
 
-  // 1. معالجة طلبات الربط الجديدة
   web3wallet.on('session_proposal', async (proposal) => {
     const { name, url } = proposal.params.proposer.metadata;
 
@@ -100,7 +99,7 @@ function setupEventListeners() {
     );
   });
 
-  // 2. ✅ معالجة طلبات التوقيع والمعاملات (السبب الرئيسي للفشل السابق)
+  // ✅ التعديل الجوهري: معالجة طلبات التوقيع هنا وليس فقط عرض Alert
   web3wallet.on('session_request', async (event) => {
     const { topic, params, id } = event;
     const { request } = params;
@@ -122,13 +121,12 @@ function setupEventListeners() {
     );
   });
 
-  // 3. معالجة الحذف
   web3wallet.on('session_delete', () => {
     console.log('ℹ️ WalletConnect session deleted.');
   });
 }
 
-// ─── دوال التعامل مع الجلسات (Sessions) ──────────────────────────────────────
+// ─── دوال التعامل مع الجلسات ──────────────────────────────────────────────────
 export async function approveSession(proposal) {
   try {
     const pubKey = useAppStore.getState().walletPublicKey;
@@ -138,13 +136,13 @@ export async function approveSession(proposal) {
 
     const solanaAddress = `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${pubKey}`;
 
-    // بناء المساحات (Namespaces) المطلوبة بشكل صحيح وفقاً لمعايير V2
+    // ✅ يجب إضافة solana_signAndSendTransaction لكي تقبله المنصات الكبرى
     const namespaces = buildApprovedNamespaces({
       proposal: proposal.params,
       supportedNamespaces: {
         solana: {
           chains: ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'],
-          methods: ['solana_signTransaction', 'solana_signMessage'],
+          methods: ['solana_signTransaction', 'solana_signMessage', 'solana_signAndSendTransaction'],
           events: [],
           accounts: [solanaAddress],
         },
@@ -178,25 +176,24 @@ export async function rejectSession(proposal) {
   }
 }
 
-// ─── ✅ دوال معالجة التوقيع الفعلي للمعاملات (القلب النابض) ─────────────────
+// ─── ✅ دوال معالجة التوقيع الفعلي للمعاملات (هذا ما كان ينقصك) ─────────────────
 async function handleRequestApproval(event) {
   const { topic, params, id } = event;
   const { request } = params;
 
   try {
     const keypair = await getWalletKeypair();
-
     let result;
 
     // 1. معالجة توقيع رسالة (Sign Message)
     if (request.method === 'solana_signMessage') {
-      const messageToSign = request.params.message || request.params.pubkey; // يختلف حسب إصدار DApp
+      const messageToSign = request.params.message || request.params.pubkey; 
       const messageBytes = bs58.decode(messageToSign);
-      // التوقيع على الرسالة
       const signatureBytes = require('tweetnacl').sign.detached(messageBytes, keypair.secretKey);
       result = { signature: bs58.encode(signatureBytes) };
     } 
-    // 2. ✅ معالجة توقيع معاملة (Sign Transaction) - (هذا ما يحتاجه Orca للحصاد)
+    
+    // 2. معالجة توقيع معاملة (Sign Transaction) -> هنا كانت المشكلة مع Orca
     else if (request.method === 'solana_signTransaction') {
       const transactionStr = request.params.transaction;
       const transactionBuffer = Buffer.from(transactionStr, 'base64');
@@ -204,23 +201,47 @@ async function handleRequestApproval(event) {
       let signedTransactionBase64;
 
       try {
-        // محاولة فك التشفير كمعاملة حديثة (VersionedTransaction)
+        // محاولة فك التشفير كمعاملة حديثة (VersionedTransaction) وهو ما تستخدمه Orca و Jupiter V6
         const versionedTx = web3.VersionedTransaction.deserialize(transactionBuffer);
         versionedTx.sign([keypair]);
         signedTransactionBase64 = Buffer.from(versionedTx.serialize()).toString('base64');
       } catch (e) {
         // إذا فشلت، نحاول فك التشفير كمعاملة تقليدية (Legacy Transaction)
+        console.log('محاولة التوقيع كـ Legacy Transaction...');
         const legacyTx = web3.Transaction.from(transactionBuffer);
         legacyTx.partialSign(keypair);
-        signedTransactionBase64 = legacyTx.serialize({ requireAllSignatures: false }).toString('base64');
+        signedTransactionBase64 = legacyTx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       }
 
       result = { signature: signedTransactionBase64 };
-    } else {
+    } 
+    
+    // 3. معالجة توقيع وإرسال المعاملة (Sign And Send Transaction)
+    else if (request.method === 'solana_signAndSendTransaction') {
+      const transactionStr = request.params.transaction;
+      const transactionBuffer = Buffer.from(transactionStr, 'base64');
+      const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      let signature;
+
+      try {
+        const versionedTx = web3.VersionedTransaction.deserialize(transactionBuffer);
+        versionedTx.sign([keypair]);
+        signature = await connection.sendRawTransaction(versionedTx.serialize(), { skipPreflight: false, preflightCommitment: 'confirmed' });
+      } catch (e) {
+        const legacyTx = web3.Transaction.from(transactionBuffer);
+        legacyTx.partialSign(keypair);
+        const serializedTx = legacyTx.serialize({ requireAllSignatures: false });
+        signature = await connection.sendRawTransaction(serializedTx, { skipPreflight: false, preflightCommitment: 'confirmed' });
+      }
+
+      result = { signature: signature };
+      console.log(`✅ [WalletConnect] تم الإرسال للبلوكشين: ${signature}`);
+    } 
+    else {
       throw new Error(`طريقة غير مدعومة: ${request.method}`);
     }
 
-    // إرسال الرد بنجاح إلى الموقع (DApp)
+    // ✅ إرسال الرد بنجاح إلى الموقع (DApp) ليقوم هو بإكمال العملية
     await web3wallet.respondSessionRequest({
       topic,
       response: {
@@ -230,7 +251,7 @@ async function handleRequestApproval(event) {
       },
     });
 
-    console.log(`✅ [WalletConnect] تم توقيع المعاملة (${request.method}) بنجاح.`);
+    console.log(`✅ [WalletConnect] تم الرد على طلب (${request.method}) بنجاح.`);
 
   } catch (error) {
     console.error('❌ [WalletConnect] خطأ أثناء التوقيع:', error);
