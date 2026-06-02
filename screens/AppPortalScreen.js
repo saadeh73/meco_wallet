@@ -126,17 +126,35 @@ export default function AppPortalScreen() {
   const bodyOp      = useRef(new Animated.Value(0)).current;
   const switchX     = useRef(new Animated.Value(0)).current;
 
-  // ✅ الكود المحقون (Injected JS) لضبط أبعاد الشاشة وإخفاء القوائم المزعجة إن وجدت
   const INJECTED_JAVASCRIPT = `
-    const meta = document.createElement('meta');
-    meta.setAttribute('name', 'viewport');
-    meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0');
-    document.getElementsByTagName('head')[0].appendChild(meta);
-    
-    // إخفاء الأشرطة الجانبية المزعجة (اختياري) لمنصات معينة
-    document.body.style.paddingBottom = 'env(safe-area-inset-bottom)';
-    true; // note: this is required, or you'll sometimes get silent failures
-  `;
+  // 1. ضبط viewport الأساسي
+  const meta = document.createElement('meta');
+  meta.setAttribute('name', 'viewport');
+  meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover');
+  document.getElementsByTagName('head')[0].appendChild(meta);
+
+  // 2. إصلاح مشكلة 100vh في WebView – هذا هو التعديل الجوهري
+  function setRealHeight() {
+    var vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', vh + 'px');
+    // نجبر العناصر التي تستخدم 100vh على استخدام المتغير الجديد
+    var style = document.createElement('style');
+    style.id = 'vh-fix';
+    style.innerHTML = '.h-full, .min-h-screen, [style*="100vh"] { height: calc(var(--vh, 1vh) * 100) !important; }';
+    if (!document.getElementById('vh-fix')) {
+      document.head.appendChild(style);
+    }
+  }
+  window.addEventListener('resize', setRealHeight);
+  window.addEventListener('orientationchange', setRealHeight);
+  setRealHeight();
+
+  // 3. السماح بالتمرير دائمًا
+  document.body.style.overflowY = 'auto';
+  document.documentElement.style.overflowY = 'auto';
+  
+  true;
+`;
 
   useEffect(() => {
     Animated.stagger(70, [
