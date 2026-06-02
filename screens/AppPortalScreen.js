@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, Image, Platform, FlatList, ActivityIndicator,
   Modal, TextInput, Keyboard, TouchableWithoutFeedback,
-  Animated,
+  Animated, SafeAreaView
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import { pairWalletConnect, initWalletConnect } from '../services/walletConnectService';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const BOOKMARKS_KEY = '@meco_bookmarks';
 
 // ─── Protocol data ────────────────────────────────────────────────────────────
@@ -25,8 +25,8 @@ const EARNING_OPPORTUNITIES = [
   { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                            asset: 'USDC',     apy: 8.0,  url: 'https://app.kamino.finance/lend',      category: 'defi',    featured: false, descKey: 'desc_kamino'   },
   { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                              asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade',              category: 'trading', featured: false, descKey: 'desc_drift'    },
   { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                     asset: 'USDC',     apy: 5.0,  url: 'https://solend.fi/dashboard',          category: 'defi',    featured: false, descKey: 'desc_solend'   },
-  { id: 'raydium',   protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',                category: 'pools',   featured: false, descKey: 'desc_raydium'  },
-  { id: 'orca',      protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'SOL-USDC', apy: 12.0, url: 'https://www.orca.so/pools',               category: 'pools',   featured: false, descKey: 'desc_orca'     },
+  { id: 'raydium',        protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',                category: 'pools',   featured: false, descKey: 'desc_raydium'  },
+  { id: 'orca',           protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'SOL-USDC', apy: 12.0, url: 'https://www.orca.so/pools',               category: 'pools',   featured: false, descKey: 'desc_orca'     },
 ];
 
 const CAT = {
@@ -36,7 +36,6 @@ const CAT = {
   pools:   { accent: '#F59E0B', bg: 'rgba(245,158,11,0.13)',  icon: 'water-outline'           },
 };
 
-// ─── SafeImage ────────────────────────────────────────────────────────────────
 const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor = '#606080' }) => {
   const [err, setErr] = useState(false);
   if (err || !uri)
@@ -48,7 +47,6 @@ const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor =
   return <Image source={{ uri }} style={style} onError={() => setErr(true)} />;
 };
 
-// ─── Spring-press wrapper ─────────────────────────────────────────────────────
 const Pressable = ({ onPress, style, children }) => {
   const sc = useRef(new Animated.Value(1)).current;
   const spring = v => Animated.spring(sc, { toValue: v, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
@@ -59,7 +57,6 @@ const Pressable = ({ onPress, style, children }) => {
   );
 };
 
-// ─── Live Ticker ──────────────────────────────────────────────────────────────
 const TickerStrip = ({ items, C }) => {
   const x = useRef(new Animated.Value(0)).current;
   const ITEM_W = 140;
@@ -89,7 +86,6 @@ const TickerStrip = ({ items, C }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
   const { t }        = useTranslation();
   const navigation   = useNavigation();
@@ -129,6 +125,18 @@ export default function AppPortalScreen() {
   const headerOp    = useRef(new Animated.Value(0)).current;
   const bodyOp      = useRef(new Animated.Value(0)).current;
   const switchX     = useRef(new Animated.Value(0)).current;
+
+  // ✅ الكود المحقون (Injected JS) لضبط أبعاد الشاشة وإخفاء القوائم المزعجة إن وجدت
+  const INJECTED_JAVASCRIPT = `
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'viewport');
+    meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0');
+    document.getElementsByTagName('head')[0].appendChild(meta);
+    
+    // إخفاء الأشرطة الجانبية المزعجة (اختياري) لمنصات معينة
+    document.body.style.paddingBottom = 'env(safe-area-inset-bottom)';
+    true; // note: this is required, or you'll sometimes get silent failures
+  `;
 
   useEffect(() => {
     Animated.stagger(70, [
@@ -260,14 +268,10 @@ export default function AppPortalScreen() {
             <Text style={[S.appApyTxt, { color: cat.accent }]}>{item.apy}%</Text>
           </View>
         )}
-        {item.requiresVpn && (
-          <View style={S.vpnBadge}><Ionicons name="warning" size={11} color={C.warning} /></View>
-        )}
       </Pressable>
     );
   };
 
-  // ✅ إصلاح: توحيد onPress و onLongPress في TouchableOpacity واحد
   const BookmarkRow = ({ item }) => (
     <View style={[S.bmCard, { backgroundColor: C.surface, borderColor: C.border }]}>
       <TouchableOpacity
@@ -302,8 +306,10 @@ export default function AppPortalScreen() {
   };
 
   return (
-    <View style={[S.root, { backgroundColor: C.bg, paddingTop: Platform.OS === 'ios' ? 52 : 30 }]}>
-
+    <View style={[S.root, { backgroundColor: C.bg }]}>
+      {/* ✅ إزالة SafeAreaView من الحاوية الكلية واستخدامها فقط للشريط العلوي لكي يتمدد المتصفح لأسفل الشاشة */}
+      <SafeAreaView style={{ backgroundColor: C.bg }} />
+      
       {/* ── Address bar ── */}
       <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
         <TouchableOpacity
@@ -333,7 +339,6 @@ export default function AppPortalScreen() {
           )}
         </View>
 
-        {/* ✅ زر QR لمسح WalletConnect URI */}
         <TouchableOpacity
           style={[S.qrBtn, { backgroundColor: C.accent + '20', borderColor: C.accent + '50' }]}
           onPress={() => navigation.navigate('QRScanner')}
@@ -417,7 +422,7 @@ export default function AppPortalScreen() {
       </Modal>
 
       {/* ── Main content ── */}
-      <View style={{ flex: 1 }}>
+      <View style={S.contentWrapper}>
         {activeTabId ? (
           tabs.map(tab => (
             <View key={tab.id} style={{ flex: 1, display: tab.id === activeTabId ? 'flex' : 'none' }}>
@@ -426,29 +431,24 @@ export default function AppPortalScreen() {
                   <ActivityIndicator size="large" color={C.accent} />
                 </View>
               )}
+              {/* ✅ WebView معدل بأبعاد صريحة وحقن للـ JS لضبط وضع الجوال */}
               <WebView
-                    ref={el => (webviewRefs.current[tab.id] = el)}
-                    source={{ uri: tab.url }}
-                    style={{ flex: 1, width: '100%', height: '100%' }}
-                                                             // ✅ حقن كود لإجبار الموقع على التوافق مع شاشة الجوال (Responsive viewport)                   
-                    injectedJavaScript={`
-                    const meta = document.createElement('meta'); 
-                    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0'); 
-                    meta.setAttribute('name', 'viewport'); 
-                    document.getElementsByTagName('head')[0].appendChild(meta);
-                    true;
-                    `}
-                    scalesPageToFit={true}
-                     bounces={false}
-                     javaScriptEnabled={true}
-                     domStorageEnabled={true}
-                     onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
-                      onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
-                      onNavigationStateChange={nav => {
-                           setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
-                            if (tab.id === activeTabId) setInputUrl(nav.url);
+                ref={el => (webviewRefs.current[tab.id] = el)}
+                source={{ uri: tab.url }}
+                style={S.webViewContainer}
+                containerStyle={S.webViewContainer}
+                injectedJavaScript={INJECTED_JAVASCRIPT}
+                scalesPageToFit={true}
+                bounces={false}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                pullToRefreshEnabled={true}
+                onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
+                onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
+                onNavigationStateChange={nav => {
+                  setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
+                  if (tab.id === activeTabId) setInputUrl(nav.url);
                 }}
-                javaScriptEnabled domStorageEnabled
               />
             </View>
           ))
@@ -588,7 +588,11 @@ const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
 const S = StyleSheet.create({
   root: { flex: 1 },
-  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
+  // ✅ التعديل هنا: استخدام flex: 1 لكي يتمدد WebView ليملأ الشاشة السفلية كاملة بدون قص
+  contentWrapper: { flex: 1, width: '100%', height: '100%' },
+  webViewContainer: { flex: 1, width: '100%', height: '100%' },
+  
+  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, paddingTop: 10, gap: 8 },
   homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
   urlInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
