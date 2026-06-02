@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, Image, Platform, FlatList, ActivityIndicator,
   Modal, TextInput, Keyboard, TouchableWithoutFeedback,
-  Animated, SafeAreaView
+  Animated, SafeAreaView, KeyboardAvoidingView
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -86,6 +86,181 @@ const TickerStrip = ({ items, C }) => {
   );
 };
 
+// ✅ INJECTED_JAVASCRIPT محسّن لحل مشكلة 100vh والـ viewport بشكل شامل
+const getInjectedJavaScript = (screenHeight) => {
+  return `
+  (function() {
+    'use strict';
+    
+    // ─────────────────────────────────────────────────────────────
+    // 1. إصلاح ViewportMeta - ضمان دعم full height
+    // ─────────────────────────────────────────────────────────────
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      document.head.appendChild(meta);
+    }
+    // نستخدم viewport-fit=cover للتعامل مع الشاشات اللي فيها notch
+    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes, viewport-fit=cover';
+    
+    // ─────────────────────────────────────────────────────────────
+    // 2. إصلاح مشكلة 100vh في iOS Safari / Android Chrome
+    //    (المشكلة الأساسية - mobile browsers يعتبرون 100vh = full screen including address bar)
+    // ─────────────────────────────────────────────────────────────
+    function fixVH() {
+      // حساب الارتفاع الفعلي بدون الـ browser chrome
+      const documentHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.offsetHeight,
+        document.documentElement.clientHeight
+      );
+      
+      // استخدام innerHeight إذا متاح (يعطي الارتفاع الفعلي للviewport)
+      const viewportHeight = window.innerHeight || documentHeight;
+      
+      // نحسب 1vh كـ 1% من الارتفاع الفعلي
+      const vh = viewportHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', vh + 'px');
+      document.documentElement.style.setProperty('--real-height', viewportHeight + 'px');
+      
+      // تطبيق على body
+      document.body.style.minHeight = viewportHeight + 'px';
+      document.body.style.height = viewportHeight + 'px';
+      document.documentElement.style.minHeight = viewportHeight + 'px';
+      document.documentElement.style.height = viewportHeight + 'px';
+      
+      // إصلاح العناصر اللي تستخدم 100vh
+      const style = document.createElement('style');
+      style.id = 'meco-vh-fix';
+      style.innerHTML = [
+        '.__meco_fixed_height { height: ' + viewportHeight + 'px !important; }',
+        '[style*="100vh"] { height: ' + viewportHeight + 'px !important; }',
+        '[style*="100vh"] { min-height: ' + viewportHeight + 'px !important; }',
+        '[class*="min-h-screen"] { min-height: ' + viewportHeight + 'px !important; }',
+        '[class*="h-screen"] { height: ' + viewportHeight + 'px !important; }',
+        '[class*="h-full"] { height: ' + viewportHeight + 'px !important; }',
+        '[class*="container"] { max-width: 100% !important; }',
+        // إصلاح للـ Orca تحديداً
+        '[class*="Pool"] { min-height: ' + viewportHeight + 'px !important; }',
+        '[class*="Liquidity"] { min-height: ' + viewportHeight + 'px !important; }',
+        '[id*="pool"] { min-height: ' + viewportHeight + 'px !important; }',
+      ].join('\\n');
+      
+      const existing = document.getElementById('meco-vh-fix');
+      if (existing) existing.remove();
+      document.head.appendChild(style);
+      
+      // إصلاح inline styles على العناصر الرئيسية
+      document.querySelectorAll('[style*="100vh"], [style*="100vh"]').forEach(el => {
+        if (el.scrollHeight > viewportHeight) {
+          el.style.minHeight = viewportHeight + 'px';
+        }
+      });
+    }
+    
+    // ─────────────────────────────────────────────────────────────
+    // 3. إصلاح scrolling - ضمان أن الصفحة قابلة للتمرير
+    // ─────────────────────────────────────────────────────────────
+    function fixScrolling() {
+      document.body.style.overflowY = 'auto';
+      document.body.style.overflowX = 'hidden';
+      document.documentElement.style.overflowY = 'auto';
+      document.documentElement.style.overflowX = 'hidden';
+      document.documentElement.style.position = 'relative';
+      document.body.style.position = 'relative';
+      
+      // إزالة fixed positioning من العناصر اللي بتسبب مشاكل
+      document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]').forEach(el => {
+        const style = el.getAttribute('style') || '';
+        if (style.includes('top: 0') && style.includes('left: 0') && style.includes('right: 0')) {
+          el.style.position = 'absolute';
+        }
+      });
+    }
+    
+    // ─────────────────────────────────────────────────────────────
+    // 4. إصلاح للعناصر الثابتة (fixed/sticky) اللي ممكن تعطل التفاعل
+    // ─────────────────────────────────────────────────────────────
+    function fixFixedElements() {
+      // تحويل fixed overlays إلى relative إن أمكن
+      document.querySelectorAll('div[style*="position: fixed"], div[style*="position:fixed"]').forEach(el => {
+        const rect = el.getBoundingClientRect();
+        // إن كان العنصر يغطي كل الشاشة تقريباً (overlay)
+        if (rect.width > window.innerWidth * 0.9 && rect.height > window.innerHeight * 0.9) {
+          // نخليه position absolute بدل fixed
+          // el.style.position = 'absolute'; // ⚠️ ممكن يكسر التصميم، نستخدم حل آخر
+        }
+      });
+    }
+    
+    // ─────────────────────────────────────────────────────────────
+    // 5. Event Listeners للـ resize و orientation change
+    // ─────────────────────────────────────────────────────────────
+    window.addEventListener('resize', function() {
+      fixVH();
+      fixScrolling();
+    });
+    
+    window.addEventListener('orientationchange', function() {
+      setTimeout(function() {
+        fixVH();
+        fixScrolling();
+      }, 100);
+    });
+    
+    // ─────────────────────────────────────────────────────────────
+    // 6. Touch handling - تحسين التفاعل مع العناصر القابلة للتمرير
+    // ─────────────────────────────────────────────────────────────
+    document.addEventListener('touchstart', function(e) {
+      // السماح بالتمرير في أي مكان
+      e.stopPropagation();
+    }, { passive: true });
+    
+    document.addEventListener('touchmove', function(e) {
+      // لا نمنع الـ touchmove للسماح بالتمرير
+    }, { passive: true });
+    
+    // ─────────────────────────────────────────────────────────────
+    // 7. تنفيذ الإصلاحات
+    // ─────────────────────────────────────────────────────────────
+    fixVH();
+    fixScrolling();
+    
+    // تنفيذ متكرر لضمان تطبيق الإصلاحات بعد تحميل كل شيء
+    setTimeout(fixVH, 100);
+    setTimeout(fixVH, 500);
+    setTimeout(fixVH, 1000);
+    setTimeout(fixVH, 2000);
+    
+    // MutationObserver لمراقبة التغييرات في DOM
+    if (typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver(function(mutations) {
+        let shouldFix = false;
+        mutations.forEach(function(mutation) {
+          if (mutation.addedNodes.length > 0) {
+            shouldFix = true;
+          }
+        });
+        if (shouldFix) {
+          setTimeout(fixVH, 50);
+        }
+      });
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+    
+    console.log('[MECO] WebView viewport fix applied');
+  })();
+  true;
+  `;
+};
+
 export default function AppPortalScreen() {
   const { t }        = useTranslation();
   const navigation   = useNavigation();
@@ -119,42 +294,22 @@ export default function AppPortalScreen() {
   const [loadingWeb,       setLoadingWeb]        = useState(false);
   const [menuVisible,      setMenuVisible]       = useState(false);
   const [tabsOvVisible,    setTabsOvVisible]     = useState(false);
+  const [screenHeight,     setScreenHeight]      = useState(height);
 
   const webviewRefs = useRef({});
   const headerY     = useRef(new Animated.Value(-18)).current;
   const headerOp    = useRef(new Animated.Value(0)).current;
   const bodyOp      = useRef(new Animated.Value(0)).current;
   const switchX     = useRef(new Animated.Value(0)).current;
+  const contentWrapperRef = useRef(null);
 
-  const INJECTED_JAVASCRIPT = `
-  // 1. ضبط viewport الأساسي
-  const meta = document.createElement('meta');
-  meta.setAttribute('name', 'viewport');
-  meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover');
-  document.getElementsByTagName('head')[0].appendChild(meta);
-
-  // 2. إصلاح مشكلة 100vh في WebView – هذا هو التعديل الجوهري
-  function setRealHeight() {
-    var vh = window.innerHeight * 0.01;
-    document.documentElement.style.setProperty('--vh', vh + 'px');
-    // نجبر العناصر التي تستخدم 100vh على استخدام المتغير الجديد
-    var style = document.createElement('style');
-    style.id = 'vh-fix';
-    style.innerHTML = '.h-full, .min-h-screen, [style*="100vh"] { height: calc(var(--vh, 1vh) * 100) !important; }';
-    if (!document.getElementById('vh-fix')) {
-      document.head.appendChild(style);
-    }
-  }
-  window.addEventListener('resize', setRealHeight);
-  window.addEventListener('orientationchange', setRealHeight);
-  setRealHeight();
-
-  // 3. السماح بالتمرير دائمًا
-  document.body.style.overflowY = 'auto';
-  document.documentElement.style.overflowY = 'auto';
-  
-  true;
-`;
+  // ✅ تحديث screenHeight عند تغير الـ dimensions
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenHeight(window.height);
+    });
+    return () => subscription?.remove();
+  }, []);
 
   useEffect(() => {
     Animated.stagger(70, [
@@ -323,54 +478,97 @@ export default function AppPortalScreen() {
     );
   };
 
-  return (
-    <View style={[S.root, { backgroundColor: C.bg }]}>
-      {/* ✅ إزالة SafeAreaView من الحاوية الكلية واستخدامها فقط للشريط العلوي لكي يتمدد المتصفح لأسفل الشاشة */}
-      <SafeAreaView style={{ backgroundColor: C.bg }} />
-      
-      {/* ── Address bar ── */}
-      <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
-        <TouchableOpacity
-          style={[S.homeBtn, { backgroundColor: activeTabId ? C.inputBg : C.accent + '25', borderColor: activeTabId ? C.border : C.accent + '50' }]}
-          onPress={() => setActiveTabId(null)}
-        >
-          <Ionicons name={activeTabId ? 'home-outline' : 'home'} size={20} color={activeTabId ? C.muted : C.accent} />
-        </TouchableOpacity>
-
-        <View style={[S.urlBar, { backgroundColor: C.inputBg, borderColor: C.border }]}>
-          <Ionicons name="search" size={14} color={C.muted} style={{ marginLeft: 13 }} />
-          <TextInput
-            style={[S.urlInput, { color: C.text }]}
-            placeholder={t('browser_search_placeholder')}
-            placeholderTextColor={C.muted}
-            value={inputUrl}
-            onChangeText={setInputUrl}
-            onSubmitEditing={handleSearch}
-            autoCapitalize="none"
-            keyboardType="url"
-            returnKeyType="go"
-          />
-          {activeTabId && (
-            <TouchableOpacity onPress={() => setMenuVisible(true)} style={S.dotsBtn}>
-              <Ionicons name="ellipsis-vertical" size={18} color={C.muted} />
-            </TouchableOpacity>
-          )}
+  // ✅ دالة render الـ WebView منفصلة لاستخدامها بحالتين
+  const renderWebView = (tab) => (
+    <View key={tab.id} style={S.webViewWrapper}>
+      {loadingWeb && tab.id === activeTabId && (
+        <View style={[S.webLoader, { backgroundColor: C.bg }]}>
+          <ActivityIndicator size="large" color={C.accent} />
         </View>
+      )}
+      <WebView
+        ref={el => (webviewRefs.current[tab.id] = el)}
+        source={{ uri: tab.url }}
+        style={S.webView}
+        containerStyle={S.webViewContainer}
+        injectedJavaScript={getInjectedJavaScript(screenHeight)}
+        scalesPageToFit={true}
+        bounces={true}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        pullToRefreshEnabled={true}
+        allowsInlineMediaPlayback={true}
+        mediaPlaybackRequiresUserAction={true}
+        startInLoadingState={false}
+        onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
+        onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
+        onNavigationStateChange={nav => {
+          setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
+          if (tab.id === activeTabId) setInputUrl(nav.url);
+        }}
+        onMessage={event => {
+          // Handle messages from web if needed
+          console.log('[WebView] Message:', event.nativeEvent.data);
+        }}
+        onError={syntheticEvent => {
+          const { nativeEvent } = syntheticEvent;
+          console.warn('[WebView] Error:', nativeEvent.description);
+        }}
+      />
+    </View>
+  );
 
-        <TouchableOpacity
-          style={[S.qrBtn, { backgroundColor: C.accent + '20', borderColor: C.accent + '50' }]}
-          onPress={() => navigation.navigate('QRScanner')}
-        >
-          <Ionicons name="qr-code-outline" size={20} color={C.accent} />
-        </TouchableOpacity>
+  return (
+    // ✅ Root View بـ flex: 1 و background صريح
+    <View style={[S.root, { backgroundColor: C.bg, flex: 1 }]}>
+      
+      {/* ✅ SafeAreaView للشريط العلوي فقط */}
+      <SafeAreaView style={[S.safeAreaTop, { backgroundColor: C.bg }]} edges={['top']}>
+        
+        {/* ── Address bar ── */}
+        <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
+          <TouchableOpacity
+            style={[S.homeBtn, { backgroundColor: activeTabId ? C.inputBg : C.accent + '25', borderColor: activeTabId ? C.border : C.accent + '50' }]}
+            onPress={() => setActiveTabId(null)}
+          >
+            <Ionicons name={activeTabId ? 'home-outline' : 'home'} size={20} color={activeTabId ? C.muted : C.accent} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[S.tabsBtn, { backgroundColor: tabs.length ? C.accent + '20' : C.inputBg, borderColor: tabs.length ? C.accent + '55' : C.border }]}
-          onPress={() => tabs.length && setTabsOvVisible(true)}
-        >
-          <Text style={[S.tabsBadge, { color: tabs.length ? C.accent : C.muted }]}>{tabs.length}</Text>
-        </TouchableOpacity>
-      </Animated.View>
+          <View style={[S.urlBar, { backgroundColor: C.inputBg, borderColor: C.border }]}>
+            <Ionicons name="search" size={14} color={C.muted} style={{ marginLeft: 13 }} />
+            <TextInput
+              style={[S.urlInput, { color: C.text }]}
+              placeholder={t('browser_search_placeholder')}
+              placeholderTextColor={C.muted}
+              value={inputUrl}
+              onChangeText={setInputUrl}
+              onSubmitEditing={handleSearch}
+              autoCapitalize="none"
+              keyboardType="url"
+              returnKeyType="go"
+            />
+            {activeTabId && (
+              <TouchableOpacity onPress={() => setMenuVisible(true)} style={S.dotsBtn}>
+                <Ionicons name="ellipsis-vertical" size={18} color={C.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[S.qrBtn, { backgroundColor: C.accent + '20', borderColor: C.accent + '50' }]}
+            onPress={() => navigation.navigate('QRScanner')}
+          >
+            <Ionicons name="qr-code-outline" size={20} color={C.accent} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[S.tabsBtn, { backgroundColor: tabs.length ? C.accent + '20' : C.inputBg, borderColor: tabs.length ? C.accent + '55' : C.border }]}
+            onPress={() => tabs.length && setTabsOvVisible(true)}
+          >
+            <Text style={[S.tabsBadge, { color: tabs.length ? C.accent : C.muted }]}>{tabs.length}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </SafeAreaView>
 
       {/* ── Browser menu ── */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
@@ -440,38 +638,21 @@ export default function AppPortalScreen() {
       </Modal>
 
       {/* ── Main content ── */}
-      <View style={S.contentWrapper}>
+      {/* ✅ contentWrapper يملأ المساحة المتبقية بالكامل */}
+      <View style={S.contentWrapper} ref={contentWrapperRef} collapsable={false}>
         {activeTabId ? (
+          // ✅ WebView يملأ كامل المساحة المتبقية
           tabs.map(tab => (
-            <View key={tab.id} style={{ flex: 1, display: tab.id === activeTabId ? 'flex' : 'none' }}>
-              {loadingWeb && tab.id === activeTabId && (
-                <View style={[S.webLoader, { backgroundColor: C.bg }]}>
-                  <ActivityIndicator size="large" color={C.accent} />
-                </View>
-              )}
-              {/* ✅ WebView معدل بأبعاد صريحة وحقن للـ JS لضبط وضع الجوال */}
-              <WebView
-                ref={el => (webviewRefs.current[tab.id] = el)}
-                source={{ uri: tab.url }}
-                style={S.webViewContainer}
-                containerStyle={S.webViewContainer}
-                injectedJavaScript={INJECTED_JAVASCRIPT}
-                scalesPageToFit={true}
-                bounces={false}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                pullToRefreshEnabled={true}
-                onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
-                onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
-                onNavigationStateChange={nav => {
-                  setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
-                  if (tab.id === activeTabId) setInputUrl(nav.url);
-                }}
-              />
-            </View>
+            tab.id === activeTabId ? renderWebView(tab) : null
           ))
         ) : (
-          <Animated.ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} style={{ opacity: bodyOp }}>
+          // ✅ ScrollView للمحتوى الاستكشافي
+          <Animated.ScrollView 
+            showsVerticalScrollIndicator={false} 
+            contentContainerStyle={{ paddingBottom: 60, flexGrow: 1 }} 
+            style={{ opacity: bodyOp }}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={S.hero}>
               <View style={[S.heroBadge, { backgroundColor: C.accent + '18', borderColor: C.accent + '40' }]}>
                 <View style={[S.heroPulse, { backgroundColor: C.accent }]} />
@@ -605,12 +786,48 @@ export default function AppPortalScreen() {
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
 const S = StyleSheet.create({
-  root: { flex: 1 },
-  // ✅ التعديل هنا: استخدام flex: 1 لكي يتمدد WebView ليملأ الشاشة السفلية كاملة بدون قص
-  contentWrapper: { flex: 1, width: '100%', height: '100%' },
-  webViewContainer: { flex: 1, width: '100%', height: '100%' },
+  // ✅ Root - يملأ كل المساحة مع flex: 1
+  root: { 
+    flex: 1,
+    // ✅ إضافة padding للأمان في الأسفل (home indicator)
+    paddingBottom: Platform.OS === 'ios' ? 34 : 0,
+  },
   
-  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, paddingTop: 10, gap: 8 },
+  // ✅ SafeArea للشريط العلوي فقط
+  safeAreaTop: {
+    width: '100%',
+    zIndex: 10,
+  },
+  
+  // ✅ contentWrapper - يملأ المساحة المتبقية
+  contentWrapper: { 
+    flex: 1,
+    width: '100%',
+  },
+  
+  // ✅ WebView wrapper - يملأ كامل المساحة
+  webViewWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  
+  // ✅ WebView style و container
+  webView: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  },
+  
+  webViewContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'transparent',
+  },
+  
+  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, gap: 8 },
   homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
   urlInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
