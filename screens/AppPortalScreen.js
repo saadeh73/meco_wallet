@@ -197,6 +197,87 @@ const getInjectedJavaScript = (screenHeight) => {
     }
     
     // ─────────────────────────────────────────────────────────────
+    // 4.5 إصلاح شعارات MECO اللي تطلع غريبة في WebView
+    //     (Lottie animations / SVGs / position: fixed elements)
+    // ─────────────────────────────────────────────────────────────
+    function fixMecoLogos() {
+      // CSS قوي لإخفاء/احتواء الشعارات المعطوبة
+      let mecoStyle = document.getElementById('meco-logo-fix');
+      if (mecoStyle) mecoStyle.remove();
+      
+      mecoStyle = document.createElement('style');
+      mecoStyle.id = 'meco-logo-fix';
+      mecoStyle.innerHTML = [
+        // إخفاء Lottie animations اللي بتسبب مشاكل
+        'lottie-player, [class*="lottie"], [class*="Lottie"], [data-animation-type="lottie"] {',
+        '  max-width: 100% !important;',
+        '  max-height: 60px !important;',
+        '  object-fit: contain !important;',
+        '  overflow: hidden !important;',
+        '  position: static !important;',
+        '}',
+        // إصلاح عناصر SVG الكبيرة
+        'svg[width="100%"], svg[style*="width: 100%"] {',
+        '  max-width: 100% !important;',
+        '  max-height: 80px !important;',
+        '  height: auto !important;',
+        '}',
+        // إصلاح صور الشعارات
+        'img[src*="logo"], img[class*="logo"], img[alt*="logo" i], img[alt*="meco" i] {',
+        '  max-width: 100% !important;',
+        '  max-height: 60px !important;',
+        '  object-fit: contain !important;',
+        '  width: auto !important;',
+        '  height: auto !important;',
+        '}',
+        // إصلاح الـ fixed divs اللي تحتوي على شعارات
+        'div[style*="position: fixed"][style*="z-index"] {',
+        '  max-width: 100vw !important;',
+        '  max-height: 100vh !important;',
+        '  overflow: hidden !important;',
+        '}',
+        // إخفاء عناصر الـ canvas الكبيرة
+        'canvas {',
+        '  max-width: 100% !important;',
+        '  max-height: 80px !important;',
+        '  object-fit: contain !important;',
+        '}',
+        // إصلاح خلفيات الـ SVG أو الـ div اللي تحتوي على meco
+        '[class*="meco-logo"], [class*="MecoLogo"], [class*="brand"], [class*="Brand"] {',
+        '  max-width: 100% !important;',
+        '  max-height: 60px !important;',
+        '  overflow: hidden !important;',
+        '  display: block !important;',
+        '  position: static !important;',
+        '}',
+      ].join('\\n');
+      document.head.appendChild(mecoStyle);
+      
+      // تنظيف inline styles على الشعارات
+      document.querySelectorAll('img, svg, lottie-player, canvas, div').forEach(el => {
+        const src = (el.src || el.getAttribute('src') || '').toLowerCase();
+        const alt = (el.alt || el.getAttribute('alt') || '').toLowerCase();
+        const cls = (el.className || '').toString().toLowerCase();
+        
+        const isLogo = src.includes('logo') || alt.includes('meco') || alt.includes('logo') || 
+                       cls.includes('logo') || cls.includes('meco') || cls.includes('brand') ||
+                       cls.includes('lottie');
+        
+        if (isLogo) {
+          el.style.maxWidth = '100%';
+          el.style.maxHeight = '60px';
+          el.style.width = 'auto';
+          el.style.height = 'auto';
+          el.style.objectFit = 'contain';
+          el.style.overflow = 'hidden';
+          if (el.style.position === 'fixed' || el.style.position === 'absolute') {
+            el.style.position = 'static';
+          }
+        }
+      });
+    }
+    
+    // ─────────────────────────────────────────────────────────────
     // 5. Event Listeners للـ resize و orientation change
     // ─────────────────────────────────────────────────────────────
     window.addEventListener('resize', function() {
@@ -228,12 +309,17 @@ const getInjectedJavaScript = (screenHeight) => {
     // ─────────────────────────────────────────────────────────────
     fixVH();
     fixScrolling();
+    fixMecoLogos();
     
     // تنفيذ متكرر لضمان تطبيق الإصلاحات بعد تحميل كل شيء
     setTimeout(fixVH, 100);
     setTimeout(fixVH, 500);
     setTimeout(fixVH, 1000);
     setTimeout(fixVH, 2000);
+    setTimeout(fixMecoLogos, 200);
+    setTimeout(fixMecoLogos, 800);
+    setTimeout(fixMecoLogos, 1500);
+    setTimeout(fixMecoLogos, 3000);
     
     // MutationObserver لمراقبة التغييرات في DOM
     if (typeof MutationObserver !== 'undefined') {
@@ -246,6 +332,7 @@ const getInjectedJavaScript = (screenHeight) => {
         });
         if (shouldFix) {
           setTimeout(fixVH, 50);
+          setTimeout(fixMecoLogos, 50);
         }
       });
       
