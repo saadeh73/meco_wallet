@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
-import { pairWalletConnect, initWalletConnect } from '../services/walletConnectService';
+import { pairWalletConnect, initWalletConnect, WCEvents } from '../services/walletConnectService';
 
 const { width, height } = Dimensions.get('window');
 const BOOKMARKS_KEY = '@meco_bookmarks';
@@ -92,7 +92,168 @@ const TickerStrip = ({ items, C }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ✅ كود JavaScript قوي ومُحكم لاحتواء WebView ومنع أي تجاوزات
 // ═══════════════════════════════════════════════════════════════════════════════
-const INJECTED_JAVASCRIPT = `
+const getInjectedJavaScript = (walletPubKey) => {
+  const pubKey = walletPubKey || '';
+
+  return `
+(function() {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // 0. حقن Solana Wallet Provider (مهم جداً لـ Orca)
+  // ═══════════════════════════════════════════════════════════
+  (function injectSolanaProvider() {
+    if (window.solana) return;
+    
+    // Event listener للـ dApp لما يطلب connect
+    const pendingRequests = new Map();
+    let requestId = 0;
+    
+    // إنشاء wallet adapter متوافق مع Solana dApps
+    window.solana = {
+      isPhantom: false,
+      isMecoWallet: true,
+      isConnected: ${!!pubKey},
+      publicKey: null,
+      
+      // محاكاة PublicKey object
+      _pubKey: '${pubKey}',
+      
+      // دالة connect اللي dApp بتستدعيها
+      async connect() {
+        console.log('[MECO Wallet] connect() called');
+        if (window.ReactNativeWebView) {
+          return new Promise((resolve) => {
+            const id = ++requestId;
+            pendingRequests.set('connect_' + id, resolve);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'connect_request',
+              id: id,
+            }));
+            // timeout بعد 60 ثانية
+            setTimeout(() => {
+              if (pendingRequests.has('connect_' + id)) {
+                pendingRequests.delete('connect_' + id);
+                resolve({ publicKey: window.solana._pubKey });
+              }
+            }, 60000);
+          });
+        }
+        return { publicKey: window.solana._pubKey };
+      },
+      
+      async disconnect() {
+        console.log('[MECO Wallet] disconnect() called');
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'disconnect_request',
+          }));
+        }
+      },
+      
+      async signTransaction(transaction) {
+        console.log('[MECO Wallet] signTransaction() called');
+        const serialized = transaction.serialize ? transaction.serialize() : transaction;
+        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(serialized)));
+        
+        if (window.ReactNativeWebView) {
+          return new Promise((resolve) => {
+            const id = ++requestId;
+            pendingRequests.set('sign_' + id, resolve);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'sign_transaction',
+              id: id,
+              method: 'solana_signTransaction',
+              transaction: base64,
+            }));
+            setTimeout(() => {
+              if (pendingRequests.has('sign_' + id)) {
+                pendingRequests.delete('sign_' + id);
+                resolve(null); // فشل
+              }
+            }, 120000);
+          });
+        }
+        return null;
+      },
+      
+      async signAndSendTransaction(transaction) {
+        console.log('[MECO Wallet] signAndSendTransaction() called');
+        const serialized = transaction.serialize ? transaction.serialize() : transaction;
+        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(serialized)));
+        
+        if (window.ReactNativeWebView) {
+          return new Promise((resolve) => {
+            const id = ++requestId;
+            pendingRequests.set('sign_send_' + id, resolve);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'sign_and_send_transaction',
+              id: id,
+              method: 'solana_signAndSendTransaction',
+              transaction: base64,
+            }));
+            setTimeout(() => {
+              if (pendingRequests.has('sign_send_' + id)) {
+                pendingRequests.delete('sign_send_' + id);
+                resolve(null);
+              }
+            }, 120000);
+          });
+        }
+        return null;
+      },
+      
+      async signMessage(message) {
+        console.log('[MECO Wallet] signMessage() called');
+        const messageStr = typeof message === 'string' ? message : new TextDecoder().decode(message);
+        
+        if (window.ReactNativeWebView) {
+          return new Promise((resolve) => {
+            const id = ++requestId;
+            pendingRequests.set('sign_msg_' + id, resolve);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'sign_message',
+              id: id,
+              method: 'solana_signMessage',
+              message: messageStr,
+            }));
+            setTimeout(() => {
+              if (pendingRequests.has('sign_msg_' + id)) {
+                pendingRequests.delete('sign_msg_' + id);
+                resolve(null);
+              }
+            }, 120000);
+          });
+        }
+        return null;
+      },
+      
+      // دالة للردود الواردة من React Native
+      _handleResponse: function(id, result) {
+        for (let [key, resolver] of pendingRequests) {
+          if (key.endsWith('_' + id)) {
+            pendingRequests.delete(key);
+            resolver(result);
+            return true;
+          }
+        }
+        return false;
+      },
+    };
+    
+    // تخزين الـ pending requests في window للوصول من React Native
+    window.__mecoPendingRequests = pendingRequests;
+    
+    // إطلاق event كما يفعل Phantom
+    window.dispatchEvent(new Event('solana#initialized'));
+    
+    console.log('[MECO Wallet] Solana provider injected');
+  })();
+
+  // ═══════════════════════════════════════════════════════════
+  // 1. ضبط Viewport مع viewport-fit=cover
+  // ═══════════════════════════════════════════════════════════
+  function setViewport() {
 (function() {
   'use strict';
 
@@ -299,6 +460,11 @@ const INJECTED_JAVASCRIPT = `
   true;
 })();
 `;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ كود JavaScript قوي ومُحكم لاحتواء WebView ومنع أي تجاوزات
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
@@ -307,6 +473,7 @@ export default function AppPortalScreen() {
   const route        = useRoute();
   const theme        = useAppStore(s => s.theme);
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
+  const walletPubKey = useAppStore(s => s.walletPublicKey); // ✅ جلب الـ public key
   const isDark       = theme === 'dark';
 
   const C = {
@@ -340,6 +507,57 @@ export default function AppPortalScreen() {
   const headerOp    = useRef(new Animated.Value(0)).current;
   const bodyOp      = useRef(new Animated.Value(0)).current;
   const switchX     = useRef(new Animated.Value(0)).current;
+  
+  // ✅ معالجة رسائل WebView من dApp
+  const onWebViewMessage = (tabId) => (event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      console.log('[WebView Message]:', data);
+      
+      switch (data.type) {
+        case 'connect_request':
+          // dApp يطلب الاتصال - نفتح Modal الموافقة
+          WCEvents.emit('dapp_connect_request', { 
+            tabId, 
+            requestId: data.id,
+            onApprove: () => sendResponseToWebView(tabId, data.id, { publicKey: walletPubKey }),
+            onReject:  () => sendResponseToWebView(tabId, data.id, null),
+          });
+          break;
+          
+        case 'sign_transaction':
+        case 'sign_and_send_transaction':
+        case 'sign_message':
+          // dApp يطلب التوقيع
+          WCEvents.emit('dapp_sign_request', {
+            tabId,
+            type: data.type,
+            method: data.method,
+            requestId: data.id,
+            transaction: data.transaction,
+            message: data.message,
+            onApprove: (result) => sendResponseToWebView(tabId, data.id, result),
+            onReject:  () => sendResponseToWebView(tabId, data.id, null),
+          });
+          break;
+          
+        case 'disconnect_request':
+          console.log('[WebView] dApp requested disconnect');
+          break;
+      }
+    } catch (err) {
+      console.error('[WebView Message Error]:', err);
+    }
+  };
+  
+  // ✅ إرسال الرد من React Native للـ WebView
+  const sendResponseToWebView = (tabId, requestId, result) => {
+    const webView = webviewRefs.current[tabId];
+    if (!webView) return;
+    
+    const js = `window.solana._handleResponse(${requestId}, ${JSON.stringify(result)}); true;`;
+    webView.injectJavaScript(js);
+  };
 
   useEffect(() => {
     Animated.stagger(70, [
@@ -641,7 +859,7 @@ export default function AppPortalScreen() {
                   source={{ uri: tab.url }}
                   style={S.webView}
                   containerStyle={S.webViewContainer}
-                  injectedJavaScript={INJECTED_JAVASCRIPT}
+                  injectedJavaScript={getInjectedJavaScript(walletPubKey)}
                   scalesPageToFit={true}
                   scrollEnabled={true}
                   bounces={false}
@@ -656,6 +874,7 @@ export default function AppPortalScreen() {
                     setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
                     if (tab.id === activeTabId) setInputUrl(nav.url);
                   }}
+                  onMessage={onWebViewMessage(tab.id)}
                 />
               </View>
             )
