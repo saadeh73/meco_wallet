@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, Image, Platform, FlatList, ActivityIndicator,
   Modal, TextInput, Keyboard, TouchableWithoutFeedback,
-  Animated, SafeAreaView, KeyboardAvoidingView
+  Animated,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -36,6 +36,7 @@ const CAT = {
   pools:   { accent: '#F59E0B', bg: 'rgba(245,158,11,0.13)',  icon: 'water-outline'           },
 };
 
+// ─── SafeImage ────────────────────────────────────────────────────────────────
 const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor = '#606080' }) => {
   const [err, setErr] = useState(false);
   if (err || !uri)
@@ -47,6 +48,7 @@ const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor =
   return <Image source={{ uri }} style={style} onError={() => setErr(true)} />;
 };
 
+// ─── Spring-press wrapper ─────────────────────────────────────────────────────
 const Pressable = ({ onPress, style, children }) => {
   const sc = useRef(new Animated.Value(1)).current;
   const spring = v => Animated.spring(sc, { toValue: v, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
@@ -57,6 +59,7 @@ const Pressable = ({ onPress, style, children }) => {
   );
 };
 
+// ─── Live Ticker ──────────────────────────────────────────────────────────────
 const TickerStrip = ({ items, C }) => {
   const x = useRef(new Animated.Value(0)).current;
   const ITEM_W = 140;
@@ -86,268 +89,218 @@ const TickerStrip = ({ items, C }) => {
   );
 };
 
-// ✅ INJECTED_JAVASCRIPT محسّن لحل مشكلة 100vh والـ viewport بشكل شامل
-const getInjectedJavaScript = (screenHeight) => {
-  return `
-  (function() {
-    'use strict';
-    
-    // ─────────────────────────────────────────────────────────────
-    // 1. إصلاح ViewportMeta - ضمان دعم full height
-    // ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// ✅ كود JavaScript قوي ومُحكم لاحتواء WebView ومنع أي تجاوزات
+// ═══════════════════════════════════════════════════════════════════════════════
+const INJECTED_JAVASCRIPT = `
+(function() {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // 1. ضبط Viewport مع viewport-fit=cover
+  // ═══════════════════════════════════════════════════════════
+  function setViewport() {
     let meta = document.querySelector('meta[name="viewport"]');
     if (!meta) {
       meta = document.createElement('meta');
       meta.name = 'viewport';
       document.head.appendChild(meta);
     }
-    // نستخدم viewport-fit=cover للتعامل مع الشاشات اللي فيها notch
-    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes, viewport-fit=cover';
+    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes, viewport-fit=cover, shrink-to-fit=no';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 2. ضبط CSS containment على مستوى document لمنع أي تجاوز
+  // ═══════════════════════════════════════════════════════════
+  function applyContainment() {
+    const css = document.createElement('style');
+    css.id = 'meco-containment';
+    css.innerHTML = \`
+      /* ✅ احتواء document */
+      html, body {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        position: relative !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior: contain !important;
+        contain: layout style !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      
+      /* ✅ احتواء جميع العناصر داخل الشاشة */
+      * {
+        max-width: 100vw !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* ✅ منع أي عنصر من الخروج (نسمح فقط بـ overflow-y للتمرير) */
+      body > * {
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+      }
+      
+      /* ✅ تحويل position fixed إلى absolute لمنع الـ overlays المعطوبة */
+      [style*="position: fixed"],
+      [style*="position:fixed"] {
+        position: absolute !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+      }
+      
+      /* ✅ ضبط Lottie animations */
+      lottie-player, dotlottie-player,
+      [class*="lottie"], [class*="Lottie"],
+      [data-animation-type] {
+        max-width: 100% !important;
+        max-height: 80px !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        overflow: hidden !important;
+      }
+      
+      /* ✅ ضبط SVGs الكبيرة */
+      svg {
+        max-width: 100% !important;
+        max-height: 100% !important;
+        height: auto !important;
+      }
+      
+      /* ✅ ضبط الشعارات */
+      img[src*="logo" i], img[alt*="logo" i], img[alt*="meco" i],
+      [class*="logo" i], [class*="Logo"], [class*="brand" i], [class*="Brand"] {
+        max-width: 100% !important;
+        max-height: 60px !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+      }
+      
+      /* ✅ ضبط الـ canvas */
+      canvas {
+        max-width: 100% !important;
+        max-height: 100% !important;
+        object-fit: contain !important;
+      }
+      
+      /* ✅ منع overflow الـ root divs */
+      #root, #app, #__next, [class*="App"], [class*="app"] {
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+      }
+    \`;
     
-    // ─────────────────────────────────────────────────────────────
-    // 2. إصلاح مشكلة 100vh في iOS Safari / Android Chrome
-    //    (المشكلة الأساسية - mobile browsers يعتبرون 100vh = full screen including address bar)
-    // ─────────────────────────────────────────────────────────────
-    function fixVH() {
-      // حساب الارتفاع الفعلي بدون الـ browser chrome
-      const documentHeight = Math.max(
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight,
-        document.body.offsetHeight,
-        document.documentElement.offsetHeight,
-        document.documentElement.clientHeight
-      );
-      
-      // استخدام innerHeight إذا متاح (يعطي الارتفاع الفعلي للviewport)
-      const viewportHeight = window.innerHeight || documentHeight;
-      
-      // نحسب 1vh كـ 1% من الارتفاع الفعلي
-      const vh = viewportHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', vh + 'px');
-      document.documentElement.style.setProperty('--real-height', viewportHeight + 'px');
-      
-      // تطبيق على body
-      document.body.style.minHeight = viewportHeight + 'px';
-      document.body.style.height = viewportHeight + 'px';
-      document.documentElement.style.minHeight = viewportHeight + 'px';
-      document.documentElement.style.height = viewportHeight + 'px';
-      
-      // إصلاح العناصر اللي تستخدم 100vh
-      const style = document.createElement('style');
-      style.id = 'meco-vh-fix';
-      style.innerHTML = [
-        '.__meco_fixed_height { height: ' + viewportHeight + 'px !important; }',
-        '[style*="100vh"] { height: ' + viewportHeight + 'px !important; }',
-        '[style*="100vh"] { min-height: ' + viewportHeight + 'px !important; }',
-        '[class*="min-h-screen"] { min-height: ' + viewportHeight + 'px !important; }',
-        '[class*="h-screen"] { height: ' + viewportHeight + 'px !important; }',
-        '[class*="h-full"] { height: ' + viewportHeight + 'px !important; }',
-        '[class*="container"] { max-width: 100% !important; }',
-        // إصلاح للـ Orca تحديداً
-        '[class*="Pool"] { min-height: ' + viewportHeight + 'px !important; }',
-        '[class*="Liquidity"] { min-height: ' + viewportHeight + 'px !important; }',
-        '[id*="pool"] { min-height: ' + viewportHeight + 'px !important; }',
-      ].join('\\n');
-      
-      const existing = document.getElementById('meco-vh-fix');
-      if (existing) existing.remove();
-      document.head.appendChild(style);
-      
-      // إصلاح inline styles على العناصر الرئيسية
-      document.querySelectorAll('[style*="100vh"], [style*="100vh"]').forEach(el => {
-        if (el.scrollHeight > viewportHeight) {
-          el.style.minHeight = viewportHeight + 'px';
-        }
-      });
-    }
+    const existing = document.getElementById('meco-containment');
+    if (existing) existing.remove();
+    document.head.appendChild(css);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 3. ضبط الـ height بشكل ديناميكي (iOS Safari fix)
+  // ═══════════════════════════════════════════════════════════
+  function fixViewportHeight() {
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', vh + 'px');
+    document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
     
-    // ─────────────────────────────────────────────────────────────
-    // 3. إصلاح scrolling - ضمان أن الصفحة قابلة للتمرير
-    // ─────────────────────────────────────────────────────────────
-    function fixScrolling() {
-      document.body.style.overflowY = 'auto';
-      document.body.style.overflowX = 'hidden';
-      document.documentElement.style.overflowY = 'auto';
-      document.documentElement.style.overflowX = 'hidden';
-      document.documentElement.style.position = 'relative';
-      document.body.style.position = 'relative';
-      
-      // إزالة fixed positioning من العناصر اللي بتسبب مشاكل
-      document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]').forEach(el => {
-        const style = el.getAttribute('style') || '';
-        if (style.includes('top: 0') && style.includes('left: 0') && style.includes('right: 0')) {
-          el.style.position = 'absolute';
-        }
-      });
-    }
+    // ضبط body height
+    document.body.style.minHeight = window.innerHeight + 'px';
     
-    // ─────────────────────────────────────────────────────────────
-    // 4. إصلاح للعناصر الثابتة (fixed/sticky) اللي ممكن تعطل التفاعل
-    // ─────────────────────────────────────────────────────────────
-    function fixFixedElements() {
-      // تحويل fixed overlays إلى relative إن أمكن
-      document.querySelectorAll('div[style*="position: fixed"], div[style*="position:fixed"]').forEach(el => {
-        const rect = el.getBoundingClientRect();
-        // إن كان العنصر يغطي كل الشاشة تقريباً (overlay)
-        if (rect.width > window.innerWidth * 0.9 && rect.height > window.innerHeight * 0.9) {
-          // نخليه position absolute بدل fixed
-          // el.style.position = 'absolute'; // ⚠️ ممكن يكسر التصميم، نستخدم حل آخر
-        }
-      });
-    }
-    
-    // ─────────────────────────────────────────────────────────────
-    // 4.5 إصلاح شعارات MECO اللي تطلع غريبة في WebView
-    //     (Lottie animations / SVGs / position: fixed elements)
-    // ─────────────────────────────────────────────────────────────
-    function fixMecoLogos() {
-      // CSS قوي لإخفاء/احتواء الشعارات المعطوبة
-      let mecoStyle = document.getElementById('meco-logo-fix');
-      if (mecoStyle) mecoStyle.remove();
-      
-      mecoStyle = document.createElement('style');
-      mecoStyle.id = 'meco-logo-fix';
-      mecoStyle.innerHTML = [
-        // إخفاء Lottie animations اللي بتسبب مشاكل
-        'lottie-player, [class*="lottie"], [class*="Lottie"], [data-animation-type="lottie"] {',
-        '  max-width: 100% !important;',
-        '  max-height: 60px !important;',
-        '  object-fit: contain !important;',
-        '  overflow: hidden !important;',
-        '  position: static !important;',
-        '}',
-        // إصلاح عناصر SVG الكبيرة
-        'svg[width="100%"], svg[style*="width: 100%"] {',
-        '  max-width: 100% !important;',
-        '  max-height: 80px !important;',
-        '  height: auto !important;',
-        '}',
-        // إصلاح صور الشعارات
-        'img[src*="logo"], img[class*="logo"], img[alt*="logo" i], img[alt*="meco" i] {',
-        '  max-width: 100% !important;',
-        '  max-height: 60px !important;',
-        '  object-fit: contain !important;',
-        '  width: auto !important;',
-        '  height: auto !important;',
-        '}',
-        // إصلاح الـ fixed divs اللي تحتوي على شعارات
-        'div[style*="position: fixed"][style*="z-index"] {',
-        '  max-width: 100vw !important;',
-        '  max-height: 100vh !important;',
-        '  overflow: hidden !important;',
-        '}',
-        // إخفاء عناصر الـ canvas الكبيرة
-        'canvas {',
-        '  max-width: 100% !important;',
-        '  max-height: 80px !important;',
-        '  object-fit: contain !important;',
-        '}',
-        // إصلاح خلفيات الـ SVG أو الـ div اللي تحتوي على meco
-        '[class*="meco-logo"], [class*="MecoLogo"], [class*="brand"], [class*="Brand"] {',
-        '  max-width: 100% !important;',
-        '  max-height: 60px !important;',
-        '  overflow: hidden !important;',
-        '  display: block !important;',
-        '  position: static !important;',
-        '}',
-      ].join('\\n');
-      document.head.appendChild(mecoStyle);
-      
-      // تنظيف inline styles على الشعارات
-      document.querySelectorAll('img, svg, lottie-player, canvas, div').forEach(el => {
-        const src = (el.src || el.getAttribute('src') || '').toLowerCase();
-        const alt = (el.alt || el.getAttribute('alt') || '').toLowerCase();
-        const cls = (el.className || '').toString().toLowerCase();
-        
-        const isLogo = src.includes('logo') || alt.includes('meco') || alt.includes('logo') || 
-                       cls.includes('logo') || cls.includes('meco') || cls.includes('brand') ||
-                       cls.includes('lottie');
-        
-        if (isLogo) {
-          el.style.maxWidth = '100%';
-          el.style.maxHeight = '60px';
-          el.style.width = 'auto';
-          el.style.height = 'auto';
-          el.style.objectFit = 'contain';
-          el.style.overflow = 'hidden';
-          if (el.style.position === 'fixed' || el.style.position === 'absolute') {
-            el.style.position = 'static';
-          }
-        }
-      });
-    }
-    
-    // ─────────────────────────────────────────────────────────────
-    // 5. Event Listeners للـ resize و orientation change
-    // ─────────────────────────────────────────────────────────────
-    window.addEventListener('resize', function() {
-      fixVH();
-      fixScrolling();
+    // ضبط root divs
+    const rootSelectors = ['#root', '#app', '#__next'];
+    rootSelectors.forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el) {
+        el.style.minHeight = window.innerHeight + 'px';
+        el.style.maxWidth = '100vw';
+      }
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 4. منع الـ zoom المزدوج على iOS
+  // ═══════════════════════════════════════════════════════════
+  function preventDoubleZoom() {
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(e) {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) e.preventDefault();
+      lastTouchEnd = now;
+    }, { passive: false });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 5. MutationObserver لإعادة تطبيق containment
+  // ═══════════════════════════════════════════════════════════
+  function setupObserver() {
+    if (typeof MutationObserver === 'undefined') return;
     
-    window.addEventListener('orientationchange', function() {
-      setTimeout(function() {
-        fixVH();
-        fixScrolling();
+    const observer = new MutationObserver(() => {
+      // إعادة تطبيق بعد أي تغيير
+      setTimeout(() => {
+        applyContainment();
+        fixViewportHeight();
       }, 100);
     });
     
-    // ─────────────────────────────────────────────────────────────
-    // 6. Touch handling - تحسين التفاعل مع العناصر القابلة للتمرير
-    // ─────────────────────────────────────────────────────────────
-    document.addEventListener('touchstart', function(e) {
-      // السماح بالتمرير في أي مكان
-      e.stopPropagation();
-    }, { passive: true });
-    
-    document.addEventListener('touchmove', function(e) {
-      // لا نمنع الـ touchmove للسماح بالتمرير
-    }, { passive: true });
-    
-    // ─────────────────────────────────────────────────────────────
-    // 7. تنفيذ الإصلاحات
-    // ─────────────────────────────────────────────────────────────
-    fixVH();
-    fixScrolling();
-    fixMecoLogos();
-    
-    // تنفيذ متكرر لضمان تطبيق الإصلاحات بعد تحميل كل شيء
-    setTimeout(fixVH, 100);
-    setTimeout(fixVH, 500);
-    setTimeout(fixVH, 1000);
-    setTimeout(fixVH, 2000);
-    setTimeout(fixMecoLogos, 200);
-    setTimeout(fixMecoLogos, 800);
-    setTimeout(fixMecoLogos, 1500);
-    setTimeout(fixMecoLogos, 3000);
-    
-    // MutationObserver لمراقبة التغييرات في DOM
-    if (typeof MutationObserver !== 'undefined') {
-      const observer = new MutationObserver(function(mutations) {
-        let shouldFix = false;
-        mutations.forEach(function(mutation) {
-          if (mutation.addedNodes.length > 0) {
-            shouldFix = true;
-          }
-        });
-        if (shouldFix) {
-          setTimeout(fixVH, 50);
-          setTimeout(fixMecoLogos, 50);
-        }
-      });
-      
+    if (document.body) {
       observer.observe(document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class']
       });
     }
-    
-    console.log('[MECO] WebView viewport fix applied');
-  })();
-  true;
-  `;
-};
+  }
 
+  // ═══════════════════════════════════════════════════════════
+  // 6. Event Listeners
+  // ═══════════════════════════════════════════════════════════
+  window.addEventListener('resize', () => {
+    fixViewportHeight();
+    applyContainment();
+  });
+  
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      fixViewportHeight();
+      applyContainment();
+    }, 200);
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // 7. التنفيذ الفوري والمتكرر
+  // ═══════════════════════════════════════════════════════════
+  setViewport();
+  applyContainment();
+  fixViewportHeight();
+  preventDoubleZoom();
+  
+  // تطبيق متكرر لضمان العمل مع المواقع اللي بتحمّل ببطء
+  [100, 300, 800, 1500, 3000, 5000].forEach(delay => {
+    setTimeout(() => {
+      setViewport();
+      applyContainment();
+      fixViewportHeight();
+    }, delay);
+  });
+  
+  // إعداد observer بعد تحميل DOM
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupObserver);
+  } else {
+    setupObserver();
+  }
+  
+  console.log('[MECO] WebView containment applied');
+  true;
+})();
+`;
+
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
   const { t }        = useTranslation();
   const navigation   = useNavigation();
@@ -381,22 +334,12 @@ export default function AppPortalScreen() {
   const [loadingWeb,       setLoadingWeb]        = useState(false);
   const [menuVisible,      setMenuVisible]       = useState(false);
   const [tabsOvVisible,    setTabsOvVisible]     = useState(false);
-  const [screenHeight,     setScreenHeight]      = useState(height);
 
   const webviewRefs = useRef({});
   const headerY     = useRef(new Animated.Value(-18)).current;
   const headerOp    = useRef(new Animated.Value(0)).current;
   const bodyOp      = useRef(new Animated.Value(0)).current;
   const switchX     = useRef(new Animated.Value(0)).current;
-  const contentWrapperRef = useRef(null);
-
-  // ✅ تحديث screenHeight عند تغير الـ dimensions
-  useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
-      setScreenHeight(window.height);
-    });
-    return () => subscription?.remove();
-  }, []);
 
   useEffect(() => {
     Animated.stagger(70, [
@@ -565,97 +508,52 @@ export default function AppPortalScreen() {
     );
   };
 
-  // ✅ دالة render الـ WebView منفصلة لاستخدامها بحالتين
-  const renderWebView = (tab) => (
-    <View key={tab.id} style={S.webViewWrapper}>
-      {loadingWeb && tab.id === activeTabId && (
-        <View style={[S.webLoader, { backgroundColor: C.bg }]}>
-          <ActivityIndicator size="large" color={C.accent} />
-        </View>
-      )}
-      <WebView
-        ref={el => (webviewRefs.current[tab.id] = el)}
-        source={{ uri: tab.url }}
-        style={S.webView}
-        containerStyle={S.webViewContainer}
-        injectedJavaScript={getInjectedJavaScript(screenHeight)}
-        scalesPageToFit={true}
-        bounces={true}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        pullToRefreshEnabled={true}
-        allowsInlineMediaPlayback={true}
-        mediaPlaybackRequiresUserAction={true}
-        startInLoadingState={false}
-        onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
-        onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
-        onNavigationStateChange={nav => {
-          setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
-          if (tab.id === activeTabId) setInputUrl(nav.url);
-        }}
-        onMessage={event => {
-          // Handle messages from web if needed
-          console.log('[WebView] Message:', event.nativeEvent.data);
-        }}
-        onError={syntheticEvent => {
-          const { nativeEvent } = syntheticEvent;
-          console.warn('[WebView] Error:', nativeEvent.description);
-        }}
-      />
-    </View>
-  );
-
   return (
-    // ✅ Root View بـ flex: 1 و background صريح
-    <View style={[S.root, { backgroundColor: C.bg, flex: 1 }]}>
-      
-      {/* ✅ SafeAreaView للشريط العلوي فقط */}
-      <SafeAreaView style={[S.safeAreaTop, { backgroundColor: C.bg }]} edges={['top']}>
-        
-        {/* ── Address bar ── */}
-        <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
-          <TouchableOpacity
-            style={[S.homeBtn, { backgroundColor: activeTabId ? C.inputBg : C.accent + '25', borderColor: activeTabId ? C.border : C.accent + '50' }]}
-            onPress={() => setActiveTabId(null)}
-          >
-            <Ionicons name={activeTabId ? 'home-outline' : 'home'} size={20} color={activeTabId ? C.muted : C.accent} />
-          </TouchableOpacity>
+    <View style={[S.root, { backgroundColor: C.bg }]}>
 
-          <View style={[S.urlBar, { backgroundColor: C.inputBg, borderColor: C.border }]}>
-            <Ionicons name="search" size={14} color={C.muted} style={{ marginLeft: 13 }} />
-            <TextInput
-              style={[S.urlInput, { color: C.text }]}
-              placeholder={t('browser_search_placeholder')}
-              placeholderTextColor={C.muted}
-              value={inputUrl}
-              onChangeText={setInputUrl}
-              onSubmitEditing={handleSearch}
-              autoCapitalize="none"
-              keyboardType="url"
-              returnKeyType="go"
-            />
-            {activeTabId && (
-              <TouchableOpacity onPress={() => setMenuVisible(true)} style={S.dotsBtn}>
-                <Ionicons name="ellipsis-vertical" size={18} color={C.muted} />
-              </TouchableOpacity>
-            )}
-          </View>
+      {/* ── Address bar ── */}
+      <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
+        <TouchableOpacity
+          style={[S.homeBtn, { backgroundColor: activeTabId ? C.inputBg : C.accent + '25', borderColor: activeTabId ? C.border : C.accent + '50' }]}
+          onPress={() => setActiveTabId(null)}
+        >
+          <Ionicons name={activeTabId ? 'home-outline' : 'home'} size={20} color={activeTabId ? C.muted : C.accent} />
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[S.qrBtn, { backgroundColor: C.accent + '20', borderColor: C.accent + '50' }]}
-            onPress={() => navigation.navigate('QRScanner')}
-          >
-            <Ionicons name="qr-code-outline" size={20} color={C.accent} />
-          </TouchableOpacity>
+        <View style={[S.urlBar, { backgroundColor: C.inputBg, borderColor: C.border }]}>
+          <Ionicons name="search" size={14} color={C.muted} style={{ marginLeft: 13 }} />
+          <TextInput
+            style={[S.urlInput, { color: C.text }]}
+            placeholder={t('browser_search_placeholder')}
+            placeholderTextColor={C.muted}
+            value={inputUrl}
+            onChangeText={setInputUrl}
+            onSubmitEditing={handleSearch}
+            autoCapitalize="none"
+            keyboardType="url"
+            returnKeyType="go"
+          />
+          {activeTabId && (
+            <TouchableOpacity onPress={() => setMenuVisible(true)} style={S.dotsBtn}>
+              <Ionicons name="ellipsis-vertical" size={18} color={C.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
 
-          <TouchableOpacity
-            style={[S.tabsBtn, { backgroundColor: tabs.length ? C.accent + '20' : C.inputBg, borderColor: tabs.length ? C.accent + '55' : C.border }]}
-            onPress={() => tabs.length && setTabsOvVisible(true)}
-          >
-            <Text style={[S.tabsBadge, { color: tabs.length ? C.accent : C.muted }]}>{tabs.length}</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </SafeAreaView>
+        <TouchableOpacity
+          style={[S.qrBtn, { backgroundColor: C.accent + '20', borderColor: C.accent + '50' }]}
+          onPress={() => navigation.navigate('QRScanner')}
+        >
+          <Ionicons name="qr-code-outline" size={20} color={C.accent} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[S.tabsBtn, { backgroundColor: tabs.length ? C.accent + '20' : C.inputBg, borderColor: tabs.length ? C.accent + '55' : C.border }]}
+          onPress={() => tabs.length && setTabsOvVisible(true)}
+        >
+          <Text style={[S.tabsBadge, { color: tabs.length ? C.accent : C.muted }]}>{tabs.length}</Text>
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* ── Browser menu ── */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
@@ -724,19 +622,48 @@ export default function AppPortalScreen() {
         </View>
       </Modal>
 
-      {/* ── Main content ── */}
-      {/* ✅ contentWrapper يملأ المساحة المتبقية بالكامل */}
-      <View style={S.contentWrapper} ref={contentWrapperRef} collapsable={false}>
+      {/* ═══════════════════════════════════════════════════════════════════
+          ✅ Main content - محصور داخل الشاشة مع overflow: hidden
+          ═══════════════════════════════════════════════════════════════════ */}
+      <View style={S.contentWrapper} collapsable={false}>
         {activeTabId ? (
-          // ✅ WebView يملأ كامل المساحة المتبقية
           tabs.map(tab => (
-            tab.id === activeTabId ? renderWebView(tab) : null
+            tab.id === activeTabId && (
+              <View key={tab.id} style={S.webViewWrapper}>
+                {loadingWeb && tab.id === activeTabId && (
+                  <View style={[S.webLoader, { backgroundColor: C.bg }]}>
+                    <ActivityIndicator size="large" color={C.accent} />
+                  </View>
+                )}
+                {/* ✅ WebView مع scrollEnabled + contain layout */}
+                <WebView
+                  ref={el => (webviewRefs.current[tab.id] = el)}
+                  source={{ uri: tab.url }}
+                  style={S.webView}
+                  containerStyle={S.webViewContainer}
+                  injectedJavaScript={INJECTED_JAVASCRIPT}
+                  scalesPageToFit={true}
+                  scrollEnabled={true}
+                  bounces={false}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  pullToRefreshEnabled={true}
+                  allowsInlineMediaPlayback={true}
+                  startInLoadingState={false}
+                  onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
+                  onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
+                  onNavigationStateChange={nav => {
+                    setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
+                    if (tab.id === activeTabId) setInputUrl(nav.url);
+                  }}
+                />
+              </View>
+            )
           ))
         ) : (
-          // ✅ ScrollView للمحتوى الاستكشافي
           <Animated.ScrollView 
             showsVerticalScrollIndicator={false} 
-            contentContainerStyle={{ paddingBottom: 60, flexGrow: 1 }} 
+            contentContainerStyle={{ paddingBottom: 60, paddingTop: Platform.OS === 'ios' ? 52 : 20 }} 
             style={{ opacity: bodyOp }}
             keyboardShouldPersistTaps="handled"
           >
@@ -873,33 +800,30 @@ export default function AppPortalScreen() {
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
 const S = StyleSheet.create({
-  // ✅ Root - يملأ كل المساحة مع flex: 1
-  root: { 
+  // ✅ Root - مع paddingTop آمن للتعامل مع النوتش و status bar
+  root: {
     flex: 1,
-    // ✅ إضافة padding للأمان في الأسفل (home indicator)
+    paddingTop: Platform.OS === 'ios' ? 52 : 30,
     paddingBottom: Platform.OS === 'ios' ? 34 : 0,
   },
   
-  // ✅ SafeArea للشريط العلوي فقط
-  safeAreaTop: {
-    width: '100%',
-    zIndex: 10,
-  },
-  
-  // ✅ contentWrapper - يملأ المساحة المتبقية
-  contentWrapper: { 
+  // ✅ contentWrapper - محصور داخل الشاشة مع overflow hidden
+  contentWrapper: {
     flex: 1,
     width: '100%',
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   
-  // ✅ WebView wrapper - يملأ كامل المساحة
+  // ✅ webViewWrapper - مع overflow hidden لاحتواء أي تجاوزات
   webViewWrapper: {
     flex: 1,
     width: '100%',
     height: '100%',
+    overflow: 'hidden',
   },
   
-  // ✅ WebView style و container
+  // ✅ webView - يملأ كامل المساحة
   webView: {
     flex: 1,
     width: '100%',
@@ -912,9 +836,10 @@ const S = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: 'transparent',
+    overflow: 'hidden',
   },
   
-  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, gap: 8 },
+  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
   homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
   urlInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
