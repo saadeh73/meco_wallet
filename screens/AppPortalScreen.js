@@ -11,12 +11,11 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
-import { pairWalletConnect, initWalletConnect, WCEvents } from '../services/walletConnectService';
+import { pairWalletConnect, initWalletConnect } from '../services/walletConnectService';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 const BOOKMARKS_KEY = '@meco_bookmarks';
 
-// ─── Protocol data ────────────────────────────────────────────────────────────
 const EARNING_OPPORTUNITIES = [
   { id: 'marinade-sol',   protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png',    asset: 'SOL',      apy: 8.5,  url: 'https://marinade.finance/app/staking', category: 'staking', featured: true,  descKey: 'desc_marinade' },
   { id: 'jito-sol',       protocol: 'Jito',             protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png',     asset: 'SOL',      apy: 9.2,  url: 'https://jito.network/staking',         category: 'staking', featured: true,  descKey: 'desc_jito'     },
@@ -25,8 +24,8 @@ const EARNING_OPPORTUNITIES = [
   { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                            asset: 'USDC',     apy: 8.0,  url: 'https://app.kamino.finance/lend',      category: 'defi',    featured: false, descKey: 'desc_kamino'   },
   { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                              asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade',              category: 'trading', featured: false, descKey: 'desc_drift'    },
   { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                     asset: 'USDC',     apy: 5.0,  url: 'https://solend.fi/dashboard',          category: 'defi',    featured: false, descKey: 'desc_solend'   },
-  { id: 'raydium',        protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',                category: 'pools',   featured: false, descKey: 'desc_raydium'  },
-  { id: 'orca',           protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'SOL-USDC', apy: 12.0, url: 'https://www.orca.so/pools',               category: 'pools',   featured: false, descKey: 'desc_orca'     },
+  { id: 'raydium',        protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',  category: 'pools',   featured: false, descKey: 'desc_raydium'  },
+  { id: 'orca',           protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',asset:'SOL-USDC', apy: 12.0, url: 'https://www.orca.so/pools',            category: 'pools',   featured: false, descKey: 'desc_orca'     },
 ];
 
 const CAT = {
@@ -36,7 +35,27 @@ const CAT = {
   pools:   { accent: '#F59E0B', bg: 'rgba(245,158,11,0.13)',  icon: 'water-outline'           },
 };
 
-// ─── SafeImage ────────────────────────────────────────────────────────────────
+// ✅ CSS احتواء فقط — بدون window.solana حتى لا يتعارض مع WalletConnect
+const INJECTED_CSS = `
+(function() {
+  const style = document.createElement('style');
+  style.innerHTML = \`
+    html, body {
+      width: 100vw !important;
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+      -webkit-overflow-scrolling: touch !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    * { max-width: 100vw !important; box-sizing: border-box !important; }
+    #root, #app, #__next { max-width: 100vw !important; overflow-x: hidden !important; }
+  \`;
+  document.head.appendChild(style);
+  true;
+})();
+`;
+
 const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor = '#606080' }) => {
   const [err, setErr] = useState(false);
   if (err || !uri)
@@ -48,7 +67,6 @@ const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor =
   return <Image source={{ uri }} style={style} onError={() => setErr(true)} />;
 };
 
-// ─── Spring-press wrapper ─────────────────────────────────────────────────────
 const Pressable = ({ onPress, style, children }) => {
   const sc = useRef(new Animated.Value(1)).current;
   const spring = v => Animated.spring(sc, { toValue: v, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
@@ -59,7 +77,6 @@ const Pressable = ({ onPress, style, children }) => {
   );
 };
 
-// ─── Live Ticker ──────────────────────────────────────────────────────────────
 const TickerStrip = ({ items, C }) => {
   const x = useRef(new Animated.Value(0)).current;
   const ITEM_W = 140;
@@ -89,391 +106,12 @@ const TickerStrip = ({ items, C }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ✅ كود JavaScript قوي ومُحكم لاحتواء WebView ومنع أي تجاوزات
-// ═══════════════════════════════════════════════════════════════════════════════
-const getInjectedJavaScript = (walletPubKey) => {
-  const pubKey = walletPubKey || '';
-
-  return `
-(function() {
-  'use strict';
-
-  // ═══════════════════════════════════════════════════════════
-  // 0. حقن Solana Wallet Provider (مهم جداً لـ Orca)
-  // ═══════════════════════════════════════════════════════════
-  (function injectSolanaProvider() {
-    if (window.solana) return;
-    
-    // Event listener للـ dApp لما يطلب connect
-    const pendingRequests = new Map();
-    let requestId = 0;
-    
-    // إنشاء wallet adapter متوافق مع Solana dApps
-    window.solana = {
-      isPhantom: false,
-      isMecoWallet: true,
-      isConnected: ${!!pubKey},
-      publicKey: null,
-      
-      // محاكاة PublicKey object
-      _pubKey: '${pubKey}',
-      
-      // دالة connect اللي dApp بتستدعيها
-      async connect() {
-        console.log('[MECO Wallet] connect() called');
-        if (window.ReactNativeWebView) {
-          return new Promise((resolve) => {
-            const id = ++requestId;
-            pendingRequests.set('connect_' + id, resolve);
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'connect_request',
-              id: id,
-            }));
-            // timeout بعد 60 ثانية
-            setTimeout(() => {
-              if (pendingRequests.has('connect_' + id)) {
-                pendingRequests.delete('connect_' + id);
-                resolve({ publicKey: window.solana._pubKey });
-              }
-            }, 60000);
-          });
-        }
-        return { publicKey: window.solana._pubKey };
-      },
-      
-      async disconnect() {
-        console.log('[MECO Wallet] disconnect() called');
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'disconnect_request',
-          }));
-        }
-      },
-      
-      async signTransaction(transaction) {
-        console.log('[MECO Wallet] signTransaction() called');
-        const serialized = transaction.serialize ? transaction.serialize() : transaction;
-        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(serialized)));
-        
-        if (window.ReactNativeWebView) {
-          return new Promise((resolve) => {
-            const id = ++requestId;
-            pendingRequests.set('sign_' + id, resolve);
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'sign_transaction',
-              id: id,
-              method: 'solana_signTransaction',
-              transaction: base64,
-            }));
-            setTimeout(() => {
-              if (pendingRequests.has('sign_' + id)) {
-                pendingRequests.delete('sign_' + id);
-                resolve(null); // فشل
-              }
-            }, 120000);
-          });
-        }
-        return null;
-      },
-      
-      async signAndSendTransaction(transaction) {
-        console.log('[MECO Wallet] signAndSendTransaction() called');
-        const serialized = transaction.serialize ? transaction.serialize() : transaction;
-        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(serialized)));
-        
-        if (window.ReactNativeWebView) {
-          return new Promise((resolve) => {
-            const id = ++requestId;
-            pendingRequests.set('sign_send_' + id, resolve);
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'sign_and_send_transaction',
-              id: id,
-              method: 'solana_signAndSendTransaction',
-              transaction: base64,
-            }));
-            setTimeout(() => {
-              if (pendingRequests.has('sign_send_' + id)) {
-                pendingRequests.delete('sign_send_' + id);
-                resolve(null);
-              }
-            }, 120000);
-          });
-        }
-        return null;
-      },
-      
-      async signMessage(message) {
-        console.log('[MECO Wallet] signMessage() called');
-        const messageStr = typeof message === 'string' ? message : new TextDecoder().decode(message);
-        
-        if (window.ReactNativeWebView) {
-          return new Promise((resolve) => {
-            const id = ++requestId;
-            pendingRequests.set('sign_msg_' + id, resolve);
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'sign_message',
-              id: id,
-              method: 'solana_signMessage',
-              message: messageStr,
-            }));
-            setTimeout(() => {
-              if (pendingRequests.has('sign_msg_' + id)) {
-                pendingRequests.delete('sign_msg_' + id);
-                resolve(null);
-              }
-            }, 120000);
-          });
-        }
-        return null;
-      },
-      
-      // دالة للردود الواردة من React Native
-      _handleResponse: function(id, result) {
-        for (let [key, resolver] of pendingRequests) {
-          if (key.endsWith('_' + id)) {
-            pendingRequests.delete(key);
-            resolver(result);
-            return true;
-          }
-        }
-        return false;
-      },
-    };
-    
-    // تخزين الـ pending requests في window للوصول من React Native
-    window.__mecoPendingRequests = pendingRequests;
-    
-    // إطلاق event كما يفعل Phantom
-    window.dispatchEvent(new Event('solana#initialized'));
-    
-    console.log('[MECO Wallet] Solana provider injected');
-  })();
-
-  // ═══════════════════════════════════════════════════════════
-  // 1. ضبط Viewport مع viewport-fit=cover
-  // ═══════════════════════════════════════════════════════════
-  function setViewport() {
-(function() {
-  'use strict';
-
-  // ═══════════════════════════════════════════════════════════
-  // 1. ضبط Viewport مع viewport-fit=cover
-  // ═══════════════════════════════════════════════════════════
-  function setViewport() {
-    let meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.name = 'viewport';
-      document.head.appendChild(meta);
-    }
-    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes, viewport-fit=cover, shrink-to-fit=no';
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // 2. ضبط CSS containment على مستوى document لمنع أي تجاوز
-  // ═══════════════════════════════════════════════════════════
-  function applyContainment() {
-    const css = document.createElement('style');
-    css.id = 'meco-containment';
-    css.innerHTML = \`
-      /* ✅ احتواء document */
-      html, body {
-        width: 100vw !important;
-        max-width: 100vw !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        position: relative !important;
-        -webkit-overflow-scrolling: touch !important;
-        overscroll-behavior: contain !important;
-        contain: layout style !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      
-      /* ✅ احتواء جميع العناصر داخل الشاشة */
-      * {
-        max-width: 100vw !important;
-        box-sizing: border-box !important;
-      }
-      
-      /* ✅ منع أي عنصر من الخروج (نسمح فقط بـ overflow-y للتمرير) */
-      body > * {
-        max-width: 100vw !important;
-        overflow-x: hidden !important;
-      }
-      
-      /* ✅ تحويل position fixed إلى absolute لمنع الـ overlays المعطوبة */
-      [style*="position: fixed"],
-      [style*="position:fixed"] {
-        position: absolute !important;
-        max-width: 100vw !important;
-        max-height: 100vh !important;
-      }
-      
-      /* ✅ ضبط Lottie animations */
-      lottie-player, dotlottie-player,
-      [class*="lottie"], [class*="Lottie"],
-      [data-animation-type] {
-        max-width: 100% !important;
-        max-height: 80px !important;
-        width: auto !important;
-        height: auto !important;
-        object-fit: contain !important;
-        overflow: hidden !important;
-      }
-      
-      /* ✅ ضبط SVGs الكبيرة */
-      svg {
-        max-width: 100% !important;
-        max-height: 100% !important;
-        height: auto !important;
-      }
-      
-      /* ✅ ضبط الشعارات */
-      img[src*="logo" i], img[alt*="logo" i], img[alt*="meco" i],
-      [class*="logo" i], [class*="Logo"], [class*="brand" i], [class*="Brand"] {
-        max-width: 100% !important;
-        max-height: 60px !important;
-        width: auto !important;
-        height: auto !important;
-        object-fit: contain !important;
-      }
-      
-      /* ✅ ضبط الـ canvas */
-      canvas {
-        max-width: 100% !important;
-        max-height: 100% !important;
-        object-fit: contain !important;
-      }
-      
-      /* ✅ منع overflow الـ root divs */
-      #root, #app, #__next, [class*="App"], [class*="app"] {
-        max-width: 100vw !important;
-        overflow-x: hidden !important;
-      }
-    \`;
-    
-    const existing = document.getElementById('meco-containment');
-    if (existing) existing.remove();
-    document.head.appendChild(css);
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // 3. ضبط الـ height بشكل ديناميكي (iOS Safari fix)
-  // ═══════════════════════════════════════════════════════════
-  function fixViewportHeight() {
-    const vh = window.innerHeight * 0.01;
-    document.documentElement.style.setProperty('--vh', vh + 'px');
-    document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
-    
-    // ضبط body height
-    document.body.style.minHeight = window.innerHeight + 'px';
-    
-    // ضبط root divs
-    const rootSelectors = ['#root', '#app', '#__next'];
-    rootSelectors.forEach(sel => {
-      const el = document.querySelector(sel);
-      if (el) {
-        el.style.minHeight = window.innerHeight + 'px';
-        el.style.maxWidth = '100vw';
-      }
-    });
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // 4. منع الـ zoom المزدوج على iOS
-  // ═══════════════════════════════════════════════════════════
-  function preventDoubleZoom() {
-    let lastTouchEnd = 0;
-    document.addEventListener('touchend', function(e) {
-      const now = Date.now();
-      if (now - lastTouchEnd <= 300) e.preventDefault();
-      lastTouchEnd = now;
-    }, { passive: false });
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // 5. MutationObserver لإعادة تطبيق containment
-  // ═══════════════════════════════════════════════════════════
-  function setupObserver() {
-    if (typeof MutationObserver === 'undefined') return;
-    
-    const observer = new MutationObserver(() => {
-      // إعادة تطبيق بعد أي تغيير
-      setTimeout(() => {
-        applyContainment();
-        fixViewportHeight();
-      }, 100);
-    });
-    
-    if (document.body) {
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['style', 'class']
-      });
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // 6. Event Listeners
-  // ═══════════════════════════════════════════════════════════
-  window.addEventListener('resize', () => {
-    fixViewportHeight();
-    applyContainment();
-  });
-  
-  window.addEventListener('orientationchange', () => {
-    setTimeout(() => {
-      fixViewportHeight();
-      applyContainment();
-    }, 200);
-  });
-
-  // ═══════════════════════════════════════════════════════════
-  // 7. التنفيذ الفوري والمتكرر
-  // ═══════════════════════════════════════════════════════════
-  setViewport();
-  applyContainment();
-  fixViewportHeight();
-  preventDoubleZoom();
-  
-  // تطبيق متكرر لضمان العمل مع المواقع اللي بتحمّل ببطء
-  [100, 300, 800, 1500, 3000, 5000].forEach(delay => {
-    setTimeout(() => {
-      setViewport();
-      applyContainment();
-      fixViewportHeight();
-    }, delay);
-  });
-  
-  // إعداد observer بعد تحميل DOM
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupObserver);
-  } else {
-    setupObserver();
-  }
-  
-  console.log('[MECO] WebView containment applied');
-  true;
-})();
-`;
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ✅ كود JavaScript قوي ومُحكم لاحتواء WebView ومنع أي تجاوزات
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
   const { t }        = useTranslation();
   const navigation   = useNavigation();
   const route        = useRoute();
   const theme        = useAppStore(s => s.theme);
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
-  const walletPubKey = useAppStore(s => s.walletPublicKey); // ✅ جلب الـ public key
   const isDark       = theme === 'dark';
 
   const C = {
@@ -507,57 +145,6 @@ export default function AppPortalScreen() {
   const headerOp    = useRef(new Animated.Value(0)).current;
   const bodyOp      = useRef(new Animated.Value(0)).current;
   const switchX     = useRef(new Animated.Value(0)).current;
-  
-  // ✅ معالجة رسائل WebView من dApp
-  const onWebViewMessage = (tabId) => (event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      console.log('[WebView Message]:', data);
-      
-      switch (data.type) {
-        case 'connect_request':
-          // dApp يطلب الاتصال - نفتح Modal الموافقة
-          WCEvents.emit('dapp_connect_request', { 
-            tabId, 
-            requestId: data.id,
-            onApprove: () => sendResponseToWebView(tabId, data.id, { publicKey: walletPubKey }),
-            onReject:  () => sendResponseToWebView(tabId, data.id, null),
-          });
-          break;
-          
-        case 'sign_transaction':
-        case 'sign_and_send_transaction':
-        case 'sign_message':
-          // dApp يطلب التوقيع
-          WCEvents.emit('dapp_sign_request', {
-            tabId,
-            type: data.type,
-            method: data.method,
-            requestId: data.id,
-            transaction: data.transaction,
-            message: data.message,
-            onApprove: (result) => sendResponseToWebView(tabId, data.id, result),
-            onReject:  () => sendResponseToWebView(tabId, data.id, null),
-          });
-          break;
-          
-        case 'disconnect_request':
-          console.log('[WebView] dApp requested disconnect');
-          break;
-      }
-    } catch (err) {
-      console.error('[WebView Message Error]:', err);
-    }
-  };
-  
-  // ✅ إرسال الرد من React Native للـ WebView
-  const sendResponseToWebView = (tabId, requestId, result) => {
-    const webView = webviewRefs.current[tabId];
-    if (!webView) return;
-    
-    const js = `window.solana._handleResponse(${requestId}, ${JSON.stringify(result)}); true;`;
-    webView.injectJavaScript(js);
-  };
 
   useEffect(() => {
     Animated.stagger(70, [
@@ -727,9 +314,8 @@ export default function AppPortalScreen() {
   };
 
   return (
-    <View style={[S.root, { backgroundColor: C.bg }]}>
+    <View style={[S.root, { backgroundColor: C.bg, paddingTop: Platform.OS === 'ios' ? 52 : 30 }]}>
 
-      {/* ── Address bar ── */}
       <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
         <TouchableOpacity
           style={[S.homeBtn, { backgroundColor: activeTabId ? C.inputBg : C.accent + '25', borderColor: activeTabId ? C.border : C.accent + '50' }]}
@@ -773,7 +359,6 @@ export default function AppPortalScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* ── Browser menu ── */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
           <View style={{ flex: 1 }}>
@@ -801,7 +386,6 @@ export default function AppPortalScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* ── Tabs overview ── */}
       <Modal visible={tabsOvVisible} animationType="slide" onRequestClose={() => setTabsOvVisible(false)}>
         <View style={[S.tabsOvRoot, { backgroundColor: C.bg }]}>
           <View style={[S.tabsOvHeader, { borderBottomColor: C.border }]}>
@@ -840,52 +424,37 @@ export default function AppPortalScreen() {
         </View>
       </Modal>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          ✅ Main content - محصور داخل الشاشة مع overflow: hidden
-          ═══════════════════════════════════════════════════════════════════ */}
-      <View style={S.contentWrapper} collapsable={false}>
+      <View style={{ flex: 1 }}>
         {activeTabId ? (
           tabs.map(tab => (
-            tab.id === activeTabId && (
-              <View key={tab.id} style={S.webViewWrapper}>
-                {loadingWeb && tab.id === activeTabId && (
-                  <View style={[S.webLoader, { backgroundColor: C.bg }]}>
-                    <ActivityIndicator size="large" color={C.accent} />
-                  </View>
-                )}
-                {/* ✅ WebView مع scrollEnabled + contain layout */}
-                <WebView
-                  ref={el => (webviewRefs.current[tab.id] = el)}
-                  source={{ uri: tab.url }}
-                  style={S.webView}
-                  containerStyle={S.webViewContainer}
-                  injectedJavaScript={getInjectedJavaScript(walletPubKey)}
-                  scalesPageToFit={true}
-                  scrollEnabled={true}
-                  bounces={false}
-                  javaScriptEnabled={true}
-                  domStorageEnabled={true}
-                  pullToRefreshEnabled={true}
-                  allowsInlineMediaPlayback={true}
-                  startInLoadingState={false}
-                  onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
-                  onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
-                  onNavigationStateChange={nav => {
-                    setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
-                    if (tab.id === activeTabId) setInputUrl(nav.url);
-                  }}
-                  onMessage={onWebViewMessage(tab.id)}
-                />
-              </View>
-            )
+            <View key={tab.id} style={{ flex: 1, display: tab.id === activeTabId ? 'flex' : 'none' }}>
+              {loadingWeb && tab.id === activeTabId && (
+                <View style={[S.webLoader, { backgroundColor: C.bg }]}>
+                  <ActivityIndicator size="large" color={C.accent} />
+                </View>
+              )}
+              <WebView
+                ref={el => (webviewRefs.current[tab.id] = el)}
+                source={{ uri: tab.url }}
+                style={{ flex: 1 }}
+                // ✅ CSS فقط — بدون window.solana لعدم التعارض مع WalletConnect
+                injectedJavaScript={INJECTED_CSS}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                scalesPageToFit={true}
+                scrollEnabled={true}
+                bounces={false}
+                onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
+                onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
+                onNavigationStateChange={nav => {
+                  setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
+                  if (tab.id === activeTabId) setInputUrl(nav.url);
+                }}
+              />
+            </View>
           ))
         ) : (
-          <Animated.ScrollView 
-            showsVerticalScrollIndicator={false} 
-            contentContainerStyle={{ paddingBottom: 60, paddingTop: Platform.OS === 'ios' ? 52 : 20 }} 
-            style={{ opacity: bodyOp }}
-            keyboardShouldPersistTaps="handled"
-          >
+          <Animated.ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} style={{ opacity: bodyOp }}>
             <View style={S.hero}>
               <View style={[S.heroBadge, { backgroundColor: C.accent + '18', borderColor: C.accent + '40' }]}>
                 <View style={[S.heroPulse, { backgroundColor: C.accent }]} />
@@ -955,7 +524,6 @@ export default function AppPortalScreen() {
                   </View>
                   <Text style={[S.addBmTxt, { color: C.accent }]}>{t('add_bookmark')}</Text>
                 </TouchableOpacity>
-
                 {loadingBookmarks ? (
                   <ActivityIndicator size="small" color={C.accent} style={{ marginTop: 48 }} />
                 ) : bookmarks.length ? (
@@ -975,7 +543,6 @@ export default function AppPortalScreen() {
         )}
       </View>
 
-      {/* ── Add bookmark sheet ── */}
       <Modal visible={addModalVisible} transparent animationType="slide" onRequestClose={() => setAddModalVisible(false)}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={S.sheetOverlay}>
@@ -1017,47 +584,8 @@ export default function AppPortalScreen() {
 }
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
-
 const S = StyleSheet.create({
-  // ✅ Root - مع paddingTop آمن للتعامل مع النوتش و status bar
-  root: {
-    flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 52 : 30,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 0,
-  },
-  
-  // ✅ contentWrapper - محصور داخل الشاشة مع overflow hidden
-  contentWrapper: {
-    flex: 1,
-    width: '100%',
-    overflow: 'hidden',
-    backgroundColor: 'transparent',
-  },
-  
-  // ✅ webViewWrapper - مع overflow hidden لاحتواء أي تجاوزات
-  webViewWrapper: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    overflow: 'hidden',
-  },
-  
-  // ✅ webView - يملأ كامل المساحة
-  webView: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'transparent',
-  },
-  
-  webViewContainer: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'transparent',
-    overflow: 'hidden',
-  },
-  
+  root: { flex: 1 },
   addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
   homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
@@ -1107,7 +635,6 @@ const S = StyleSheet.create({
   appAsset:    { fontSize: 11, textAlign: 'center', marginBottom: 7 },
   appApy:      { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 9 },
   appApyTxt:   { fontSize: 11, fontWeight: '800', fontFamily: MONO },
-  vpnBadge:    { position: 'absolute', top: 9, right: 9, width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(245,158,11,0.18)', justifyContent: 'center', alignItems: 'center' },
   bmCard:    { borderRadius: 18, marginBottom: 10, borderWidth: 1, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 },
   bmInner:   { flexDirection: 'row', alignItems: 'center', padding: 14 },
   bmIconWrap:{ width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
@@ -1123,7 +650,7 @@ const S = StyleSheet.create({
   emptyIcon:  { width: 62, height: 62, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 17, fontWeight: '800' },
   emptySub:   { fontSize: 13, textAlign: 'center', lineHeight: 18 },
-  webLoader: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  webLoader:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
   tabsOvRoot:      { flex: 1, paddingTop: Platform.OS === 'ios' ? 52 : 20 },
   tabsOvHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
   tabsOvTitle:     { fontSize: 22, fontWeight: '800', marginBottom: 2 },
