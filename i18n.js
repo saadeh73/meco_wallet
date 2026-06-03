@@ -114,6 +114,12 @@ const resources = {
         sign_request: 'تنبيه',
         sign_request_message: 'طلب توقيع على شبكة سولانا',
         connection_failed: 'فشل الاتصال',
+        review_transaction: 'مراجعة المعاملة',
+        app_requesting: 'يطلب إذناً من محفظتك',
+        method_sign_message: 'توقيع رسالة',
+        method_sign_tx: 'توقيع معاملة',
+        method_sign_send_tx: 'إرسال معاملة للشبكة',
+        sign_failed: 'فشل التوقيع',
       },
 
       // ========== HomeScreen ==========
@@ -704,6 +710,12 @@ const resources = {
         sign_request: 'Alert',
         sign_request_message: 'Signature request on Solana network',
         connection_failed: 'Connection failed',
+        review_transaction: 'Review Transaction',
+        app_requesting: 'Requesting permission from your wallet',
+        method_sign_message: 'Sign Message',
+        method_sign_tx: 'Sign Transaction',
+        method_sign_send_tx: 'Send Transaction',
+        sign_failed: 'Signing failed',
       },
 
       // ========== HomeScreen ==========

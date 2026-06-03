@@ -33,6 +33,7 @@ import TokenDetailsScreen from './screens/TokenDetailsScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
 import SwapScreen from './screens/SwapScreen';
 import StakingScreen from './screens/StakingScreen';
+import WalletConnectSignModal from './components/WalletConnectSignModal'; // ✅ تمت الإضافة
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -228,6 +229,7 @@ export default function AppContainer() {
         <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
         <Stack.Screen name="AppPortal" component={AppPortalScreen} options={{ title: t('explore') || 'استكشف' }} />
       </Stack.Navigator>
+      <WalletConnectSignModal />  {/* ✅ تمت الإضافة هنا */}
     </NavigationContainer>
   );
 }

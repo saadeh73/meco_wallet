@@ -13,6 +13,14 @@ import { default as heliusService } from './heliusService';
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
 export let web3wallet;
 
+// ✅ EventEmitter للـ Modal
+const listeners = {};
+export const WCEvents = {
+  on:   (event, cb)   => { listeners[event] = cb; },
+  off:  (event)       => { delete listeners[event]; },
+  emit: (event, data) => { if (listeners[event]) listeners[event](data); },
+};
+
 // ─── جلب المفتاح الخاص للحساب النشط ──────────────────────────────────────────
 async function getWalletKeypair() {
   try {
@@ -72,33 +80,43 @@ function setupEventListeners() {
     );
   });
 
-  // ── طلب التوقيع — Alert مباشر يستدعي التوقيع الحقيقي ────────────────────
+  // ── طلب التوقيع ──────────────────────────────────────────────────────────
   web3wallet.on('session_request', async (event) => {
     const { topic, params, id } = event;
     const { request }           = params;
     const method                = request.method;
 
-    // جلب اسم التطبيق من الجلسة النشطة
     const sessions = web3wallet.getActiveSessions?.() || {};
-    const appName  = sessions[topic]?.peer?.metadata?.name || 'dApp';
+    const session  = sessions[topic];
+    const appName  = session?.peer?.metadata?.name || 'dApp';
+    const appUrl   = session?.peer?.metadata?.url  || '';
+    const appIcons = session?.peer?.metadata?.icons || [];
+    const appIcon  = appIcons[0] || null;
 
-    // ✅ Alert مباشر — لا يعتمد على أي listener خارجي
-    Alert.alert(
-      `${appName} — ${i18n.t('walletConnect.sign_request')}`,
-      i18n.t('walletConnect.sign_request_message'),
-      [
-        {
-          text: i18n.t('walletConnect.reject'),
-          onPress: () => handleRequestRejection(topic, id),
-          style: 'cancel',
-        },
-        {
-          text: i18n.t('walletConnect.approve'),
-          onPress: () => handleRequestApproval(event),
-        },
-      ],
-      { cancelable: false } // ✅ لا يُغلق بالضغط خارجه
-    );
+    // ✅ إرسال للـ Modal إذا كان موجوداً
+    if (listeners['sign_request']) {
+      WCEvents.emit('sign_request', {
+        event,
+        method,
+        appName,
+        appUrl,
+        appIcon,
+        details: { instructionCount: 0, programs: [] },
+        onApprove: () => handleRequestApproval(event),
+        onReject:  () => handleRequestRejection(topic, id),
+      });
+    } else {
+      // ✅ fallback — Alert مباشر إذا لم يكن Modal مسجلاً
+      Alert.alert(
+        `${appName} — ${i18n.t('walletConnect.sign_request')}`,
+        i18n.t('walletConnect.sign_request_message'),
+        [
+          { text: i18n.t('walletConnect.reject'),  onPress: () => handleRequestRejection(topic, id), style: 'cancel' },
+          { text: i18n.t('walletConnect.approve'), onPress: () => handleRequestApproval(event) },
+        ],
+        { cancelable: false }
+      );
+    }
   });
 }
 
@@ -148,19 +166,16 @@ async function handleRequestApproval(event) {
     const connection = await heliusService.getConnection();
     let   result;
 
-    // ── توقيع رسالة ──────────────────────────────────────────────────────
     if (request.method === 'solana_signMessage') {
       const messageBytes   = bs58.decode(request.params.message || request.params.pubkey);
       const signatureBytes = require('tweetnacl').sign.detached(messageBytes, keypair.secretKey);
       result = { signature: bs58.encode(signatureBytes) };
     }
 
-    // ── توقيع معاملة فقط ─────────────────────────────────────────────────
     else if (request.method === 'solana_signTransaction') {
       const buffer = Buffer.from(request.params.transaction, 'base64');
       let signedBase64;
       try {
-        // Versioned + ALT
         const vTx = web3.VersionedTransaction.deserialize(buffer);
         const lookupTables = await Promise.all(
           vTx.message.addressTableLookups.map(async lut =>
@@ -174,7 +189,6 @@ async function handleRequestApproval(event) {
         rebuilt.sign([keypair]);
         signedBase64 = Buffer.from(rebuilt.serialize()).toString('base64');
       } catch (_) {
-        // Legacy fallback
         const tx = web3.Transaction.from(buffer);
         tx.partialSign(keypair);
         signedBase64 = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
@@ -182,12 +196,10 @@ async function handleRequestApproval(event) {
       result = { transaction: signedBase64 };
     }
 
-    // ── توقيع وإرسال ─────────────────────────────────────────────────────
     else if (request.method === 'solana_signAndSendTransaction') {
       const buffer = Buffer.from(request.params.transaction, 'base64');
       let signature;
       try {
-        // Versioned + ALT
         const vTx = web3.VersionedTransaction.deserialize(buffer);
         const lookupTables = await Promise.all(
           vTx.message.addressTableLookups.map(async lut =>
@@ -203,10 +215,8 @@ async function handleRequestApproval(event) {
           skipPreflight:       false,
           preflightCommitment: 'confirmed',
         });
-        // انتظار التأكيد
         await connection.confirmTransaction(signature, 'confirmed');
       } catch (_) {
-        // Legacy fallback
         const tx = web3.Transaction.from(buffer);
         tx.partialSign(keypair);
         signature = await connection.sendRawTransaction(
@@ -222,12 +232,11 @@ async function handleRequestApproval(event) {
       throw new Error(`طريقة غير مدعومة: ${request.method}`);
     }
 
-    // ✅ إرسال الرد لـ dApp
     await web3wallet.respondSessionRequest({
       topic,
       response: { id, jsonrpc: '2.0', result },
     });
-    console.log('✅ [WalletConnect] تم التوقيع بنجاح:', request.method);
+    console.log('✅ [WalletConnect] تم التوقيع:', request.method);
 
   } catch (error) {
     console.error('❌ [WalletConnect]:', error.message);
@@ -236,7 +245,6 @@ async function handleRequestApproval(event) {
   }
 }
 
-// ─── رفض المعاملة ─────────────────────────────────────────────────────────────
 async function handleRequestRejection(topic, id) {
   try {
     await web3wallet.respondSessionRequest({
