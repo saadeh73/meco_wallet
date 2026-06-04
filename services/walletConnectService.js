@@ -11,70 +11,44 @@ import { Buffer } from 'buffer';
 import { default as heliusService } from './heliusService';
 
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
-
-// ✅ الـ chain ID الصحيح لـ Solana Mainnet
-const SOLANA_CHAIN_ID = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
-
 export let web3wallet;
 
-// ─── EventEmitter بسيط لإرسال أحداث التوقيع للشاشة ───────────────────────────
+// ✅ EventEmitter للـ Modal
 const listeners = {};
 export const WCEvents = {
-  on:   (event, cb) => { listeners[event] = cb; },
-  off:  (event)     => { delete listeners[event]; },
+  on:   (event, cb)   => { listeners[event] = cb; },
+  off:  (event)       => { delete listeners[event]; },
   emit: (event, data) => { if (listeners[event]) listeners[event](data); },
 };
 
-// ─── جلب المفتاح الخاص للحساب النشط ──────────────────────────────────────────
-async function getWalletKeypair() {
-  try {
-    const activeIndex  = useAppStore.getState().activeAccountIndex;
-    let privateKeyStr  = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
-    if (!privateKeyStr && activeIndex === 0) {
-      privateKeyStr = await SecureStore.getItemAsync('wallet_private_key');
-    }
-    if (!privateKeyStr) throw new Error('المفتاح الخاص غير موجود');
-    const secretKey = privateKeyStr.startsWith('[')
-      ? new Uint8Array(JSON.parse(privateKeyStr))
-      : bs58.decode(privateKeyStr);
-    return web3.Keypair.fromSecretKey(secretKey);
-  } catch (error) {
-    console.error('❌ Error getting keypair:', error);
-    throw error;
-  }
+// ─── فحص نوع المعاملة — Versioned أم Legacy ──────────────────────────────────
+// ✅ إذا كان البايت الأول >= 0x80 فهي Versioned Transaction
+const isVersionedBuffer = (buffer) => (buffer[0] & 0x80) !== 0;
+
+// ─── جلب ALT ─────────────────────────────────────────────────────────────────
+async function getLookupTables(vTx, connection) {
+  if (!vTx.message.addressTableLookups?.length) return [];
+  const tables = await Promise.all(
+    vTx.message.addressTableLookups.map(async lut => {
+      const result = await connection.getAddressLookupTable(lut.accountKey);
+      return result.value;
+    })
+  );
+  return tables.filter(Boolean);
 }
 
-// ─── استخراج تفاصيل المعاملة للعرض في الـ Modal ──────────────────────────────
-async function parseTransactionDetails(transactionBase64) {
-  try {
-    const buffer = Buffer.from(transactionBase64, 'base64');
-    const connection = await heliusService.getConnection();
-    let instructions = [];
-
-    try {
-      const vTx = web3.VersionedTransaction.deserialize(buffer);
-      // جلب ALT لتفسير التعليمات بشكل صحيح
-      const lookupTables = await Promise.all(
-        vTx.message.addressTableLookups.map(async (lut) => {
-          const result = await connection.getAddressLookupTable(lut.accountKey);
-          return result?.value;
-        })
-      );
-      const validLookupTables = lookupTables.filter(Boolean);
-      const msg = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts: validLookupTables });
-      instructions = msg.instructions;
-    } catch (_) {
-      const tx = web3.Transaction.from(buffer);
-      instructions = tx.instructions;
-    }
-
-    return {
-      instructionCount: instructions.length,
-      programs: [...new Set(instructions.map(ix => ix.programId?.toBase58?.()?.slice(0, 8) + '...'))],
-    };
-  } catch (_) {
-    return { instructionCount: 0, programs: [] };
+// ─── جلب المفتاح الخاص للحساب النشط ──────────────────────────────────────────
+async function getWalletKeypair() {
+  const activeIndex = useAppStore.getState().activeAccountIndex;
+  let privateKeyStr = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
+  if (!privateKeyStr && activeIndex === 0) {
+    privateKeyStr = await SecureStore.getItemAsync('wallet_private_key');
   }
+  if (!privateKeyStr) throw new Error('المفتاح الخاص غير موجود');
+  const secretKey = privateKeyStr.startsWith('[')
+    ? new Uint8Array(JSON.parse(privateKeyStr))
+    : bs58.decode(privateKeyStr);
+  return web3.Keypair.fromSecretKey(secretKey);
 }
 
 // ─── التهيئة ──────────────────────────────────────────────────────────────────
@@ -104,57 +78,49 @@ export async function initWalletConnect() {
 function setupEventListeners() {
   if (!web3wallet) return;
 
-  // 1. طلب الربط
   web3wallet.on('session_proposal', async (proposal) => {
     const { name, url } = proposal.params.proposer.metadata;
     Alert.alert(
       i18n.t('walletConnect.connection_request'),
       i18n.t('walletConnect.connection_request_message', { name, url }),
       [
-        { text: i18n.t('walletConnect.reject'), onPress: () => rejectSession(proposal), style: 'cancel' },
+        { text: i18n.t('walletConnect.reject'),  onPress: () => rejectSession(proposal), style: 'cancel' },
         { text: i18n.t('walletConnect.approve'), onPress: () => approveSession(proposal) },
       ]
     );
   });
 
-  // 2. طلب التوقيع
   web3wallet.on('session_request', async (event) => {
     const { topic, params, id } = event;
     const { request }           = params;
-    const method                = request.method;
+    const sessions = web3wallet.getActiveSessions?.() || {};
+    const session  = sessions[topic];
+    const appName  = session?.peer?.metadata?.name    || 'dApp';
+    const appUrl   = session?.peer?.metadata?.url     || '';
+    const appIcon  = session?.peer?.metadata?.icons?.[0] || null;
 
-    // استخراج تفاصيل المعاملة قبل عرضها
-    let details = { instructionCount: 0, programs: [] };
-    if (method === 'solana_signTransaction' || method === 'solana_signAndSendTransaction') {
-      details = await parseTransactionDetails(request.params.transaction);
+    if (listeners['sign_request']) {
+      WCEvents.emit('sign_request', {
+        event,
+        method: request.method,
+        appName,
+        appUrl,
+        appIcon,
+        details: { instructionCount: 0, programs: [] },
+        onApprove: () => handleRequestApproval(event),
+        onReject:  () => handleRequestRejection(topic, id),
+      });
+    } else {
+      Alert.alert(
+        `${appName} — ${i18n.t('walletConnect.sign_request')}`,
+        i18n.t('walletConnect.sign_request_message'),
+        [
+          { text: i18n.t('walletConnect.reject'),  onPress: () => handleRequestRejection(topic, id), style: 'cancel' },
+          { text: i18n.t('walletConnect.approve'), onPress: () => handleRequestApproval(event) },
+        ],
+        { cancelable: false }
+      );
     }
-
-    // الحصول على معلومات الـ session لإرسالها للـ Modal
-    const activeSessions = web3wallet.getActiveSessions?.() || {};
-    const session = activeSessions[topic];
-    const peerMeta = session?.peer?.metadata || {};
-
-    WCEvents.emit('sign_request', {
-      event,
-      method,
-      details,
-      appName: peerMeta.name || 'dApp',
-      appUrl:  peerMeta.url  || '',
-      appIcon: peerMeta.icons?.[0] || '',
-      onApprove: () => handleRequestApproval(event),
-      onReject:  () => handleRequestRejection(topic, id),
-    });
-  });
-
-  // 3. ✅ مراقبة session_delete للتعامل مع فصل الجلسة
-  web3wallet.on('session_delete', (event) => {
-    console.log('[WC] Session deleted:', event.topic);
-    WCEvents.emit('session_deleted', { topic: event.topic });
-  });
-
-  // 4. ✅ مراقبة session_update لتحديثات السلسلة
-  web3wallet.on('session_update', (event) => {
-    console.log('[WC] Session updated:', event);
   });
 }
 
@@ -164,24 +130,14 @@ export async function approveSession(proposal) {
     const pubKey = useAppStore.getState().walletPublicKey;
     if (!pubKey) throw new Error('محفظة غير نشطة');
 
-    // ✅ التأكد من دعم dApp للسلاسل المطلوبة
-    const proposalChains = proposal.params?.optionalNamespaces?.solana?.chains 
-                        || proposal.params?.requiredNamespaces?.solana?.chains 
-                        || [SOLANA_CHAIN_ID];
-    
-    // بناء الـ namespaces مع الـ chain الصحيح
     const namespaces = buildApprovedNamespaces({
       proposal: proposal.params,
       supportedNamespaces: {
         solana: {
-          chains:   proposalChains.includes(SOLANA_CHAIN_ID) ? proposalChains : [SOLANA_CHAIN_ID],
-          methods:  [
-            'solana_signTransaction',
-            'solana_signMessage',
-            'solana_signAndSendTransaction',
-          ],
+          chains:   ['solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'],
+          methods:  ['solana_signTransaction', 'solana_signMessage', 'solana_signAndSendTransaction'],
           events:   [],
-          accounts: [`${SOLANA_CHAIN_ID}:${pubKey}`],
+          accounts: [`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${pubKey}`],
         },
       },
     });
@@ -191,12 +147,10 @@ export async function approveSession(proposal) {
       i18n.t('walletConnect.connection_success'),
       i18n.t('walletConnect.connection_success_message')
     );
-    return true;
   } catch (error) {
-    console.error('Approve Error:', error);
+    console.error('approveSession error:', error);
     Alert.alert(i18n.t('error'), i18n.t('walletConnect.connection_failed'));
     await rejectSession(proposal);
-    return false;
   }
 }
 
@@ -206,7 +160,7 @@ export async function rejectSession(proposal) {
   } catch (_) {}
 }
 
-// ─── ✅ التوقيع الحقيقي على المعاملة ─────────────────────────────────────────
+// ─── ✅ التوقيع الحقيقي مع فحص النوع مسبقاً ──────────────────────────────────
 async function handleRequestApproval(event) {
   const { topic, params, id } = event;
   const { request }           = params;
@@ -227,98 +181,55 @@ async function handleRequestApproval(event) {
     else if (request.method === 'solana_signTransaction') {
       const buffer = Buffer.from(request.params.transaction, 'base64');
       let signedBase64;
-      try {
-        // Versioned Transaction (الأحدث — Orca يستخدمها)
-        const vTx = web3.VersionedTransaction.deserialize(buffer);
-        const lookupTablesRaw = await Promise.all(
-          vTx.message.addressTableLookups.map(async (lut) => {
-            const result = await connection.getAddressLookupTable(lut.accountKey);
-            return result?.value;
-          })
-        );
-        const lookupTables = lookupTablesRaw.filter(Boolean);
 
-        // ✅ لو ما في lookup tables، نستخدم الـ message مباشرة
-        let msg;
-        if (lookupTables.length > 0) {
-          msg = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts: lookupTables });
-        } else {
-          msg = web3.TransactionMessage.decompile(vTx.message);
-        }
-        
-        // ✅ تحديث الـ blockhash للحصول على معاملة صالحة
-        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-        msg.recentBlockhash   = latestBlockhash.blockhash;
-        
-        const messageToSign = lookupTables.length > 0 
-          ? msg.compileToV0Message(lookupTables)
-          : msg.compileToV0Message();
-        
-        const rebuiltTx = new web3.VersionedTransaction(messageToSign);
-        rebuiltTx.sign([keypair]);
-        signedBase64 = Buffer.from(rebuiltTx.serialize()).toString('base64');
-      } catch (versionedError) {
-        console.warn('Versioned TX failed, trying legacy:', versionedError.message);
-        // Legacy Transaction (fallback)
+      if (isVersionedBuffer(buffer)) {
+        // ✅ Versioned Transaction
+        const vTx          = web3.VersionedTransaction.deserialize(buffer);
+        const lookupTables = await getLookupTables(vTx, connection);
+        const msg          = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts: lookupTables });
+        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        msg.recentBlockhash = blockhash;
+        const rebuilt = new web3.VersionedTransaction(msg.compileToV0Message(lookupTables));
+        rebuilt.sign([keypair]);
+        signedBase64 = Buffer.from(rebuilt.serialize()).toString('base64');
+      } else {
+        // ✅ Legacy Transaction
         const tx = web3.Transaction.from(buffer);
         tx.partialSign(keypair);
         signedBase64 = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       }
-      result = { signature: signedBase64 }; // ✅ WalletConnect v2 يتوقع 'signature' وليس 'transaction' للـ solana_signTransaction
+      result = { transaction: signedBase64 };
     }
 
-    // ── توقيع وإرسال ─────────────────────────────────────────────────────────
+    // ── توقيع وإرسال للشبكة ──────────────────────────────────────────────────
     else if (request.method === 'solana_signAndSendTransaction') {
       const buffer = Buffer.from(request.params.transaction, 'base64');
       let signature;
-      try {
-        // Versioned Transaction
-        const vTx = web3.VersionedTransaction.deserialize(buffer);
-        const lookupTablesRaw = await Promise.all(
-          vTx.message.addressTableLookups.map(async (lut) => {
-            const result = await connection.getAddressLookupTable(lut.accountKey);
-            return result?.value;
-          })
-        );
-        const lookupTables = lookupTablesRaw.filter(Boolean);
 
-        let msg;
-        if (lookupTables.length > 0) {
-          msg = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts: lookupTables });
-        } else {
-          msg = web3.TransactionMessage.decompile(vTx.message);
-        }
-        
-        const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-        msg.recentBlockhash   = latestBlockhash.blockhash;
-        
-        const messageToSign = lookupTables.length > 0 
-          ? msg.compileToV0Message(lookupTables)
-          : msg.compileToV0Message();
-        
-        const rebuiltTx = new web3.VersionedTransaction(messageToSign);
-        rebuiltTx.sign([keypair]);
-        
-        // ✅ إرسال المعاملة مع confirmation
-        signature = await connection.sendRawTransaction(rebuiltTx.serialize(), {
+      if (isVersionedBuffer(buffer)) {
+        // ✅ Versioned Transaction — Orca يستخدم هذا دائماً
+        const vTx          = web3.VersionedTransaction.deserialize(buffer);
+        const lookupTables = await getLookupTables(vTx, connection);
+        const msg          = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts: lookupTables });
+        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        msg.recentBlockhash = blockhash;
+        const rebuilt = new web3.VersionedTransaction(msg.compileToV0Message(lookupTables));
+        rebuilt.sign([keypair]);
+        signature = await connection.sendRawTransaction(rebuilt.serialize(), {
           skipPreflight:       false,
           preflightCommitment: 'confirmed',
-          maxRetries:          3,
         });
-        
-        // ✅ انتظار الـ confirmation
-        await connection.confirmTransaction(signature, 'confirmed');
-      } catch (versionedError) {
-        console.warn('Versioned TX send failed, trying legacy:', versionedError.message);
-        // Legacy Transaction fallback
+      } else {
+        // ✅ Legacy Transaction
         const tx = web3.Transaction.from(buffer);
         tx.partialSign(keypair);
         signature = await connection.sendRawTransaction(
           tx.serialize({ requireAllSignatures: false }),
-          { skipPreflight: false, maxRetries: 3 }
+          { skipPreflight: false }
         );
-        await connection.confirmTransaction(signature, 'confirmed');
       }
+
+      await connection.confirmTransaction(signature, 'confirmed');
       result = { signature };
     }
 
@@ -326,16 +237,15 @@ async function handleRequestApproval(event) {
       throw new Error(`طريقة غير مدعومة: ${request.method}`);
     }
 
-    // ✅ إرسال الرد لـ Orca/dApp
     await web3wallet.respondSessionRequest({
       topic,
       response: { id, jsonrpc: '2.0', result },
     });
-    console.log('✅ [WalletConnect] تم التوقيع والرد بنجاح.');
+    console.log('✅ [WalletConnect] تم التوقيع:', request.method);
 
   } catch (error) {
     console.error('❌ [WalletConnect]:', error.message);
-    Alert.alert(i18n.t('error'), `فشل التوقيع: ${error.message}`);
+    Alert.alert(i18n.t('error'), `${i18n.t('walletConnect.sign_failed')}: ${error.message}`);
     await handleRequestRejection(topic, id);
   }
 }
@@ -360,29 +270,5 @@ export async function pairWalletConnect(uri) {
       i18n.t('walletConnect.pairing_error'),
       i18n.t('walletConnect.pairing_error_message')
     );
-  }
-}
-
-// ─── ✅ دالة مساعدة للحصول على الـ chain ID (لإرسالها للـ dApp) ─────────────
-export function getSolanaChainId() {
-  return SOLANA_CHAIN_ID;
-}
-
-// ─── ✅ دالة للحصول على جلسات نشطة ───────────────────────────────────────────
-export function getActiveSessions() {
-  if (!web3wallet) return {};
-  return web3wallet.getActiveSessions?.() || {};
-}
-
-// ─── ✅ دالة لفصل جلسة ───────────────────────────────────────────────────────
-export async function disconnectSession(topic) {
-  try {
-    if (!web3wallet) return;
-    await web3wallet.disconnectSession({
-      topic,
-      reason: getSdkError('USER_DISCONNECTED'),
-    });
-  } catch (error) {
-    console.error('❌ Disconnect error:', error.message);
   }
 }
