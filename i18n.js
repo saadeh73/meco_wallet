@@ -78,6 +78,8 @@ const resources = {
       confirm_delete_address: 'هل أنت متأكد من حذف هذا العنوان؟',
       info: 'معلومة',
       price_impact: 'تأثير السعر',
+      liquidity_pool: 'مجمع السيولة',
+      unclaimed_fees: 'رسوم غير محصودة',
 
       // ========== حسابات متعددة (Multi-Account) ==========
       accounts: 'الحسابات',
@@ -674,6 +676,8 @@ const resources = {
       confirm_delete_address: 'Are you sure you want to delete this address?',
       info: 'Info',
       price_impact: 'Price Impact',
+      liquidity_pool: 'Liquidity Pool',
+      unclaimed_fees: 'Unclaimed Fees',
 
       // ========== Multi-Account ==========
       accounts: 'Accounts',
