@@ -158,7 +158,7 @@ export default function WalletScreen() {
       // ✅ مجمعات السيولة Orca Whirlpool
       try {
         const connection = await heliusService.getConnection();
-        const lpPositions = await getWhirlpoolPositions(tokenAccounts, connection, priceMap);
+        const lpPositions = await getWhirlpoolPositions(addr, connection, priceMap);
         for (const pos of lpPositions) {
           calculatedTotalUSD += pos.valueUSD;
           filteredAssets.push(pos);
