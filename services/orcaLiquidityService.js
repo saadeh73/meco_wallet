@@ -3,7 +3,11 @@ import * as web3 from '@solana/web3.js';
 import { Buffer } from 'buffer';
 
 const WHIRLPOOL_PROGRAM_ID = 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc';
-const TOKEN_PROGRAM_ID     = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+// ✅ تم توسيع البحث ليشمل Token-2022 program — Orca Whirlpool Positions تستخدم Token-2022 NFTs
+const TOKEN_PROGRAMS = [
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',  // Classic SPL Token
+  'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',  // Token-2022 (Orca Whirlpool Positions)
+];
 
 const MECO_POOLS = {
   '6SujZ9VU5vLyEZGkVdDDJB45ef1ugQvXAzht49Kbtfsc': {
@@ -48,10 +52,10 @@ function calcTokenAmounts(liquidity, sqrtCurrent, sqrtLower, sqrtUpper) {
 // ─── الدالة الرئيسية ──────────────────────────────────────────────────────────
 export async function getWhirlpoolPositions(walletAddress, connection, priceMap) {
   try {
-    // ✅ جلب كل token accounts مباشرة من RPC — يشمل NFTs
+    // ✅ البحث في كلا البرنامجين: SPL Token الكلاسيكي + Token-2022 (Orca NFTs)
     const tokenAccountsResp = await connection.getParsedTokenAccountsByOwner(
       new web3.PublicKey(walletAddress),
-      { programId: new web3.PublicKey(TOKEN_PROGRAM_ID) }
+      { programId: TOKEN_PROGRAMS.map(p => new web3.PublicKey(p)) }
     );
 
     // فلترة NFTs فقط: amount=1, decimals=0
@@ -102,7 +106,7 @@ export async function getWhirlpoolPositions(walletAddress, connection, priceMap)
           const liquidity = readU128LE(pd, 72);
           const tickLower = pd.readInt32LE(88);
           const tickUpper = pd.readInt32LE(92);
-          // ✅ تصحيح offsets: feeOwedA عند 96، feeOwedB عند 104 (ليس 112 و 136)
+          // ✅ تصحيح offsets: feeOwedA عند 96، feeOwedB عند 104
           const feeOwedA  = Number(pd.readBigUInt64LE(96))  / Math.pow(10, poolInfo.decimalsA);
           const feeOwedB  = Number(pd.readBigUInt64LE(104)) / Math.pow(10, poolInfo.decimalsB);
 
@@ -124,7 +128,7 @@ export async function getWhirlpoolPositions(walletAddress, connection, priceMap)
           // ── كميات التوكنز ────────────────────────────────────────────────
           const sqrtLower = tickToSqrtPrice(tickLower);
           const sqrtUpper = tickToSqrtPrice(tickUpper);
-          // ✅ تقسيم liquidity على 1e10 لتفادي فقد الدقة عند Number() — يحول BigInt الضخم إلى نطاق آمن
+          // ✅ تقسيم liquidity على 1e10 لتفادي فقد الدقة عند Number()
           const liqSafe = Number(liquidity / BigInt(10000000000));
           const { amountA, amountB } = calcTokenAmounts(liqSafe, sqrtCurrent, sqrtLower, sqrtUpper);
 
