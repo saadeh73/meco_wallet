@@ -13,19 +13,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSolBalance, getTokenAccounts, getTokenBalance } from '../services/heliusService';
-import heliusService from '../services/heliusService';
 import { CORE_TOKENS, getJupiterMarketData, getCustomTokens } from '../services/jupiterMarketService';
-import { getWhirlpoolPositions } from '../services/orcaLiquidityService';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 const { width, height } = Dimensions.get('window');
 
+// ✅ قائمة الإيموجي لتمييز الحسابات
 const ACCOUNT_EMOJIS = [
   '🦁','🐯','🦊','🐺','🐻','🦝','🦄','🐲','🦅','🦋',
   '🌟','⚡','🔥','💎','🚀','🌙','☀️','🌊','🏔️','🎯',
   '💰','🏆','👑','🎭','🎨','🛡️','⚔️','🌈','🍀','🎸',
   '🤖','👻','🦸','🧙','🧊','🌋','🌺','🦩','🐬','🦖',
 ];
+
 const EMOJIS_STORAGE_KEY = '@meco_account_emojis';
 
 export default function WalletScreen() {
@@ -68,9 +68,11 @@ export default function WalletScreen() {
   const [accountUsdBalances,    setAccountUsdBalances]    = useState({});
   const [loadingAccountBalances,setLoadingAccountBalances]= useState(false);
   const [copyFeedback,          setCopyFeedback]          = useState(false);
-  const [menuVisible,           setMenuVisible]           = useState(false);
-  const [emojiPickerVisible,    setEmojiPickerVisible]    = useState(false);
-  const [accountEmojis,         setAccountEmojis]         = useState({});
+
+  // ✅ حالات جديدة
+  const [menuVisible,      setMenuVisible]      = useState(false);
+  const [emojiPickerVisible,setEmojiPickerVisible]= useState(false);
+  const [accountEmojis,    setAccountEmojis]    = useState({}); // publicKey → emoji
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -78,6 +80,7 @@ export default function WalletScreen() {
   const swipeableRefs        = useRef({});
   const accountSwipeableRefs = useRef({});
 
+  // ── تحميل الإيموجي من التخزين ─────────────────────────────────────────────
   useEffect(() => {
     AsyncStorage.getItem(EMOJIS_STORAGE_KEY)
       .then(stored => { if (stored) setAccountEmojis(JSON.parse(stored)); })
@@ -108,7 +111,11 @@ export default function WalletScreen() {
 
   const loadWalletData = useCallback(async (publicKey) => {
     try {
-      if (!publicKey) { setLoadingInitial(false); setIsSwitchingAccount(false); return; }
+      if (!publicKey) {
+        setLoadingInitial(false);
+        setIsSwitchingAccount(false);
+        return;
+      }
       setIsSwitchingAccount(true);
       const addr = typeof publicKey === 'string' ? publicKey : publicKey.toString();
 
@@ -124,47 +131,33 @@ export default function WalletScreen() {
 
       let calculatedTotalUSD = 0;
 
-      // ── CORE_TOKENS ───────────────────────────────────────────────────────
       const allAssets = CORE_TOKENS.map(asset => {
         let amount = 0;
         if (asset.symbol === 'SOL') {
           amount = solBal || 0;
         } else {
-          const td = tokenAccounts.find(tk => tk.mint === asset.mint);
-          if (td) amount = td.amount || 0;
+          const tokenData = tokenAccounts.find(tk => tk.mint === asset.mint);
+          if (tokenData) amount = tokenData.amount || 0;
         }
         const price    = priceMap[asset.symbol] || 0;
         const valueUSD = amount * price;
         calculatedTotalUSD += valueUSD;
-        return { ...asset, type: 'asset', amount, price, valueUSD };
+        return { ...asset, amount, price, valueUSD };
       });
 
       const filteredAssets = allAssets.filter(
         asset => asset.symbol === 'SOL' || asset.symbol === 'MECO' || asset.amount > 0
       );
 
-      // ── رموز مخصصة ───────────────────────────────────────────────────────
       for (const customToken of customTokensList) {
-        const td     = tokenAccounts.find(tk => tk.mint === customToken.mint);
-        const amount = td?.amount || 0;
+        const tokenData = tokenAccounts.find(tk => tk.mint === customToken.mint);
+        const amount    = tokenData?.amount || 0;
         if (amount > 0) {
           const price    = priceMap[customToken.symbol] || customToken.current_price || 0;
           const valueUSD = amount * price;
           calculatedTotalUSD += valueUSD;
-          filteredAssets.push({ ...customToken, type: 'asset', amount, price, valueUSD });
+          filteredAssets.push({ ...customToken, amount, price, valueUSD });
         }
-      }
-
-      // ✅ مجمعات السيولة Orca Whirlpool
-      try {
-        const connection = await heliusService.getConnection();
-        const lpPositions = await getWhirlpoolPositions(addr, connection, priceMap);
-        for (const pos of lpPositions) {
-          calculatedTotalUSD += pos.valueUSD;
-          filteredAssets.push(pos);
-        }
-      } catch (lpErr) {
-        console.warn('LP positions:', lpErr.message);
       }
 
       filteredAssets.sort((a, b) => b.valueUSD - a.valueUSD);
@@ -190,10 +183,12 @@ export default function WalletScreen() {
       const marketData = await getJupiterMarketData().catch(() => []);
       const priceMap   = {};
       marketData.forEach(tk => { priceMap[tk.symbol] = tk.current_price || 0; });
+
       for (const acc of accounts) {
         try {
           if (acc.index === activeAccountIndex && totalBalanceUSD > 0) {
-            balances[acc.publicKey] = totalBalanceUSD; continue;
+            balances[acc.publicKey] = totalBalanceUSD;
+            continue;
           }
           const addr   = acc.publicKey;
           const solBal = await getSolBalance(true, addr).catch(() => 0) || 0;
@@ -208,7 +203,9 @@ export default function WalletScreen() {
             (mecoAmount * (priceMap['MECO'] || 0)) +
             (usdcAmount * (priceMap['USDC'] || 0)) +
             (usdtAmount * (priceMap['USDT'] || 0));
-        } catch (_) { balances[acc.publicKey] = 0; }
+        } catch (_) {
+          balances[acc.publicKey] = 0;
+        }
       }
     } catch (err) {
       console.error('fetchAccountUsdBalances error:', err);
@@ -261,7 +258,9 @@ export default function WalletScreen() {
       Alert.alert(t('success'), t('account_added', { name: newAccount.name }));
     } catch (_) {
       Alert.alert(t('error'), t('account_add_failed'));
-    } finally { setAddingAccount(false); }
+    } finally {
+      setAddingAccount(false);
+    }
   };
 
   const handleSwitchAccount = async (index) => {
@@ -284,7 +283,9 @@ export default function WalletScreen() {
   const authenticateWithPhonePasscode = async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: t('passcode_prompt'), disableDeviceFallback: false, fallbackLabel: t('use_phone_passcode'),
+        promptMessage:         t('passcode_prompt'),
+        disableDeviceFallback: false,
+        fallbackLabel:         t('use_phone_passcode'),
       });
       return result.success;
     } catch (_) { return false; }
@@ -296,15 +297,22 @@ export default function WalletScreen() {
     try {
       const privateKey = await useAppStore.getState().getPrivateKeyForAccount(account.index);
       if (!privateKey) { Alert.alert(t('error'), t('private_key_not_found')); return; }
-      Alert.alert(t('key_warning_title'), t('key_warning_message', { key: privateKey }), [
-        { text: t('cancel'), style: 'cancel' },
-        { text: t('copy_key'), onPress: () => { Clipboard.setStringAsync(privateKey); Alert.alert(t('success'), t('copied')); } },
-      ]);
-    } catch (_) { Alert.alert(t('error'), t('unexpected_error')); }
+      Alert.alert(
+        t('key_warning_title'),
+        t('key_warning_message', { key: privateKey }),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('copy_key'), onPress: () => { Clipboard.setStringAsync(privateKey); Alert.alert(t('success'), t('copied')); } },
+        ]
+      );
+    } catch (_) {
+      Alert.alert(t('error'), t('unexpected_error'));
+    }
   };
 
-  const activeAccount = accounts[activeAccountIndex];
-  const activeEmoji   = activeAccount ? accountEmojis[activeAccount.publicKey] : null;
+  // ── الحساب النشط الحالي ───────────────────────────────────────────────────
+  const activeAccount      = accounts[activeAccountIndex];
+  const activeEmoji        = activeAccount ? accountEmojis[activeAccount.publicKey] : null;
 
   const renderLeftActions = (progress, dragX, asset) => {
     const trans = dragX.interpolate({ inputRange: [0, 50, 100], outputRange: [-80, -40, 0], extrapolate: 'clamp' });
@@ -336,72 +344,7 @@ export default function WalletScreen() {
     );
   };
 
-  // ✅ بطاقة مجمع السيولة
-  const renderLPPositionItem = (item) => {
-    const poolColor = item.poolInfo?.color || primaryColor;
-    return (
-      <Animated.View style={[styles.assetItemWrapper, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        <View style={[styles.lpCard, { backgroundColor: colors.card, borderColor: poolColor + '40' }]}>
-          {/* Header */}
-          <View style={styles.lpHeader}>
-            <View style={[styles.lpIconWrap, { backgroundColor: poolColor + '20' }]}>
-              <Text style={styles.lpIcon}>🌊</Text>
-            </View>
-            <View style={styles.lpTitleWrap}>
-              <Text style={[styles.lpTitle, { color: colors.text }]}>{item.symbol}</Text>
-              <Text style={[styles.lpSubtitle, { color: colors.textSecondary }]}>
-                {t('liquidity_pool')} • {item.poolInfo?.fee}
-              </Text>
-            </View>
-            <View style={[styles.lpValueWrap, { backgroundColor: poolColor + '12' }]}>
-              <Text style={[styles.lpValue, { color: poolColor }]}>
-                ${item.valueUSD > 0 ? item.valueUSD.toFixed(2) : '0.00'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Token Amounts */}
-          <View style={[styles.lpAmountsRow, { borderTopColor: colors.border }]}>
-            <View style={styles.lpAmountItem}>
-              <Text style={[styles.lpAmountLabel, { color: colors.textSecondary }]}>
-                {item.poolInfo?.tokenA}
-              </Text>
-              <Text style={[styles.lpAmountValue, { color: colors.text }]}>
-                {item.tokenAAmount > 0 ? item.tokenAAmount.toFixed(4) : '0'}
-              </Text>
-            </View>
-            <View style={[styles.lpDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.lpAmountItem}>
-              <Text style={[styles.lpAmountLabel, { color: colors.textSecondary }]}>
-                {item.poolInfo?.tokenB}
-              </Text>
-              <Text style={[styles.lpAmountValue, { color: colors.text }]}>
-                {item.tokenBAmount > 0 ? item.tokenBAmount.toFixed(4) : '0'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Unclaimed Fees */}
-          {item.hasUnclaimedFees && (
-            <View style={[styles.lpFeesRow, { backgroundColor: '#F59E0B' + '12', borderColor: '#F59E0B' + '30' }]}>
-              <Ionicons name="gift-outline" size={14} color="#F59E0B" />
-              <Text style={[styles.lpFeesLabel, { color: '#F59E0B' }]}>
-                {t('unclaimed_fees')} — ${item.feesUSD.toFixed(4)}
-              </Text>
-              <Text style={[styles.lpFeesHint, { color: colors.textSecondary }]}>
-                {item.feeOwedA.toFixed(4)} {item.poolInfo?.tokenA} + {item.feeOwedB.toFixed(4)} {item.poolInfo?.tokenB}
-              </Text>
-            </View>
-          )}
-        </View>
-      </Animated.View>
-    );
-  };
-
   const renderAssetItem = ({ item }) => {
-    // ✅ عرض مجمع السيولة بكرت مخصص
-    if (item.type === 'lp_position') return renderLPPositionItem(item);
-
     const isPositive = item.valueUSD > 0;
     return (
       <Animated.View style={[styles.assetItemWrapper, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }]}>
@@ -497,6 +440,7 @@ export default function WalletScreen() {
     const usdBalance = accountUsdBalances[item.publicKey];
     const isLoading  = loadingAccountBalances && usdBalance === undefined;
     const emoji      = accountEmojis[item.publicKey];
+
     return (
       <View style={{ marginBottom: 8 }}>
         <Swipeable
@@ -513,6 +457,7 @@ export default function WalletScreen() {
             onPress={() => handleSwitchAccount(item.index)}
           >
             <View style={styles.accountInfo}>
+              {/* ✅ أفاتار يعرض الإيموجي إذا وجد */}
               <View style={[styles.accountAvatar, { backgroundColor: isActive ? primaryColor + '30' : primaryColor + '15' }]}>
                 <Text style={emoji ? styles.accountAvatarEmoji : [styles.accountAvatarText, { color: primaryColor }]}>
                   {emoji || item.name.charAt(0).toUpperCase()}
@@ -526,12 +471,13 @@ export default function WalletScreen() {
               </View>
             </View>
             <View style={styles.accountBalanceContainer}>
-              {isLoading
-                ? <ActivityIndicator size="small" color={primaryColor} />
-                : <Text style={[styles.accountBalance, { color: colors.text }]}>
-                    ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                  </Text>
-              }
+              {isLoading ? (
+                <ActivityIndicator size="small" color={primaryColor} />
+              ) : (
+                <Text style={[styles.accountBalance, { color: colors.text }]}>
+                  ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                </Text>
+              )}
               {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
             </View>
           </TouchableOpacity>
@@ -544,20 +490,26 @@ export default function WalletScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
 
+        {/* Header Card */}
         <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <View style={styles.topBar}>
+
+            {/* ✅ الجانب الأيسر: أيقونة المحفظة الكبيرة تفتح شاشة الحسابات + اسم الحساب + نسخ */}
             <View style={styles.walletInfoRow}>
               <TouchableOpacity
                 onPress={() => setAccountsModalVisible(true)}
                 style={[styles.walletIconWrapper, { backgroundColor: primaryColor + '20' }]}
                 activeOpacity={0.7}
               >
-                {activeEmoji
-                  ? <Text style={styles.walletIconEmoji}>{activeEmoji}</Text>
-                  : <Ionicons name="wallet" size={22} color={primaryColor} />
-                }
+                {activeEmoji ? (
+                  <Text style={styles.walletIconEmoji}>{activeEmoji}</Text>
+                ) : (
+                  <Ionicons name="wallet" size={22} color={primaryColor} />
+                )}
               </TouchableOpacity>
+
               <View>
+                {/* ✅ اسم الحساب + أيقونة النسخ بجانبه */}
                 <View style={styles.walletNameRow}>
                   <Text style={[styles.walletName, { color: colors.text }]}>{walletName}</Text>
                   <TouchableOpacity onPress={() => copyAddress()} style={styles.inlineCopyBtn}>
@@ -573,6 +525,8 @@ export default function WalletScreen() {
                 </Text>
               </View>
             </View>
+
+            {/* ✅ الجانب الأيمن: مصفوفة النقاط تفتح قائمة الخيارات */}
             <TouchableOpacity
               onPress={() => setMenuVisible(true)}
               style={[styles.dotsButton, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
@@ -584,7 +538,9 @@ export default function WalletScreen() {
           <View style={styles.balanceSection}>
             <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('total_balance')}</Text>
             {loadingInitial || isSwitchingAccount ? (
-              <View style={styles.loadingBalance}><ActivityIndicator color={primaryColor} /></View>
+              <View style={styles.loadingBalance}>
+                <ActivityIndicator color={primaryColor} />
+              </View>
             ) : (
               <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
                 <Text style={[styles.balanceAmount, { color: colors.text }]}>
@@ -611,6 +567,7 @@ export default function WalletScreen() {
           </View>
         </Animated.View>
 
+        {/* Assets List */}
         <View style={styles.assetsSection}>
           <View style={styles.assetsHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('wallet_your_assets')}</Text>
@@ -636,13 +593,20 @@ export default function WalletScreen() {
           />
         </View>
 
-        {/* قائمة الخيارات */}
+        {/* ✅ قائمة الخيارات (النقاط) */}
         <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
           <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
             <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
+
+              {/* تغيير الاسم */}
               <TouchableOpacity
                 style={[styles.menuItem, { borderBottomColor: colors.border }]}
-                onPress={() => { setMenuVisible(false); setEditingAccountIndex(activeAccountIndex); setTempWalletName(walletName); setTimeout(() => setModalVisible(true), 200); }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  setEditingAccountIndex(activeAccountIndex);
+                  setTempWalletName(walletName);
+                  setTimeout(() => setModalVisible(true), 200);
+                }}
               >
                 <View style={[styles.menuItemIcon, { backgroundColor: '#6366F1' + '20' }]}>
                   <Ionicons name="pencil" size={20} color="#6366F1" />
@@ -650,9 +614,14 @@ export default function WalletScreen() {
                 <Text style={[styles.menuItemText, { color: colors.text }]}>{t('edit_wallet_name')}</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
+
+              {/* اختيار إيموجي */}
               <TouchableOpacity
                 style={styles.menuItem}
-                onPress={() => { setMenuVisible(false); setTimeout(() => setEmojiPickerVisible(true), 200); }}
+                onPress={() => {
+                  setMenuVisible(false);
+                  setTimeout(() => setEmojiPickerVisible(true), 200);
+                }}
               >
                 <View style={[styles.menuItemIcon, { backgroundColor: primaryColor + '20' }]}>
                   <Text style={{ fontSize: 20 }}>🎨</Text>
@@ -660,21 +629,26 @@ export default function WalletScreen() {
                 <Text style={[styles.menuItemText, { color: colors.text }]}>{t('change')}</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
+
             </View>
           </TouchableOpacity>
         </Modal>
 
-        {/* منتقي الإيموجي */}
+        {/* ✅ منتقي الإيموجي */}
         <Modal visible={emojiPickerVisible} transparent animationType="slide" onRequestClose={() => setEmojiPickerVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.emojiPickerContent, { backgroundColor: colors.card }]}>
               <View style={styles.modalHandle} />
               <View style={styles.emojiPickerHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>🎨 {t('change')}</Text>
+                <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>
+                  🎨 {t('change')}
+                </Text>
                 <TouchableOpacity onPress={() => setEmojiPickerVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.background }]}>
                   <Ionicons name="close" size={20} color={colors.text} />
                 </TouchableOpacity>
               </View>
+
+              {/* ✅ زر إزالة الإيموجي */}
               {activeAccount && accountEmojis[activeAccount.publicKey] && (
                 <TouchableOpacity
                   style={[styles.removeEmojiBtn, { borderColor: colors.error + '50' }]}
@@ -692,6 +666,8 @@ export default function WalletScreen() {
                   <Text style={[styles.removeEmojiText, { color: colors.error }]}>{t('delete')}</Text>
                 </TouchableOpacity>
               )}
+
+              {/* شبكة الإيموجي */}
               <FlatList
                 data={ACCOUNT_EMOJIS}
                 numColumns={8}
@@ -702,7 +678,10 @@ export default function WalletScreen() {
                   return (
                     <TouchableOpacity
                       style={[styles.emojiItem, isSelected && { backgroundColor: primaryColor + '30', borderRadius: 12 }]}
-                      onPress={async () => { if (activeAccount) await saveEmoji(activeAccount.publicKey, item); setEmojiPickerVisible(false); }}
+                      onPress={async () => {
+                        if (activeAccount) await saveEmoji(activeAccount.publicKey, item);
+                        setEmojiPickerVisible(false);
+                      }}
                     >
                       <Text style={styles.emojiText}>{item}</Text>
                     </TouchableOpacity>
@@ -713,7 +692,7 @@ export default function WalletScreen() {
           </View>
         </Modal>
 
-        {/* تعديل اسم المحفظة */}
+        {/* Edit Wallet Name Modal */}
         <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => { setModalVisible(false); setEditingAccountIndex(null); }}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
@@ -741,7 +720,7 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* الحسابات */}
+        {/* Accounts Modal */}
         <Modal visible={accountsModalVisible} transparent animationType="slide" onRequestClose={() => setAccountsModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>
@@ -755,7 +734,9 @@ export default function WalletScreen() {
                   <Ionicons name="close" size={20} color={colors.text} />
                 </TouchableOpacity>
               </View>
-              <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>{t('swipe_hint')}</Text>
+              <Text style={{ textAlign: 'center', fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>
+                {t('swipe_hint')}
+              </Text>
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <FlatList
                   data={accounts}
@@ -770,7 +751,10 @@ export default function WalletScreen() {
                 <TouchableOpacity style={[styles.addAccountBtn, { borderColor: primaryColor }]} onPress={handleAddAccount} disabled={addingAccount}>
                   {addingAccount
                     ? <ActivityIndicator size="small" color={primaryColor} />
-                    : <><Ionicons name="add-circle" size={22} color={primaryColor} /><Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text></>
+                    : <>
+                        <Ionicons name="add-circle" size={22} color={primaryColor} />
+                        <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text>
+                      </>
                   }
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -794,14 +778,19 @@ const styles = StyleSheet.create({
   container:    { flex: 1 },
   headerCard:   { borderBottomLeftRadius: 32, borderBottomRightRadius: 32, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 24, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 10, zIndex: 10 },
   topBar:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  walletInfoRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  walletIconWrapper:{ width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  walletIconEmoji:  { fontSize: 26 },
-  walletNameRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  walletName:       { fontSize: 20, fontWeight: '800' },
-  inlineCopyBtn:    { padding: 4 },
-  accountsCount:    { fontSize: 12, fontWeight: '500', marginTop: 2 },
-  dotsButton:       { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+
+  // ✅ الجانب الأيسر
+  walletInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  walletIconWrapper: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  walletIconEmoji:   { fontSize: 26 },
+  walletNameRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  walletName:     { fontSize: 20, fontWeight: '800' },
+  inlineCopyBtn:  { padding: 4 },
+  accountsCount:  { fontSize: 12, fontWeight: '500', marginTop: 2 },
+
+  // ✅ زر النقاط
+  dotsButton:   { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+
   balanceSection:   { alignItems: 'center', marginBottom: 28 },
   balanceLabel:     { fontSize: 14, fontWeight: '500', marginBottom: 8 },
   balanceAmount:    { fontSize: 42, fontWeight: '800', letterSpacing: -1 },
@@ -810,14 +799,16 @@ const styles = StyleSheet.create({
   actionBtn:        { alignItems: 'center', gap: 8 },
   actionCircle:     { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   actionLabel:      { fontSize: 12, fontWeight: '600' },
+
   assetsSection:    { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
   assetsHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle:     { fontSize: 18, fontWeight: '700' },
   refreshBtn:       { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+
   assetItemWrapper: { marginBottom: 12 },
   assetItem:        { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
   assetLeft:        { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 14 },
-  assetIconContainer:{ position: 'relative', width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  assetIconContainer: { position: 'relative', width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   assetIcon:        { width: 32, height: 32, borderRadius: 16 },
   badgeDot:         { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2 },
   assetInfo:        { flex: 1 },
@@ -834,38 +825,21 @@ const styles = StyleSheet.create({
   emptyContainer:   { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText:        { fontSize: 14, marginTop: 8 },
 
-  // ✅ بطاقة مجمع السيولة
-  lpCard:          { borderRadius: 18, padding: 16, borderWidth: 1.5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  lpHeader:        { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  lpIconWrap:      { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  lpIcon:          { fontSize: 22 },
-  lpTitleWrap:     { flex: 1 },
-  lpTitle:         { fontSize: 16, fontWeight: '800' },
-  lpSubtitle:      { fontSize: 12, marginTop: 2 },
-  lpValueWrap:     { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  lpValue:         { fontSize: 15, fontWeight: '800' },
-  lpAmountsRow:    { flexDirection: 'row', borderTopWidth: 1, paddingTop: 12, marginBottom: 8 },
-  lpAmountItem:    { flex: 1, alignItems: 'center', gap: 4 },
-  lpAmountLabel:   { fontSize: 11, fontWeight: '600' },
-  lpAmountValue:   { fontSize: 14, fontWeight: '700' },
-  lpDivider:       { width: 1, marginHorizontal: 8 },
-  lpFeesRow:       { flexDirection: 'column', padding: 10, borderRadius: 10, borderWidth: 1, gap: 4 },
-  lpFeesLabel:     { fontSize: 13, fontWeight: '700' },
-  lpFeesHint:      { fontSize: 11 },
-
+  // ✅ قائمة الخيارات
   menuOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: Platform.OS === 'ios' ? 110 : 90, paddingRight: 20 },
   menuCard:       { width: 220, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 10 },
   menuItem:       { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, gap: 12 },
   menuItemIcon:   { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   menuItemText:   { flex: 1, fontSize: 15, fontWeight: '600' },
 
+  // ✅ منتقي الإيموجي
   emojiPickerContent: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingTop: 12, maxHeight: height * 0.6 },
   emojiPickerHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  emojiGrid:          { paddingBottom: 20 },
-  emojiItem:          { flex: 1, aspectRatio: 1, justifyContent: 'center', alignItems: 'center', margin: 4 },
-  emojiText:          { fontSize: 28 },
-  removeEmojiBtn:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
-  removeEmojiText:    { fontSize: 14, fontWeight: '600' },
+  emojiGrid:      { paddingBottom: 20 },
+  emojiItem:      { flex: 1, aspectRatio: 1, justifyContent: 'center', alignItems: 'center', margin: 4 },
+  emojiText:      { fontSize: 28 },
+  removeEmojiBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginBottom: 16 },
+  removeEmojiText:{ fontSize: 14, fontWeight: '600' },
 
   modalOverlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalOverlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 20 },
