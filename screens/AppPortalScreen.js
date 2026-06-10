@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+// screens/ExploreScreen.js (AppPortalScreen)
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, Image, Platform, FlatList, ActivityIndicator,
@@ -16,45 +17,29 @@ import { pairWalletConnect, initWalletConnect } from '../services/walletConnectS
 const { width } = Dimensions.get('window');
 const BOOKMARKS_KEY = '@meco_bookmarks';
 
+// ─── قائمة التطبيقات والبروتوكولات ───────────────────────────────────────────
 const EARNING_OPPORTUNITIES = [
-  { id: 'marinade-sol',   protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png',    asset: 'SOL',      apy: 8.5,  url: 'https://marinade.finance/app/staking', category: 'staking', featured: true,  descKey: 'desc_marinade' },
-  { id: 'jito-sol',       protocol: 'Jito',             protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png',     asset: 'SOL',      apy: 9.2,  url: 'https://jito.network/staking',         category: 'staking', featured: true,  descKey: 'desc_jito'     },
-  { id: 'meteora-lp',     protocol: 'Meteora',          protocolIcon: 'https://meteora.ag/favicon.ico',                                    asset: 'SOL/USDC', apy: 20.0, url: 'https://app.meteora.ag',               category: 'defi',    featured: true,  descKey: 'desc_meteora'  },
-  { id: 'jupiter-swap',   protocol: 'Jupiter',          protocolIcon: 'https://jup.ag/favicon.ico',                                        asset: 'SOL',      apy: 0,    url: 'https://jup.ag',                       category: 'trading', featured: true,  descKey: 'desc_jupiter'  },
-  { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                            asset: 'USDC',     apy: 8.0,  url: 'https://app.kamino.finance/lend',      category: 'defi',    featured: false, descKey: 'desc_kamino'   },
-  { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                              asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade',              category: 'trading', featured: false, descKey: 'desc_drift'    },
-  { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                     asset: 'USDC',     apy: 5.0,  url: 'https://solend.fi/dashboard',          category: 'defi',    featured: false, descKey: 'desc_solend'   },
-  { id: 'raydium',        protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png', asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',  category: 'pools',   featured: false, descKey: 'desc_raydium'  },
-  { id: 'orca',           protocol: 'Orca',             protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',asset:'SOL-USDC', apy: 12.0, url: 'https://www.orca.so/pools',            category: 'pools',   featured: false, descKey: 'desc_orca'     },
+  // ✅ Orca — مجمعات السيولة وإنشاء المجمعات
+  { id: 'orca-pools',   protocol: 'Orca Pools',       protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',   asset: 'Liquidity Pools', apy: 12.0, url: 'https://www.orca.so/pools',        category: 'pools',   featured: true,  descKey: 'desc_orca'       },
+  { id: 'orca-create',  protocol: 'Orca Create Pool', protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png',   asset: 'Create Pool',     apy: 0,    url: 'https://www.orca.so/create-pool',  category: 'pools',   featured: true,  descKey: 'desc_orca_create'},
+
+  { id: 'marinade-sol',   protocol: 'Marinade Finance', protocolIcon: 'https://assets.coingecko.com/coins/images/18612/large/mnde.png',      asset: 'SOL',      apy: 8.5,  url: 'https://marinade.finance/app/staking', category: 'staking', featured: true,  descKey: 'desc_marinade' },
+  { id: 'jito-sol',       protocol: 'Jito',             protocolIcon: 'https://assets.coingecko.com/coins/images/33228/large/jto.png',       asset: 'SOL',      apy: 9.2,  url: 'https://jito.network/staking',         category: 'staking', featured: true,  descKey: 'desc_jito'     },
+  { id: 'meteora-lp',     protocol: 'Meteora',          protocolIcon: 'https://meteora.ag/favicon.ico',                                      asset: 'SOL/USDC', apy: 20.0, url: 'https://app.meteora.ag',               category: 'defi',    featured: true,  descKey: 'desc_meteora'  },
+  { id: 'jupiter-swap',   protocol: 'Jupiter',          protocolIcon: 'https://jup.ag/favicon.ico',                                          asset: 'SOL',      apy: 0,    url: 'https://jup.ag',                       category: 'trading', featured: true,  descKey: 'desc_jupiter'  },
+  { id: 'kamino-usdc',    protocol: 'Kamino',           protocolIcon: 'https://www.kamino.finance/favicon.ico',                              asset: 'USDC',     apy: 8.0,  url: 'https://app.kamino.finance/lend',      category: 'defi',    featured: false, descKey: 'desc_kamino'   },
+  { id: 'drift-perps',    protocol: 'Drift Protocol',   protocolIcon: 'https://drift.foundation/favicon.ico',                                asset: 'SOL/USDC', apy: 12.0, url: 'https://app.drift.trade',              category: 'trading', featured: false, descKey: 'desc_drift'    },
+  { id: 'solend-lending', protocol: 'Solend',           protocolIcon: 'https://solend.fi/favicon.ico',                                       asset: 'USDC',     apy: 5.0,  url: 'https://solend.fi/dashboard',          category: 'defi',    featured: false, descKey: 'desc_solend'   },
+  { id: 'raydium',        protocol: 'Raydium',          protocolIcon: 'https://assets.coingecko.com/coins/images/13928/large/PSym7VQ.png',   asset: 'SOL-USDC', apy: 15.5, url: 'https://raydium.io/liquidity/pools/',  category: 'pools',   featured: false, descKey: 'desc_raydium'  },
+  { id: 'orca-swap',      protocol: 'Orca Swap',        protocolIcon: 'https://assets.coingecko.com/coins/images/17547/large/Orca_Logo.png', asset: 'SOL-USDC', apy: 0,    url: 'https://www.orca.so',                  category: 'trading', featured: false, descKey: 'desc_orca'     },
 ];
 
 const CAT = {
-  staking: { accent: '#3B82F6', bg: 'rgba(59,130,246,0.13)',  icon: 'layers-outline'          },
-  defi:    { accent: '#8B5CF6', bg: 'rgba(139,92,246,0.13)',  icon: 'trending-up-outline'     },
-  trading: { accent: '#10B981', bg: 'rgba(16,185,129,0.13)',  icon: 'swap-horizontal-outline' },
-  pools:   { accent: '#F59E0B', bg: 'rgba(245,158,11,0.13)',  icon: 'water-outline'           },
+  staking: { accent: '#3B82F6', bg: 'rgba(59,130,246,0.13)', icon: 'layers-outline'          },
+  defi:    { accent: '#8B5CF6', bg: 'rgba(139,92,246,0.13)', icon: 'trending-up-outline'     },
+  trading: { accent: '#10B981', bg: 'rgba(16,185,129,0.13)', icon: 'swap-horizontal-outline' },
+  pools:   { accent: '#9945FF', bg: 'rgba(153,69,255,0.13)', icon: 'water-outline'           },
 };
-
-// ✅ CSS احتواء فقط — بدون window.solana حتى لا يتعارض مع WalletConnect
-const INJECTED_CSS = `
-(function() {
-  const style = document.createElement('style');
-  style.innerHTML = \`
-    html, body {
-      width: 100vw !important;
-      max-width: 100vw !important;
-      overflow-x: hidden !important;
-      -webkit-overflow-scrolling: touch !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    * { max-width: 100vw !important; box-sizing: border-box !important; }
-    #root, #app, #__next { max-width: 100vw !important; overflow-x: hidden !important; }
-  \`;
-  document.head.appendChild(style);
-  true;
-})();
-`;
 
 const SafeImage = ({ uri, style, fallbackIcon = 'globe-outline', fallbackColor = '#606080' }) => {
   const [err, setErr] = useState(false);
@@ -78,7 +63,7 @@ const Pressable = ({ onPress, style, children }) => {
 };
 
 const TickerStrip = ({ items, C }) => {
-  const x = useRef(new Animated.Value(0)).current;
+  const x      = useRef(new Animated.Value(0)).current;
   const ITEM_W = 140;
   const totalW = items.length * ITEM_W;
   useEffect(() => {
@@ -106,6 +91,7 @@ const TickerStrip = ({ items, C }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function AppPortalScreen() {
   const { t }        = useTranslation();
   const navigation   = useNavigation();
@@ -157,7 +143,10 @@ export default function AppPortalScreen() {
   }, []);
 
   useEffect(() => {
-    Animated.spring(switchX, { toValue: activeView === 'explore' ? 0 : 1, useNativeDriver: true, damping: 22, stiffness: 220 }).start();
+    Animated.spring(switchX, {
+      toValue: activeView === 'explore' ? 0 : 1,
+      useNativeDriver: true, damping: 22, stiffness: 220,
+    }).start();
   }, [activeView]);
 
   useEffect(() => { loadBookmarks(); }, []);
@@ -168,7 +157,7 @@ export default function AppPortalScreen() {
 
   useEffect(() => {
     const scanned = route.params?.scannedAddress;
-    if (scanned && scanned.startsWith('wc:')) {
+    if (scanned?.startsWith('wc:')) {
       navigation.setParams({ scannedAddress: undefined });
       pairWalletConnect(scanned);
     }
@@ -178,54 +167,72 @@ export default function AppPortalScreen() {
     try { const s = await AsyncStorage.getItem(BOOKMARKS_KEY); if (s) setBookmarks(JSON.parse(s)); }
     catch (_) {} finally { setLoadingBookmarks(false); }
   };
+
   const saveBookmarks = async bm => {
     try { await AsyncStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bm)); setBookmarks(bm); } catch (_) {}
   };
+
   const handleAddBookmark = async () => {
     if (!newBookmark.name.trim() || !newBookmark.url.trim()) return;
     let url = newBookmark.url.trim();
     if (!url.startsWith('http')) url = 'https://' + url;
-    await saveBookmarks([{ id: Date.now().toString(), name: newBookmark.name.trim(), url, iconUrl: newBookmark.iconUrl.trim() || null }, ...bookmarks]);
+    await saveBookmarks([
+      { id: Date.now().toString(), name: newBookmark.name.trim(), url, iconUrl: newBookmark.iconUrl.trim() || null },
+      ...bookmarks,
+    ]);
     setNewBookmark({ name: '', url: '', iconUrl: '' });
     setAddModalVisible(false);
   };
+
   const handleDeleteBookmark = id => saveBookmarks(bookmarks.filter(b => b.id !== id));
 
-  const openNewTab = url => {
+  const openNewTab = useCallback(url => {
     const id = Date.now().toString();
     setTabs(prev => [...prev, { id, url, title: t('loading_page'), canGoBack: false, canGoForward: false }]);
-    setActiveTabId(id); setInputUrl(url); setTabsOvVisible(false);
-  };
-  const closeTab = id => {
-    const next = tabs.filter(t => t.id !== id);
-    setTabs(next);
-    if (activeTabId === id) {
-      if (next.length) { setActiveTabId(next[next.length - 1].id); setInputUrl(next[next.length - 1].url); }
-      else { setActiveTabId(null); setInputUrl(''); setTabsOvVisible(false); }
-    }
-  };
+    setActiveTabId(id);
+    setInputUrl(url);
+    setTabsOvVisible(false);
+  }, [t]);
+
+  const closeTab = useCallback(id => {
+    setTabs(prev => {
+      const next = prev.filter(t => t.id !== id);
+      if (activeTabId === id) {
+        if (next.length) { setActiveTabId(next[next.length-1].id); setInputUrl(next[next.length-1].url); }
+        else { setActiveTabId(null); setInputUrl(''); setTabsOvVisible(false); }
+      }
+      return next;
+    });
+  }, [activeTabId]);
+
   const switchTab = id => {
     const tab = tabs.find(t => t.id === id);
     if (tab) { setActiveTabId(id); setInputUrl(tab.url); setTabsOvVisible(false); }
   };
+
   const handleSearch = () => {
     let url = inputUrl.trim();
     if (!url) return;
-    if (!url.startsWith('http') && !url.includes('.')) url = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
-    else if (!url.startsWith('http')) url = `https://${url}`;
+    if (!url.startsWith('http') && !url.includes('.'))
+      url = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+    else if (!url.startsWith('http'))
+      url = `https://${url}`;
     Keyboard.dismiss();
-    if (activeTabId) setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url } : t));
-    else openNewTab(url);
+    if (activeTabId)
+      setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url } : t));
+    else
+      openNewTab(url);
   };
 
   const activeTab  = tabs.find(t => t.id === activeTabId);
   const featured   = EARNING_OPPORTUNITIES.filter(a => a.featured);
   const categories = [
+    { id: 'pools',   titleKey: 'category_pools'   },
     { id: 'staking', titleKey: 'category_staking' },
     { id: 'defi',    titleKey: 'category_defi'    },
-    { id: 'trading', titleKey: 'category_trading'  },
-    { id: 'pools',   titleKey: 'category_pools'    },
-  ].map(c => ({ ...c, data: EARNING_OPPORTUNITIES.filter(a => a.category === c.id) })).filter(c => c.data.length);
+    { id: 'trading', titleKey: 'category_trading' },
+  ].map(c => ({ ...c, data: EARNING_OPPORTUNITIES.filter(a => a.category === c.id) }))
+   .filter(c => c.data.length);
 
   const FeaturedCard = ({ item }) => {
     const cat = CAT[item.category] || CAT.staking;
@@ -316,6 +323,7 @@ export default function AppPortalScreen() {
   return (
     <View style={[S.root, { backgroundColor: C.bg, paddingTop: Platform.OS === 'ios' ? 52 : 30 }]}>
 
+      {/* ── شريط العنوان ── */}
       <Animated.View style={[S.addrRow, { opacity: headerOp, transform: [{ translateY: headerY }] }]}>
         <TouchableOpacity
           style={[S.homeBtn, { backgroundColor: activeTabId ? C.inputBg : C.accent + '25', borderColor: activeTabId ? C.border : C.accent + '50' }]}
@@ -325,7 +333,10 @@ export default function AppPortalScreen() {
         </TouchableOpacity>
 
         <View style={[S.urlBar, { backgroundColor: C.inputBg, borderColor: C.border }]}>
-          <Ionicons name="search" size={14} color={C.muted} style={{ marginLeft: 13 }} />
+          {loadingWeb && activeTabId
+            ? <ActivityIndicator size="small" color={C.accent} style={{ marginLeft: 13 }} />
+            : <Ionicons name="search" size={14} color={C.muted} style={{ marginLeft: 13 }} />
+          }
           <TextInput
             style={[S.urlInput, { color: C.text }]}
             placeholder={t('browser_search_placeholder')}
@@ -334,8 +345,10 @@ export default function AppPortalScreen() {
             onChangeText={setInputUrl}
             onSubmitEditing={handleSearch}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="url"
             returnKeyType="go"
+            selectTextOnFocus
           />
           {activeTabId && (
             <TouchableOpacity onPress={() => setMenuVisible(true)} style={S.dotsBtn}>
@@ -359,13 +372,14 @@ export default function AppPortalScreen() {
         </TouchableOpacity>
       </Animated.View>
 
+      {/* ── قائمة المتصفح ── */}
       <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
           <View style={{ flex: 1 }}>
             <View style={[S.menu, { backgroundColor: C.surface2, borderColor: C.border2, top: Platform.OS === 'ios' ? 96 : 76 }]}>
               {[
-                { icon: 'arrow-back',    key: 'browser_back',    enabled: activeTab?.canGoBack,    action: () => { setMenuVisible(false); if (activeTab?.canGoBack) webviewRefs.current[activeTabId]?.goBack(); } },
-                { icon: 'arrow-forward', key: 'browser_forward', enabled: activeTab?.canGoForward, action: () => { setMenuVisible(false); if (activeTab?.canGoForward) webviewRefs.current[activeTabId]?.goForward(); } },
+                { icon:'arrow-back',    key:'browser_back',    enabled: activeTab?.canGoBack,    action: () => { setMenuVisible(false); if (activeTab?.canGoBack) webviewRefs.current[activeTabId]?.goBack(); } },
+                { icon:'arrow-forward', key:'browser_forward', enabled: activeTab?.canGoForward, action: () => { setMenuVisible(false); if (activeTab?.canGoForward) webviewRefs.current[activeTabId]?.goForward(); } },
               ].map(b => (
                 <TouchableOpacity key={b.key} style={S.menuRow} onPress={b.action}>
                   <Ionicons name={b.icon} size={17} color={b.enabled ? C.text : C.muted} />
@@ -386,6 +400,7 @@ export default function AppPortalScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
+      {/* ── نظرة عامة على التبويبات ── */}
       <Modal visible={tabsOvVisible} animationType="slide" onRequestClose={() => setTabsOvVisible(false)}>
         <View style={[S.tabsOvRoot, { backgroundColor: C.bg }]}>
           <View style={[S.tabsOvHeader, { borderBottomColor: C.border }]}>
@@ -393,7 +408,10 @@ export default function AppPortalScreen() {
               <Text style={[S.tabsOvTitle, { color: C.text }]}>{t('open_tabs')}</Text>
               <Text style={[S.tabsOvSub,   { color: C.muted }]}>{tabs.length} {t('portal_tabs_label')}</Text>
             </View>
-            <TouchableOpacity style={[S.closeBtn, { backgroundColor: C.border }]} onPress={() => { setTabsOvVisible(false); if (!activeTabId && tabs.length) setActiveTabId(tabs[0].id); }}>
+            <TouchableOpacity
+              style={[S.closeBtn, { backgroundColor: C.border }]}
+              onPress={() => { setTabsOvVisible(false); if (!activeTabId && tabs.length) setActiveTabId(tabs[0].id); }}
+            >
               <Ionicons name="close" size={19} color={C.text} />
             </TouchableOpacity>
           </View>
@@ -412,18 +430,24 @@ export default function AppPortalScreen() {
                   <View style={[S.tabFavicon, { backgroundColor: C.accent + '18' }]}>
                     <Ionicons name="globe-outline" size={22} color={C.accent + '80'} />
                   </View>
-                  <Text style={[S.tabPreviewUrl, { color: C.muted }]} numberOfLines={2}>{item.url.replace(/^https?:\/\//, '').substring(0, 32)}</Text>
+                  <Text style={[S.tabPreviewUrl, { color: C.muted }]} numberOfLines={2}>
+                    {item.url.replace(/^https?:\/\//, '').substring(0, 32)}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
           />
-          <TouchableOpacity style={[S.newTabBtn, { backgroundColor: C.accent }]} onPress={() => { setTabsOvVisible(false); setActiveTabId(null); setInputUrl(''); }}>
+          <TouchableOpacity
+            style={[S.newTabBtn, { backgroundColor: C.accent }]}
+            onPress={() => { setTabsOvVisible(false); setActiveTabId(null); setInputUrl(''); }}
+          >
             <Ionicons name="add" size={22} color="#FFF" />
             <Text style={S.newTabTxt}>{t('new_tab')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
 
+      {/* ── المحتوى الرئيسي ── */}
       <View style={{ flex: 1 }}>
         {activeTabId ? (
           tabs.map(tab => (
@@ -433,28 +457,41 @@ export default function AppPortalScreen() {
                   <ActivityIndicator size="large" color={C.accent} />
                 </View>
               )}
+              {/* ✅ WebView نظيف تماماً — بدون CSS injection يكسر layouts المواقع */}
               <WebView
                 ref={el => (webviewRefs.current[tab.id] = el)}
                 source={{ uri: tab.url }}
                 style={{ flex: 1 }}
-                // ✅ CSS فقط — بدون window.solana لعدم التعارض مع WalletConnect
-                injectedJavaScript={INJECTED_CSS}
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
-                scalesPageToFit={true}
                 scrollEnabled={true}
                 bounces={false}
+                allowsInlineMediaPlayback={true}
+                allowsFullscreenVideo={true}
+                mediaPlaybackRequiresUserAction={false}
+                mixedContentMode="compatibility"
+                thirdPartyCookiesEnabled={true}
+                sharedCookiesEnabled={true}
+                startInLoadingState={false}
                 onLoadStart={() => { if (tab.id === activeTabId) setLoadingWeb(true); }}
                 onLoadEnd={()   => { if (tab.id === activeTabId) setLoadingWeb(false); }}
                 onNavigationStateChange={nav => {
-                  setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward } : t));
+                  setTabs(prev => prev.map(t =>
+                    t.id === tab.id
+                      ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward }
+                      : t
+                  ));
                   if (tab.id === activeTabId) setInputUrl(nav.url);
                 }}
               />
             </View>
           ))
         ) : (
-          <Animated.ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }} style={{ opacity: bodyOp }}>
+          <Animated.ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 60 }}
+            style={{ opacity: bodyOp }}
+          >
             <View style={S.hero}>
               <View style={[S.heroBadge, { backgroundColor: C.accent + '18', borderColor: C.accent + '40' }]}>
                 <View style={[S.heroPulse, { backgroundColor: C.accent }]} />
@@ -471,11 +508,11 @@ export default function AppPortalScreen() {
                 backgroundColor: C.accent,
                 width: (width - 62) / 2,
                 shadowColor: C.accent,
-                transform: [{ translateX: switchX.interpolate({ inputRange: [0, 1], outputRange: [3, (width - 62) / 2 + 3] }) }],
+                transform: [{ translateX: switchX.interpolate({ inputRange: [0,1], outputRange: [3, (width-62)/2+3] }) }],
               }]} />
               {[
-                { id: 'explore',   activeIcon: 'compass',   idleIcon: 'compass-outline',  key: 'discover'  },
-                { id: 'bookmarks', activeIcon: 'bookmark',  idleIcon: 'bookmark-outline', key: 'bookmarks' },
+                { id:'explore',   activeIcon:'compass',  idleIcon:'compass-outline',  key:'discover'  },
+                { id:'bookmarks', activeIcon:'bookmark', idleIcon:'bookmark-outline', key:'bookmarks' },
               ].map(tab => {
                 const active = activeView === tab.id;
                 return (
@@ -492,7 +529,9 @@ export default function AppPortalScreen() {
                 <View style={S.section}>
                   <SectionHead titleKey="featured_apps" />
                   <FlatList
-                    data={featured} horizontal showsHorizontalScrollIndicator={false}
+                    data={featured}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
                     keyExtractor={i => i.id}
                     renderItem={({ item }) => <FeaturedCard item={item} />}
                     contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 4 }}
@@ -505,7 +544,9 @@ export default function AppPortalScreen() {
                   <View key={cat.id} style={S.section}>
                     <SectionHead titleKey={cat.titleKey} catId={cat.id} />
                     <FlatList
-                      data={cat.data} horizontal showsHorizontalScrollIndicator={false}
+                      data={cat.data}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
                       keyExtractor={i => i.id}
                       renderItem={({ item }) => <AppCard item={item} />}
                       contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 4 }}
@@ -517,7 +558,7 @@ export default function AppPortalScreen() {
               <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
                 <TouchableOpacity
                   style={[S.addBmBtn, { backgroundColor: C.surface, borderColor: C.accent + '45' }]}
-                  onPress={() => { setNewBookmark({ name: '', url: '', iconUrl: '' }); setAddModalVisible(true); }}
+                  onPress={() => { setNewBookmark({ name:'', url:'', iconUrl:'' }); setAddModalVisible(true); }}
                 >
                   <View style={[S.addBmIcon, { backgroundColor: C.accent + '20' }]}>
                     <Ionicons name="add" size={20} color={C.accent} />
@@ -543,6 +584,7 @@ export default function AppPortalScreen() {
         )}
       </View>
 
+      {/* ── إضافة مفضلة ── */}
       <Modal visible={addModalVisible} transparent animationType="slide" onRequestClose={() => setAddModalVisible(false)}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={S.sheetOverlay}>
@@ -550,8 +592,8 @@ export default function AppPortalScreen() {
               <View style={[S.sheetHandle, { backgroundColor: C.border2 }]} />
               <Text style={[S.sheetTitle, { color: C.text }]}>{t('add_bookmark')}</Text>
               {[
-                { field: 'name', icon: 'text-outline', placeholderKey: 'bookmark_name_placeholder', kbType: 'default' },
-                { field: 'url',  icon: 'link-outline', placeholderKey: 'bookmark_url_placeholder',  kbType: 'url'     },
+                { field:'name', icon:'text-outline', placeholderKey:'bookmark_name_placeholder', kbType:'default' },
+                { field:'url',  icon:'link-outline', placeholderKey:'bookmark_url_placeholder',  kbType:'url'     },
               ].map(f => (
                 <View key={f.field} style={[S.inputRow, { backgroundColor: C.inputBg, borderColor: C.border }]}>
                   <Ionicons name={f.icon} size={16} color={C.muted} style={{ marginLeft: 14 }} />
@@ -585,97 +627,97 @@ export default function AppPortalScreen() {
 
 const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 const S = StyleSheet.create({
-  root: { flex: 1 },
-  addrRow:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 10, gap: 8 },
-  homeBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  urlBar:   { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 13, borderWidth: 1, height: 44 },
-  urlInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
-  dotsBtn:  { paddingHorizontal: 11, height: '100%', justifyContent: 'center' },
-  qrBtn:    { width: 42, height: 42, borderRadius: 13, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  tabsBtn:  { width: 42, height: 42, borderRadius: 13, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
-  tabsBadge:{ fontSize: 14, fontWeight: '800' },
-  hero:        { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 16 },
-  heroBadge:   { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, gap: 7, marginBottom: 14 },
-  heroPulse:   { width: 7, height: 7, borderRadius: 4 },
-  heroBadgeTxt:{ fontSize: 11, fontWeight: '800', letterSpacing: 0.6, fontFamily: MONO },
-  heroTitle:   { fontSize: 32, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6, lineHeight: 38 },
-  heroSub:     { fontSize: 14, fontWeight: '500', lineHeight: 20 },
-  tickerWrap:  { borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 10, overflow: 'hidden', marginBottom: 2 },
-  tickerTrack: { flexDirection: 'row' },
-  tickerItem:  { width: 140, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16 },
-  tickerName:  { fontFamily: MONO, fontSize: 11, fontWeight: '600' },
-  tickerDot:   { width: 3, height: 3, borderRadius: 2 },
-  tickerApy:   { fontFamily: MONO, fontSize: 11, fontWeight: '700' },
-  switcher:    { flexDirection: 'row', marginHorizontal: 20, borderRadius: 18, borderWidth: 1, padding: 3, marginTop: 18, marginBottom: 24, height: 50, position: 'relative' },
-  switchThumb: { position: 'absolute', top: 3, bottom: 3, borderRadius: 14, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
-  switchBtn:   { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
-  switchTxt:   { fontSize: 14, fontWeight: '700' },
-  section:  { marginBottom: 28 },
-  secHead:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, marginBottom: 14, gap: 9 },
-  secDot:   { width: 9, height: 9, borderRadius: 5, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6, elevation: 3 },
-  secTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3 },
-  featCard: { width: width * 0.75, borderRadius: 26, padding: 20, marginRight: 16, overflow: 'hidden', elevation: 5, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 16 },
-  featBlob:     { position: 'absolute', width: 200, height: 200, borderRadius: 100, top: -60, right: -50 },
-  featTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, zIndex: 1 },
-  featIconWrap: { width: 60, height: 60, borderRadius: 20, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  featIcon:     { width: 44, height: 44, borderRadius: 12 },
-  apyPill:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, borderWidth: 1, gap: 3 },
-  apySmall:     { fontSize: 11, fontWeight: '700', fontFamily: MONO },
-  apyBig:       { fontSize: 16, fontWeight: '900', fontFamily: MONO },
-  featName:     { fontSize: 20, fontWeight: '800', letterSpacing: -0.3, marginBottom: 4, zIndex: 1 },
-  featAsset:    { fontSize: 12, fontWeight: '800', letterSpacing: 1, marginBottom: 10, fontFamily: MONO, zIndex: 1 },
-  featDesc:     { fontSize: 13, lineHeight: 19, marginBottom: 16, zIndex: 1 },
-  featFooter:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, paddingTop: 14 },
-  openLabel:    { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  openArrow:    { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-  appCard: { width: 114, padding: 14, borderRadius: 22, marginRight: 12, alignItems: 'center', borderWidth: 1, elevation: 2, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.07, shadowRadius: 6 },
-  appIconWrap: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10, overflow: 'hidden' },
-  appIcon:     { width: 38, height: 38, borderRadius: 11 },
-  appName:     { fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 3 },
-  appAsset:    { fontSize: 11, textAlign: 'center', marginBottom: 7 },
-  appApy:      { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 9 },
-  appApyTxt:   { fontSize: 11, fontWeight: '800', fontFamily: MONO },
-  bmCard:    { borderRadius: 18, marginBottom: 10, borderWidth: 1, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 4 },
-  bmInner:   { flexDirection: 'row', alignItems: 'center', padding: 14 },
-  bmIconWrap:{ width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
-  bmIcon:    { width: 28, height: 28, borderRadius: 8 },
-  bmInfo:    { flex: 1, marginRight: 8 },
-  bmName:    { fontSize: 15, fontWeight: '700', marginBottom: 3 },
-  bmUrl:     { fontSize: 12 },
-  bmChevron: { width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  addBmBtn:  { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 18, marginBottom: 16, borderWidth: 1.5, borderStyle: 'dashed', gap: 12 },
-  addBmIcon: { width: 36, height: 36, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  addBmTxt:  { fontSize: 15, fontWeight: '700' },
-  emptyState: { padding: 36, borderRadius: 24, alignItems: 'center', marginTop: 6, borderWidth: 1, gap: 10 },
-  emptyIcon:  { width: 62, height: 62, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  emptyTitle: { fontSize: 17, fontWeight: '800' },
-  emptySub:   { fontSize: 13, textAlign: 'center', lineHeight: 18 },
-  webLoader:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  tabsOvRoot:      { flex: 1, paddingTop: Platform.OS === 'ios' ? 52 : 20 },
-  tabsOvHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1 },
-  tabsOvTitle:     { fontSize: 22, fontWeight: '800', marginBottom: 2 },
-  tabsOvSub:       { fontSize: 13 },
-  closeBtn:        { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  tabPreview:      { flex: 1, margin: 8, borderRadius: 20, borderWidth: 2, height: 175, overflow: 'hidden' },
-  tabPreviewTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1 },
-  tabPreviewTitle: { flex: 1, fontSize: 12, fontWeight: '700', marginRight: 6 },
-  tabCloseBtn:     { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  tabPreviewBody:  { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
-  tabFavicon:      { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  tabPreviewUrl:   { fontSize: 11, textAlign: 'center', paddingHorizontal: 8 },
-  newTabBtn:       { position: 'absolute', bottom: 40, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 30, elevation: 6, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10 },
-  newTabTxt:       { color: '#FFF', fontWeight: '800', fontSize: 16, marginLeft: 8 },
-  menu:       { position: 'absolute', right: 62, width: 188, borderRadius: 18, borderWidth: 1, elevation: 10, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14 },
-  menuRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 },
-  menuTxt:    { fontSize: 14, fontWeight: '600' },
-  menuDivider:{ height: 1, marginHorizontal: 10 },
-  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  sheet:        { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
-  sheetHandle:  { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  sheetTitle:   { fontSize: 20, fontWeight: '800', textAlign: 'center', marginBottom: 20 },
-  inputRow:     { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, marginBottom: 12, height: 52 },
-  inputTxt:     { flex: 1, paddingHorizontal: 12, fontSize: 15, height: '100%' },
-  sheetBtns:    { flexDirection: 'row', gap: 12, marginTop: 8 },
-  sheetBtn:     { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 16, borderRadius: 14 },
-  sheetBtnTxt:  { fontSize: 15, fontWeight: '800' },
+  root:     { flex: 1 },
+  addrRow:  { flexDirection:'row', alignItems:'center', paddingHorizontal:16, marginBottom:10, gap:8 },
+  homeBtn:  { width:42, height:42, borderRadius:13, borderWidth:1, justifyContent:'center', alignItems:'center' },
+  urlBar:   { flex:1, flexDirection:'row', alignItems:'center', borderRadius:13, borderWidth:1, height:44 },
+  urlInput: { flex:1, paddingHorizontal:10, fontSize:14, height:'100%' },
+  dotsBtn:  { paddingHorizontal:11, height:'100%', justifyContent:'center' },
+  qrBtn:    { width:42, height:42, borderRadius:13, borderWidth:1, justifyContent:'center', alignItems:'center' },
+  tabsBtn:  { width:42, height:42, borderRadius:13, borderWidth:1.5, justifyContent:'center', alignItems:'center' },
+  tabsBadge:{ fontSize:14, fontWeight:'800' },
+  hero:         { paddingHorizontal:22, paddingTop:12, paddingBottom:16 },
+  heroBadge:    { flexDirection:'row', alignItems:'center', alignSelf:'flex-start', paddingHorizontal:12, paddingVertical:6, borderRadius:20, borderWidth:1, gap:7, marginBottom:14 },
+  heroPulse:    { width:7, height:7, borderRadius:4 },
+  heroBadgeTxt: { fontSize:11, fontWeight:'800', letterSpacing:0.6, fontFamily:MONO },
+  heroTitle:    { fontSize:32, fontWeight:'900', letterSpacing:-0.8, marginBottom:6, lineHeight:38 },
+  heroSub:      { fontSize:14, fontWeight:'500', lineHeight:20 },
+  tickerWrap:   { borderTopWidth:1, borderBottomWidth:1, paddingVertical:10, overflow:'hidden', marginBottom:2 },
+  tickerTrack:  { flexDirection:'row' },
+  tickerItem:   { width:140, flexDirection:'row', alignItems:'center', gap:7, paddingHorizontal:16 },
+  tickerName:   { fontFamily:MONO, fontSize:11, fontWeight:'600' },
+  tickerDot:    { width:3, height:3, borderRadius:2 },
+  tickerApy:    { fontFamily:MONO, fontSize:11, fontWeight:'700' },
+  switcher:     { flexDirection:'row', marginHorizontal:20, borderRadius:18, borderWidth:1, padding:3, marginTop:18, marginBottom:24, height:50, position:'relative' },
+  switchThumb:  { position:'absolute', top:3, bottom:3, borderRadius:14, shadowOffset:{width:0,height:4}, shadowOpacity:0.35, shadowRadius:10, elevation:6 },
+  switchBtn:    { flex:1, flexDirection:'row', justifyContent:'center', alignItems:'center', zIndex:1 },
+  switchTxt:    { fontSize:14, fontWeight:'700' },
+  section:      { marginBottom:28 },
+  secHead:      { flexDirection:'row', alignItems:'center', paddingHorizontal:22, marginBottom:14, gap:9 },
+  secDot:       { width:9, height:9, borderRadius:5, shadowOffset:{width:0,height:0}, shadowOpacity:0.8, shadowRadius:6, elevation:3 },
+  secTitle:     { fontSize:18, fontWeight:'800', letterSpacing:-0.3 },
+  featCard:     { width:width*0.75, borderRadius:26, padding:20, marginRight:16, overflow:'hidden', elevation:5, shadowOffset:{width:0,height:8}, shadowOpacity:0.14, shadowRadius:16 },
+  featBlob:     { position:'absolute', width:200, height:200, borderRadius:100, top:-60, right:-50 },
+  featTop:      { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start', marginBottom:18, zIndex:1 },
+  featIconWrap: { width:60, height:60, borderRadius:20, borderWidth:1.5, justifyContent:'center', alignItems:'center', overflow:'hidden' },
+  featIcon:     { width:44, height:44, borderRadius:12 },
+  apyPill:      { flexDirection:'row', alignItems:'center', paddingHorizontal:10, paddingVertical:7, borderRadius:20, borderWidth:1, gap:3 },
+  apySmall:     { fontSize:11, fontWeight:'700', fontFamily:MONO },
+  apyBig:       { fontSize:16, fontWeight:'900', fontFamily:MONO },
+  featName:     { fontSize:20, fontWeight:'800', letterSpacing:-0.3, marginBottom:4, zIndex:1 },
+  featAsset:    { fontSize:12, fontWeight:'800', letterSpacing:1, marginBottom:10, fontFamily:MONO, zIndex:1 },
+  featDesc:     { fontSize:13, lineHeight:19, marginBottom:16, zIndex:1 },
+  featFooter:   { flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderTopWidth:1, paddingTop:14 },
+  openLabel:    { fontSize:13, fontWeight:'800', letterSpacing:0.3 },
+  openArrow:    { width:30, height:30, borderRadius:15, justifyContent:'center', alignItems:'center' },
+  appCard:      { width:114, padding:14, borderRadius:22, marginRight:12, alignItems:'center', borderWidth:1, elevation:2, shadowOffset:{width:0,height:3}, shadowOpacity:0.07, shadowRadius:6 },
+  appIconWrap:  { width:52, height:52, borderRadius:16, justifyContent:'center', alignItems:'center', marginBottom:10, overflow:'hidden' },
+  appIcon:      { width:38, height:38, borderRadius:11 },
+  appName:      { fontSize:13, fontWeight:'700', textAlign:'center', marginBottom:3 },
+  appAsset:     { fontSize:11, textAlign:'center', marginBottom:7 },
+  appApy:       { paddingHorizontal:9, paddingVertical:3, borderRadius:9 },
+  appApyTxt:    { fontSize:11, fontWeight:'800', fontFamily:MONO },
+  bmCard:       { borderRadius:18, marginBottom:10, borderWidth:1, elevation:1, shadowOffset:{width:0,height:2}, shadowOpacity:0.04, shadowRadius:4 },
+  bmInner:      { flexDirection:'row', alignItems:'center', padding:14 },
+  bmIconWrap:   { width:44, height:44, borderRadius:13, justifyContent:'center', alignItems:'center', marginRight:14, overflow:'hidden' },
+  bmIcon:       { width:28, height:28, borderRadius:8 },
+  bmInfo:       { flex:1, marginRight:8 },
+  bmName:       { fontSize:15, fontWeight:'700', marginBottom:3 },
+  bmUrl:        { fontSize:12 },
+  bmChevron:    { width:26, height:26, borderRadius:13, justifyContent:'center', alignItems:'center' },
+  addBmBtn:     { flexDirection:'row', alignItems:'center', padding:14, borderRadius:18, marginBottom:16, borderWidth:1.5, borderStyle:'dashed', gap:12 },
+  addBmIcon:    { width:36, height:36, borderRadius:11, justifyContent:'center', alignItems:'center' },
+  addBmTxt:     { fontSize:15, fontWeight:'700' },
+  emptyState:   { padding:36, borderRadius:24, alignItems:'center', marginTop:6, borderWidth:1, gap:10 },
+  emptyIcon:    { width:62, height:62, borderRadius:20, justifyContent:'center', alignItems:'center', marginBottom:4 },
+  emptyTitle:   { fontSize:17, fontWeight:'800' },
+  emptySub:     { fontSize:13, textAlign:'center', lineHeight:18 },
+  webLoader:    { position:'absolute', top:0, left:0, right:0, bottom:0, justifyContent:'center', alignItems:'center', zIndex:10 },
+  tabsOvRoot:   { flex:1, paddingTop: Platform.OS==='ios'?52:20 },
+  tabsOvHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:20, borderBottomWidth:1 },
+  tabsOvTitle:  { fontSize:22, fontWeight:'800', marginBottom:2 },
+  tabsOvSub:    { fontSize:13 },
+  closeBtn:     { width:36, height:36, borderRadius:18, justifyContent:'center', alignItems:'center' },
+  tabPreview:   { flex:1, margin:8, borderRadius:20, borderWidth:2, height:175, overflow:'hidden' },
+  tabPreviewTop:{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:10, borderBottomWidth:1 },
+  tabPreviewTitle:{ flex:1, fontSize:12, fontWeight:'700', marginRight:6 },
+  tabCloseBtn:  { width:22, height:22, borderRadius:11, justifyContent:'center', alignItems:'center' },
+  tabPreviewBody:{ flex:1, justifyContent:'center', alignItems:'center', gap:8 },
+  tabFavicon:   { width:42, height:42, borderRadius:13, justifyContent:'center', alignItems:'center' },
+  tabPreviewUrl:{ fontSize:11, textAlign:'center', paddingHorizontal:8 },
+  newTabBtn:    { position:'absolute', bottom:40, alignSelf:'center', flexDirection:'row', alignItems:'center', paddingVertical:16, paddingHorizontal:32, borderRadius:30, elevation:6, shadowOffset:{width:0,height:4}, shadowOpacity:0.22, shadowRadius:10 },
+  newTabTxt:    { color:'#FFF', fontWeight:'800', fontSize:16, marginLeft:8 },
+  menu:         { position:'absolute', right:62, width:188, borderRadius:18, borderWidth:1, elevation:10, shadowOffset:{width:0,height:6}, shadowOpacity:0.22, shadowRadius:14 },
+  menuRow:      { flexDirection:'row', alignItems:'center', paddingVertical:14, paddingHorizontal:16, gap:12 },
+  menuTxt:      { fontSize:14, fontWeight:'600' },
+  menuDivider:  { height:1, marginHorizontal:10 },
+  sheetOverlay: { flex:1, backgroundColor:'rgba(0,0,0,0.55)', justifyContent:'flex-end' },
+  sheet:        { borderTopLeftRadius:28, borderTopRightRadius:28, padding:24, paddingBottom: Platform.OS==='ios'?40:24 },
+  sheetHandle:  { width:40, height:4, borderRadius:2, alignSelf:'center', marginBottom:20 },
+  sheetTitle:   { fontSize:20, fontWeight:'800', textAlign:'center', marginBottom:20 },
+  inputRow:     { flexDirection:'row', alignItems:'center', borderRadius:14, borderWidth:1, marginBottom:12, height:52 },
+  inputTxt:     { flex:1, paddingHorizontal:12, fontSize:15, height:'100%' },
+  sheetBtns:    { flexDirection:'row', gap:12, marginTop:8 },
+  sheetBtn:     { flex:1, flexDirection:'row', justifyContent:'center', alignItems:'center', paddingVertical:16, borderRadius:14 },
+  sheetBtnTxt:  { fontSize:15, fontWeight:'800' },
 });
