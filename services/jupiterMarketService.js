@@ -31,7 +31,33 @@ const fetchWithTimeout = (url, ms = FETCH_TIMEOUT) => {
   return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
 };
 
-// ─── Jupiter v2 — أسعار موثوقة لكل العملات بما فيها MECO ─────────────────────
+// ─── DexScreener ──────────────────────────────────────────────────────────────
+const fetchDexScreener = async (mints) => {
+  const result = new Map();
+  if (!mints?.length) return result;
+  try {
+    const url  = `https://api.dexscreener.com/latest/dex/tokens/${mints.join(',')}`;
+    const res  = await fetchWithTimeout(url);
+    if (!res.ok) return result;
+    const data = await res.json();
+    if (!data?.pairs) return result;
+    for (const pair of data.pairs) {
+      const ml = pair.baseToken?.address?.toLowerCase();
+      if (!ml) continue;
+      const ex = result.get(ml);
+      if (!ex || (pair.liquidity?.usd||0) > (ex._liq||0)) {
+        result.set(ml, {
+          price:     parseFloat(pair.priceUsd        || 0),
+          change24h: parseFloat(pair.priceChange?.h24 || 0),
+          _liq:      pair.liquidity?.usd || 0,
+        });
+      }
+    }
+  } catch (_) {}
+  return result;
+};
+
+// ─── Jupiter v2 — أسعار العملات الكبرى ───────────────────────────────────────
 const fetchJupiterPrices = async (mints) => {
   const result = new Map();
   if (!mints?.length) return result;
@@ -47,54 +73,44 @@ const fetchJupiterPrices = async (mints) => {
   return result;
 };
 
-// ─── DexScreener — تغيير 24 ساعة لكل العملات ────────────────────────────────
-const fetchDexScreener = async (mints) => {
-  const result = new Map();
-  if (!mints?.length) return result;
-  const CHUNK = 30;
-  for (let i = 0; i < mints.length; i += CHUNK) {
-    try {
-      const chunk = mints.slice(i, i + CHUNK);
-      const res   = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(',')}`);
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (!data?.pairs) continue;
-      for (const pair of data.pairs) {
-        const ml = pair.baseToken?.address?.toLowerCase();
-        if (!ml) continue;
-        const ex = result.get(ml);
-        if (!ex || (pair.liquidity?.usd || 0) > (ex._liq || 0)) {
-          result.set(ml, {
-            price:     parseFloat(pair.priceUsd        || 0),
-            change24h: parseFloat(pair.priceChange?.h24 || 0),
-            _liq:      pair.liquidity?.usd || 0,
-          });
-        }
-      }
-    } catch (_) {}
-  }
-  return result;
-};
-
 // ─── الدالة الرئيسية ──────────────────────────────────────────────────────────
 export async function getJupiterMarketData() {
   try {
     const customTokens = await getCustomTokens();
-    const allMints     = CORE_TOKENS.map(t => t.mint);
 
-    // ✅ Jupiter + DexScreener بالتوازي
-    const [jupMap, dexMap] = await Promise.all([
-      fetchJupiterPrices(allMints),
-      fetchDexScreener(allMints),
+    // ✅ العملات غير MECO
+    const otherTokens = CORE_TOKENS.filter(t => t.symbol !== 'MECO');
+    const otherMints  = otherTokens.map(t => t.mint);
+
+    // ✅ MECO باستدعاء مستقل مضمون — لا يتأثر بفشل Batch
+    const [jupMap, dexOthersMap, mecoMap] = await Promise.all([
+      fetchJupiterPrices(otherMints),
+      fetchDexScreener(otherMints),
+      fetchDexScreener([MECO_MINT]),   // ✅ استدعاء منفصل لـ MECO
     ]);
 
+    // ── بيانات MECO ───────────────────────────────────────────────────────────
+    const mecoData  = mecoMap.get(MECO_MINT.toLowerCase());
+    const mecoPrice = mecoData?.price    || 0;
+    const mecoChg   = mecoData?.change24h ?? 0;
+
+    // ── بناء البيانات النهائية ────────────────────────────────────────────────
     const coreData = CORE_TOKENS.map((token, index) => {
+      if (token.symbol === 'MECO') {
+        return {
+          ...token,
+          current_price:               mecoPrice,
+          price_change_percentage_24h: mecoChg,
+          market_cap:                  mecoPrice * MECO_TOTAL_SUPPLY,
+          rank: index + 1,
+        };
+      }
+
       const ml       = token.mint.toLowerCase();
       const jupPrice = jupMap.get(ml) || 0;
-      const dex      = dexMap.get(ml);
-      const dexPrice = dex?.price    || 0;
+      const dex      = dexOthersMap.get(ml);
+      const dexPrice = dex?.price || 0;
 
-      // Jupiter أساسي → DexScreener fallback
       let price     = jupPrice > 0 ? jupPrice : dexPrice;
       let change24h = dex?.change24h ?? 0;
 
@@ -108,29 +124,23 @@ export async function getJupiterMarketData() {
         ...token,
         current_price:               price,
         price_change_percentage_24h: change24h,
-        market_cap:                  token.mint === MECO_MINT ? price * MECO_TOTAL_SUPPLY : 0,
-        rank:                        index + 1,
+        market_cap:                  0,
+        rank: index + 1,
       };
     });
 
-    // ✅ رموز مخصصة
+    // ── رموز مخصصة ───────────────────────────────────────────────────────────
     let updatedCustom = [...customTokens];
     if (customTokens.length > 0) {
-      const customMints = customTokens.map(t => t.mint);
-      const [cjup, cdex] = await Promise.all([
-        fetchJupiterPrices(customMints),
-        fetchDexScreener(customMints),
-      ]);
+      const customMints  = customTokens.map(t => t.mint);
+      const customDexMap = await fetchDexScreener(customMints);
       updatedCustom = customTokens.map((token, i) => {
-        const ml   = token.mint.toLowerCase();
-        const jp   = cjup.get(ml) || 0;
-        const dex  = cdex.get(ml);
-        const dp   = dex?.price || 0;
+        const info = customDexMap.get(token.mint.toLowerCase());
         return {
           ...token,
-          current_price:               jp > 0 ? jp : dp,
-          price_change_percentage_24h: dex?.change24h ?? token.price_change_percentage_24h ?? 0,
-          rank:                        CORE_TOKENS.length + i + 1,
+          current_price:               info?.price    ?? token.current_price    ?? 0,
+          price_change_percentage_24h: info?.change24h ?? token.price_change_percentage_24h ?? 0,
+          rank: CORE_TOKENS.length + i + 1,
         };
       });
     }
@@ -177,8 +187,8 @@ export async function fetchCustomTokenByMint(mintAddress) {
   const data = await res.json();
   if (!data?.pairs?.length) throw new Error('لم يتم العثور على بيانات لهذا الرمز');
 
-  const pair = data.pairs.reduce((best, p) =>
-    (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best, data.pairs[0]);
+  const pair = data.pairs.reduce((b, p) =>
+    (p.liquidity?.usd||0) > (b.liquidity?.usd||0) ? p : b, data.pairs[0]);
 
   return {
     id: mint, symbol: pair.baseToken?.symbol || 'UNKNOWN',
