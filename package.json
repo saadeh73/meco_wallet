@@ -1,6 +1,6 @@
 {
   "name": "meco_wallet",
-  "version": "1.11.0",
+  "version": "1.16.0",
   "main": "index.js",
   "license": "0BSD",
   "private": true,
