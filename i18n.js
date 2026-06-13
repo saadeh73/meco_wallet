@@ -267,6 +267,12 @@ const resources = {
       up_to_date: 'التطبيق مُحدّث ✅',
       latest_version_installed: 'أنت تستخدم أحدث إصدار من meco wallet.',
       check_update_failed: 'تعذر التحقق من التحديثات. تحقق من اتصالك بالإنترنت.',
+      clear_cache: 'مسح التخزين المؤقت',
+      clear_cache_confirm: 'هل تريد مسح بيانات الأسعار المحفوظة مؤقتاً؟',
+      clear_cache_desc: 'مسح بيانات الأسعار المحفوظة مؤقتاً',
+      cache_cleared: 'تم مسح التخزين المؤقت بنجاح',
+      clear: 'مسح',
+      data: 'البيانات',
       use_device_passcode: 'استخدام رمز الهاتف',
       authenticate_with_passcode: 'الرجاء إدخال رمز الهاتف للمتابعة',
       account: 'الحساب',
@@ -410,6 +416,15 @@ const resources = {
       swap_balance: "الرصيد المتاح",
       swap_loading_quote: "جاري البحث عن أفضل سعر...",
       swap_receive: "ستستلم تقريباً",
+
+      // ========== TradingScreen (جديد) ==========
+      trading: 'تداول',
+      buy: 'شراء',
+      sell: 'بيع',
+      amount_usdc: 'المبلغ بـ USDC',
+      amount: 'الكمية',
+      you_receive: 'ستحصل على',
+      powered_by_jupiter: 'يعمل بواسطة Jupiter Swap',
 
       // ========== TransactionHistoryScreen ==========
       all: 'الكل',
@@ -865,6 +880,12 @@ const resources = {
       up_to_date: 'App is up to date ✅',
       latest_version_installed: 'You are using the latest version of meco wallet.',
       check_update_failed: 'Failed to check for updates. Please check your internet connection.',
+      clear_cache: 'Clear Cache',
+      clear_cache_confirm: 'Clear cached price data?',
+      clear_cache_desc: 'Clear temporarily stored price data',
+      cache_cleared: 'Cache cleared successfully',
+      clear: 'Clear',
+      data: 'Data',
       use_device_passcode: 'Use device passcode',
       authenticate_with_passcode: 'Please enter device passcode to continue',
       account: 'Account',
@@ -1008,6 +1029,15 @@ const resources = {
       swap_balance: "Available Balance",
       swap_loading_quote: "Finding the best price...",
       swap_receive: "You will roughly receive",
+
+      // ========== TradingScreen (New) ==========
+      trading: 'Trading',
+      buy: 'Buy',
+      sell: 'Sell',
+      amount_usdc: 'Amount in USDC',
+      amount: 'Amount',
+      you_receive: 'You receive',
+      powered_by_jupiter: 'Powered by Jupiter Swap',
 
       // ========== TransactionHistoryScreen ==========
       all: 'All',
