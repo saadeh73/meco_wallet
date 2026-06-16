@@ -5,7 +5,9 @@ import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import heliusService from './heliusService';
 
-const JUPITER_LIMIT_API = 'https://jup.ag/api/limit/v2';
+// ✅ URLs محدثة
+const JUPITER_QUOTE_API = 'https://api.jup.ag/swap/v1';
+const JUPITER_LIMIT_API = 'https://api.jup.ag/limit/v2';
 
 async function getKeypair(activeIndex) {
   let pk = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
@@ -39,7 +41,9 @@ async function signAndSend(txBase64, activeIndex) {
     if (!e.message?.includes('Versioned') && !e.message?.includes('deserialize')) {
       const tx = web3.Transaction.from(buffer);
       tx.partialSign(keypair);
-      const sig = await connection.sendRawTransaction(tx.serialize({ requireAllSignatures:false }), { skipPreflight:false });
+      const sig = await connection.sendRawTransaction(
+        tx.serialize({ requireAllSignatures:false }), { skipPreflight:false }
+      );
       await connection.confirmTransaction(sig, 'confirmed');
       return sig;
     }
@@ -47,44 +51,68 @@ async function signAndSend(txBase64, activeIndex) {
   }
 }
 
+// ─── Market Swap ──────────────────────────────────────────────────────────────
 export async function executeMarketSwap({ inputMint, outputMint, amount, walletPublicKey, activeIndex }) {
-  const quoteRes = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`);
+  // Quote
+  const quoteRes = await fetch(
+    `${JUPITER_QUOTE_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`
+  );
   if (!quoteRes.ok) throw new Error(`Quote error: ${quoteRes.status}`);
   const quote = await quoteRes.json();
   if (quote.error) throw new Error(quote.error);
   if (!quote.routePlan?.length) throw new Error('No route available');
 
-  const swapRes = await fetch('https://quote-api.jup.ag/v6/swap', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ quoteResponse:quote, userPublicKey:walletPublicKey, wrapAndUnwrapSol:true, dynamicComputeUnitLimit:true, prioritizationFeeLamports:'auto' }),
+  // Swap
+  const swapRes = await fetch(`${JUPITER_QUOTE_API}/swap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      quoteResponse:             quote,
+      userPublicKey:             walletPublicKey,
+      wrapAndUnwrapSol:          true,
+      dynamicComputeUnitLimit:   true,
+      prioritizationFeeLamports: 'auto',
+    }),
   });
   if (!swapRes.ok) throw new Error(`Swap error: ${swapRes.status}`);
   const { swapTransaction } = await swapRes.json();
-  if (!swapTransaction) throw new Error('No swap transaction');
+  if (!swapTransaction) throw new Error('No swap transaction returned');
   return signAndSend(swapTransaction, activeIndex);
 }
 
+// ─── Limit Order ──────────────────────────────────────────────────────────────
 export async function executeLimitOrder({ inputMint, outputMint, inAmount, outAmount, walletPublicKey, activeIndex }) {
   const res = await fetch(`${JUPITER_LIMIT_API}/createOrder`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ owner:walletPublicKey, inputMint, outputMint, inAmount:inAmount.toString(), outAmount:outAmount.toString(), expiredAt:null }),
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      owner:      walletPublicKey,
+      inputMint,  outputMint,
+      inAmount:   inAmount.toString(),
+      outAmount:  outAmount.toString(),
+      expiredAt:  null,
+    }),
   });
   if (!res.ok) throw new Error(`Limit order error: ${res.status}`);
   const data = await res.json();
-  if (!data.tx) throw new Error('No limit order tx');
+  if (!data.tx) throw new Error('No limit order transaction returned');
   return signAndSend(data.tx, activeIndex);
 }
 
+// ─── Cancel Limit Order ───────────────────────────────────────────────────────
 export async function cancelLimitOrder({ orderPubkey, walletPublicKey, activeIndex }) {
   const res = await fetch(`${JUPITER_LIMIT_API}/cancelOrders`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ owner:walletPublicKey, orders:[orderPubkey] }),
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner: walletPublicKey, orders: [orderPubkey] }),
   });
   if (!res.ok) throw new Error(`Cancel error: ${res.status}`);
   const { txs } = await res.json();
+  if (!txs?.length) throw new Error('No cancel transactions');
   for (const tx of txs) await signAndSend(tx, activeIndex);
 }
 
+// ─── Open Orders ──────────────────────────────────────────────────────────────
 export async function getOpenLimitOrders(walletPublicKey) {
   try {
     const res = await fetch(`${JUPITER_LIMIT_API}/openOrders?wallet=${walletPublicKey}`);
