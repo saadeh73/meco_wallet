@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Dimensions, ActivityIndicator, TextInput, Platform,
-  Animated, FlatList, Image, SafeAreaView, Alert, Modal,
+  FlatList, Image, SafeAreaView, Alert, Modal,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppStore } from '../store';
@@ -13,26 +13,28 @@ import { WebView } from 'react-native-webview';
 import { getFullChartData } from '../services/priceChartService';
 import { getJupiterMarketData, CORE_TOKENS } from '../services/jupiterMarketService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
-import * as web3 from '@solana/web3.js';
-import * as SecureStore from 'expo-secure-store';
-import bs58 from 'bs58';
-import heliusService from '../services/heliusService';
+import {
+  executeMarketSwap,
+  executeLimitOrder,
+  cancelLimitOrder,
+  getOpenLimitOrders,
+} from '../services/tradingService';
 
 const { width, height } = Dimensions.get('window');
 const CHART_H = Math.round(height * 0.36);
 
 const TIMEFRAMES = [
-  { label:'1D', days:1  },
-  { label:'7D', days:7  },
-  { label:'30D',days:30 },
-  { label:'3M', days:90 },
-  { label:'1Y', days:365},
+  { label:'1D', days:1   },
+  { label:'7D', days:7   },
+  { label:'30D',days:30  },
+  { label:'3M', days:90  },
+  { label:'1Y', days:365 },
 ];
 
 const QUOTE_TOKENS = [
-  { symbol:'USDC', mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', decimals:6, image:'https://assets.coingecko.com/coins/images/6319/large/usdc.png'      },
-  { symbol:'USDT', mint:'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', decimals:6, image:'https://assets.coingecko.com/coins/images/325/large/Tether.png'        },
-  { symbol:'SOL',  mint:'So11111111111111111111111111111111111111112',   decimals:9, image:'https://assets.coingecko.com/coins/images/4128/large/solana.png'       },
+  { symbol:'USDC', mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', decimals:6, image:'https://assets.coingecko.com/coins/images/6319/large/usdc.png'  },
+  { symbol:'USDT', mint:'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', decimals:6, image:'https://assets.coingecko.com/coins/images/325/large/Tether.png'   },
+  { symbol:'SOL',  mint:'So11111111111111111111111111111111111111112',   decimals:9, image:'https://assets.coingecko.com/coins/images/4128/large/solana.png'  },
 ];
 
 // ─── Chart HTML ───────────────────────────────────────────────────────────────
@@ -87,92 +89,14 @@ const SafeImage = ({ uri, size=32 }) => {
   return <Image source={{uri}} style={{width:size,height:size,borderRadius:size/2}} onError={()=>setErr(true)}/>;
 };
 
-// ─── Jupiter Market Swap ──────────────────────────────────────────────────────
-async function jupiterMarketSwap({ inputMint, outputMint, amount, walletPublicKey, activeIndex }) {
-  const quoteRes = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`);
-  if (!quoteRes.ok) throw new Error('Quote failed');
-  const quote = await quoteRes.json();
-  if (!quote.routePlan?.length) throw new Error('No route found');
-
-  const swapRes = await fetch('https://quote-api.jup.ag/v6/swap', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ quoteResponse:quote, userPublicKey:walletPublicKey, wrapAndUnwrapSol:true, dynamicComputeUnitLimit:true, prioritizationFeeLamports:'auto' }),
-  });
-  if (!swapRes.ok) throw new Error('Swap build failed');
-  const { swapTransaction } = await swapRes.json();
-  return signAndSendTx(swapTransaction, activeIndex);
-}
-
-// ─── Jupiter Limit Order ──────────────────────────────────────────────────────
-async function jupiterLimitOrder({ inputMint, outputMint, inAmount, outAmount, walletPublicKey, activeIndex }) {
-  const res = await fetch('https://jup.ag/api/limit/v1/createOrder', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      owner:         walletPublicKey,
-      inputMint,  outputMint,
-      inAmount:   inAmount.toString(),
-      outAmount:  outAmount.toString(),
-      expiredAt:  null,
-    }),
-  });
-  if (!res.ok) throw new Error('Limit order creation failed');
-  const { tx } = await res.json();
-  return signAndSendTx(tx, activeIndex);
-}
-
-// ─── Cancel Limit Order ───────────────────────────────────────────────────────
-async function cancelLimitOrder({ orderPubkey, walletPublicKey, activeIndex }) {
-  const res = await fetch('https://jup.ag/api/limit/v1/cancelOrders', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ owner:walletPublicKey, orders:[orderPubkey] }),
-  });
-  if (!res.ok) throw new Error('Cancel failed');
-  const { txs } = await res.json();
-  for (const tx of txs) await signAndSendTx(tx, activeIndex);
-}
-
-// ─── Get Open Limit Orders ────────────────────────────────────────────────────
-async function getOpenLimitOrders(walletPublicKey) {
-  try {
-    const res = await fetch(`https://jup.ag/api/limit/v1/openOrders?wallet=${walletPublicKey}`);
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (_) { return []; }
-}
-
-// ─── Sign & Send ──────────────────────────────────────────────────────────────
-async function signAndSendTx(txBase64, activeIndex) {
-  let pk = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
-  if (!pk && activeIndex===0) pk = await SecureStore.getItemAsync('wallet_private_key');
-  if (!pk) throw new Error('Private key not found');
-  const secretKey  = pk.startsWith('[') ? new Uint8Array(JSON.parse(pk)) : bs58.decode(pk);
-  const keypair    = web3.Keypair.fromSecretKey(secretKey);
-  const connection = await heliusService.getConnection();
-  const buf        = Buffer.from(txBase64, 'base64');
-  const vTx        = web3.VersionedTransaction.deserialize(buf);
-  const luts       = await Promise.all(
-    vTx.message.addressTableLookups.map(async lut =>
-      (await connection.getAddressLookupTable(lut.accountKey)).value
-    )
-  );
-  const msg = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts:luts.filter(Boolean) });
-  const { blockhash } = await connection.getLatestBlockhash('confirmed');
-  msg.recentBlockhash = blockhash;
-  const rebuilt = new web3.VersionedTransaction(msg.compileToV0Message(luts.filter(Boolean)));
-  rebuilt.sign([keypair]);
-  const sig = await connection.sendRawTransaction(rebuilt.serialize(), { skipPreflight:false, preflightCommitment:'confirmed' });
-  await connection.confirmTransaction(sig, 'confirmed');
-  return sig;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function TradingScreen() {
-  const navigation   = useNavigation();
-  const route        = useRoute();
-  const { t }        = useTranslation();
-  const theme        = useAppStore(s => s.theme);
-  const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
-  const isDark       = theme === 'dark';
+  const navigation         = useNavigation();
+  const route              = useRoute();
+  const { t }              = useTranslation();
+  const theme              = useAppStore(s => s.theme);
+  const primaryColor       = useAppStore(s => s.primaryColor || '#6C63FF');
+  const isDark             = theme === 'dark';
   const activeAccountIndex = useAppStore(s => s.activeAccountIndex);
   const walletPublicKey    = useAppStore(s => s.walletPublicKey);
 
@@ -190,7 +114,7 @@ export default function TradingScreen() {
   const [quoteToken,    setQuoteToken]    = useState(QUOTE_TOKENS[0]);
   const [quoteModal,    setQuoteModal]    = useState(false);
   const [timeframe,     setTimeframe]     = useState(TIMEFRAMES[0]);
-  const [orderType,     setOrderType]     = useState('market'); // 'market' | 'limit'
+  const [orderType,     setOrderType]     = useState('market');
   const [orderSide,     setOrderSide]     = useState('buy');
   const [orderAmount,   setOrderAmount]   = useState('');
   const [limitPrice,    setLimitPrice]    = useState('');
@@ -233,6 +157,7 @@ export default function TradingScreen() {
     finally { setOrdersLoading(false); }
   }, [walletPublicKey]);
 
+  // ── جلب بيانات السوق ─────────────────────────────────────────────────────
   const fetchMarket = useCallback(async () => {
     try {
       setMarketLoading(true);
@@ -241,13 +166,13 @@ export default function TradingScreen() {
       const tok = data.find(d=>d.mint===selectedToken.mint);
       if (tok) {
         setPriceStats(prev=>({ ...prev, current:tok.current_price||0, change:tok.price_change_percentage_24h||0 }));
-        // ✅ تعبئة سعر الـ Limit تلقائياً بالسعر الحالي عند التبديل
         if (!limitPrice) setLimitPrice((tok.current_price||0).toFixed(6));
       }
     } catch (_) {}
     finally { setMarketLoading(false); }
   }, [selectedToken.mint]);
 
+  // ── جلب الرسم البياني ────────────────────────────────────────────────────
   const fetchChart = useCallback(async () => {
     try {
       setChartLoading(true); chartReady.current = false;
@@ -255,10 +180,22 @@ export default function TradingScreen() {
       if (!result?.data?.length) { setChartLoading(false); return; }
       const price    = result.stats?.currentPrice || 0;
       const decimals = price>1?2:price>0.01?4:price>0.0001?6:8;
-      setPriceStats(prev=>({ ...prev, current:prev.current||price, open:result.stats?.openPrice||0, high:result.stats?.high||0, low:result.stats?.low||0, volume:result.stats?.volume24h||0, change:prev.change||result.stats?.periodChange||0 }));
-      const candles = result.data.map(d=>({ time:Math.floor(d.timestamp/1000), open:d.open, high:d.high, low:d.low, close:d.close })).sort((a,b)=>a.time-b.time);
-      const volumes = result.volumeData?.map(v=>({ time:Math.floor(v.timestamp/1000), value:v.volume, color:'#3B82F620' })).sort((a,b)=>a.time-b.time)||[];
-      const js = `window.setChartData(${JSON.stringify(candles)},${JSON.stringify(volumes)},${decimals});true;`;
+      setPriceStats(prev=>({
+        ...prev,
+        current: prev.current||price,
+        open:    result.stats?.openPrice||0,
+        high:    result.stats?.high||0,
+        low:     result.stats?.low||0,
+        volume:  result.stats?.volume24h||0,
+        change:  prev.change||result.stats?.periodChange||0,
+      }));
+      const candleData = result.data.map(d=>({
+        time:Math.floor(d.timestamp/1000), open:d.open, high:d.high, low:d.low, close:d.close,
+      })).sort((a,b)=>a.time-b.time);
+      const volData = result.volumeData?.map(v=>({
+        time:Math.floor(v.timestamp/1000), value:v.volume, color:'#3B82F620',
+      })).sort((a,b)=>a.time-b.time)||[];
+      const js = `window.setChartData(${JSON.stringify(candleData)},${JSON.stringify(volData)},${decimals});true;`;
       if (chartReady.current) webviewRef.current?.injectJavaScript(js);
       else pendingData.current = js;
     } catch (_) {}
@@ -274,33 +211,38 @@ export default function TradingScreen() {
 
   const onWebViewLoad = () => {
     chartReady.current = true;
-    if (pendingData.current) { webviewRef.current?.injectJavaScript(pendingData.current); pendingData.current = null; }
+    if (pendingData.current) {
+      webviewRef.current?.injectJavaScript(pendingData.current);
+      pendingData.current = null;
+    }
   };
 
-  // ── تنفيذ الأمر ──────────────────────────────────────────────────────────
+  // ── تنفيذ الأمر عبر tradingService ───────────────────────────────────────
   const handleExecute = async () => {
     if (!orderAmount || parseFloat(orderAmount)<=0) return;
     if (!walletPublicKey) { Alert.alert(t('error'), t('no_wallet')); return; }
-    const amt  = parseFloat(orderAmount);
-    const avail = orderSide==='buy' ? userBalance.quote : userBalance.base;
-    if (amt > avail) { Alert.alert(t('error'), t('insufficient_balance')); return; }
+
+    const amt        = parseFloat(orderAmount);
+    const availBal   = orderSide==='buy' ? userBalance.quote : userBalance.base;
+    if (amt > availBal) { Alert.alert(t('error'), t('insufficient_balance')); return; }
 
     const inputToken  = orderSide==='buy' ? quoteToken    : selectedToken;
     const outputToken = orderSide==='buy' ? selectedToken : quoteToken;
     const rawIn       = Math.round(amt * Math.pow(10, inputToken.decimals));
 
-    // للأوامر المحددة السعر
     let rawOut = 0;
     if (orderType==='limit') {
-      if (!limitPrice || parseFloat(limitPrice)<=0) { Alert.alert(t('error'), t('enter_limit_price','أدخل السعر المحدد')); return; }
+      if (!limitPrice || parseFloat(limitPrice)<=0) {
+        Alert.alert(t('error'), t('enter_limit_price')); return;
+      }
       const lp = parseFloat(limitPrice);
       rawOut = orderSide==='buy'
         ? Math.round((amt / lp) * Math.pow(10, outputToken.decimals))
         : Math.round((amt * lp) * Math.pow(10, outputToken.decimals));
     }
 
-    const typeLabel = orderType==='market' ? t('market_order','أمر سوق') : t('limit_order','أمر محدد');
-    const priceInfo = orderType==='limit' ? `\n${t('at_price','بسعر')}: ${limitPrice} ${quoteToken.symbol}` : '';
+    const typeLabel = orderType==='market' ? t('market_order') : t('limit_order');
+    const priceInfo = orderType==='limit' ? `\n${t('at_price')}: ${limitPrice} ${quoteToken.symbol}` : '';
 
     Alert.alert(
       `${typeLabel} — ${orderSide==='buy'?t('buy'):t('sell')}`,
@@ -308,23 +250,45 @@ export default function TradingScreen() {
       [
         { text:t('cancel'), style:'cancel' },
         {
-          text:t('confirm'),
+          text: t('confirm'),
           onPress: async () => {
             try {
               setExecuting(true);
               let sig;
+
               if (orderType==='market') {
-                sig = await jupiterMarketSwap({ inputMint:inputToken.mint, outputMint:outputToken.mint, amount:rawIn, walletPublicKey, activeIndex:activeAccountIndex });
+                // ✅ تنفيذ أمر السوق عبر tradingService
+                sig = await executeMarketSwap({
+                  inputMint:      inputToken.mint,
+                  outputMint:     outputToken.mint,
+                  amount:         rawIn,
+                  walletPublicKey,
+                  activeIndex:    activeAccountIndex,
+                });
               } else {
-                sig = await jupiterLimitOrder({ inputMint:inputToken.mint, outputMint:outputToken.mint, inAmount:rawIn, outAmount:rawOut, walletPublicKey, activeIndex:activeAccountIndex });
+                // ✅ تنفيذ أمر محدد السعر عبر tradingService
+                sig = await executeLimitOrder({
+                  inputMint:      inputToken.mint,
+                  outputMint:     outputToken.mint,
+                  inAmount:       rawIn,
+                  outAmount:      rawOut,
+                  walletPublicKey,
+                  activeIndex:    activeAccountIndex,
+                });
                 await fetchOpenOrders();
               }
+
               setOrderAmount('');
               await fetchBalances();
-              Alert.alert(t('success'), `✅ ${orderType==='limit'?t('limit_order_placed','تم تسجيل الأمر'):t('trade_success','تمت العملية بنجاح')}\n${sig.slice(0,8)}...${sig.slice(-4)}`);
+              Alert.alert(
+                t('success'),
+                `✅ ${orderType==='limit' ? t('limit_order_placed') : t('trade_success')}\n${sig.slice(0,8)}...${sig.slice(-4)}`
+              );
             } catch (e) {
-              Alert.alert(t('error'), `${t('trade_failed','فشلت العملية')}: ${e.message}`);
-            } finally { setExecuting(false); }
+              Alert.alert(t('error'), `${t('trade_failed')}: ${e.message}`);
+            } finally {
+              setExecuting(false);
+            }
           },
         },
       ]
@@ -333,23 +297,22 @@ export default function TradingScreen() {
 
   // ── إلغاء أمر Limit ──────────────────────────────────────────────────────
   const handleCancelOrder = (order) => {
-    Alert.alert(t('cancel_order','إلغاء الأمر'), t('cancel_order_confirm','هل تريد إلغاء هذا الأمر؟'), [
-      { text:t('no','لا'), style:'cancel' },
+    Alert.alert(t('cancel_order'), t('cancel_order_confirm'), [
+      { text:t('no'), style:'cancel' },
       {
-        text:t('yes_cancel','نعم، إلغاء'), style:'destructive',
+        text:t('yes_cancel'), style:'destructive',
         onPress: async () => {
           try {
             await cancelLimitOrder({ orderPubkey:order.publicKey, walletPublicKey, activeIndex:activeAccountIndex });
             await fetchOpenOrders();
-            Alert.alert(t('success'), t('order_cancelled','تم إلغاء الأمر'));
-          } catch (e) {
-            Alert.alert(t('error'), e.message);
-          }
+            Alert.alert(t('success'), t('order_cancelled'));
+          } catch (e) { Alert.alert(t('error'), e.message); }
         },
       },
     ]);
   };
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const fmtPrice = (p) => {
     if (!p) return '$0.00';
     if (p>1)      return `$${p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -366,18 +329,24 @@ export default function TradingScreen() {
   };
   const fmtBal = (b) => b>0 ? b.toLocaleString(undefined,{maximumFractionDigits:4}) : '0';
 
-  const up             = priceStats.change >= 0;
-  const availBal       = orderSide==='buy' ? userBalance.quote : userBalance.base;
-  const availCur       = orderSide==='buy' ? quoteToken.symbol : selectedToken.symbol;
-  const estimatedTotal = orderAmount && priceStats.current
-    ? orderSide==='buy' ? (parseFloat(orderAmount)/priceStats.current).toFixed(6)
-                        : (parseFloat(orderAmount)*priceStats.current).toFixed(4)
-    : '0';
+  const up       = priceStats.change >= 0;
+  const availBal = orderSide==='buy' ? userBalance.quote : userBalance.base;
+  const availCur = orderSide==='buy' ? quoteToken.symbol : selectedToken.symbol;
+
+  const estimatedTotal = () => {
+    if (!orderAmount || !priceStats.current) return '0';
+    const amt = parseFloat(orderAmount);
+    const lp  = orderType==='limit' && limitPrice ? parseFloat(limitPrice) : priceStats.current;
+    if (!lp) return '0';
+    return orderSide==='buy'
+      ? (amt/lp).toFixed(6)
+      : (amt*lp).toFixed(4);
+  };
 
   return (
     <SafeAreaView style={[S.root,{backgroundColor:C.bg}]}>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <View style={[S.header,{backgroundColor:C.card,borderBottomColor:C.border}]}>
         <TouchableOpacity onPress={()=>navigation.goBack()} style={[S.iconBtn,{backgroundColor:C.card2}]}>
           <Ionicons name="arrow-back" size={22} color={C.text}/>
@@ -386,24 +355,25 @@ export default function TradingScreen() {
           <SafeImage uri={selectedToken.image} size={26}/>
           <Text style={[S.headerSym,{color:C.text}]}>{selectedToken.symbol}/{quoteToken.symbol}</Text>
         </View>
-        <TouchableOpacity style={[S.iconBtn,{backgroundColor:C.card2}]} onPress={()=>{fetchMarket();fetchChart();fetchBalances();fetchOpenOrders();}}>
+        <TouchableOpacity style={[S.iconBtn,{backgroundColor:C.card2}]}
+          onPress={()=>{ fetchMarket(); fetchChart(); fetchBalances(); fetchOpenOrders(); }}>
           <Ionicons name="refresh" size={20} color={primaryColor}/>
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
 
-        {/* Token Selector */}
+        {/* ── Token Selector ── */}
         <FlatList
           data={tokens} horizontal showsHorizontalScrollIndicator={false}
           keyExtractor={i=>i.mint} contentContainerStyle={S.tokenRow}
           renderItem={({item})=>{
-            const active=item.mint===selectedToken.mint;
-            const tok=CORE_TOKENS.find(c=>c.mint===item.mint);
+            const active = item.mint===selectedToken.mint;
+            const tok    = CORE_TOKENS.find(c=>c.mint===item.mint);
             return (
               <TouchableOpacity
-                style={[S.tokenChip,active&&{backgroundColor:primaryColor,borderColor:primaryColor}]}
-                onPress={()=>{setSelectedToken(tok||item);setOrderAmount('');setLimitPrice('');}}
+                style={[S.tokenChip, active&&{backgroundColor:primaryColor,borderColor:primaryColor}]}
+                onPress={()=>{ setSelectedToken(tok||item); setOrderAmount(''); setLimitPrice(''); }}
               >
                 <SafeImage uri={item.image} size={16}/>
                 <Text style={[S.chipSym,{color:active?'#FFF':C.text}]}>{item.symbol}</Text>
@@ -415,17 +385,23 @@ export default function TradingScreen() {
           }}
         />
 
-        {/* Price Header */}
+        {/* ── Price Header ── */}
         <View style={[S.priceHeader,{backgroundColor:C.card}]}>
           <View>
             <Text style={[S.priceMain,{color:C.text}]}>{marketLoading?'—':fmtPrice(priceStats.current)}</Text>
             <View style={[S.changePill,{backgroundColor:up?C.success+'20':C.error+'20'}]}>
               <Ionicons name={up?'trending-up':'trending-down'} size={12} color={up?C.success:C.error}/>
-              <Text style={[S.changeTxt,{color:up?C.success:C.error}]}>{up?'+':''}{priceStats.change.toFixed(2)}%</Text>
+              <Text style={[S.changeTxt,{color:up?C.success:C.error}]}>
+                {up?'+':''}{priceStats.change.toFixed(2)}%
+              </Text>
             </View>
           </View>
           <View style={S.priceStats}>
-            {[{l:'H',v:fmtPrice(priceStats.high),c:C.success},{l:'L',v:fmtPrice(priceStats.low),c:C.error},{l:'V',v:fmtBig(priceStats.volume),c:C.text}].map(s=>(
+            {[
+              {l:'H',v:fmtPrice(priceStats.high), c:C.success},
+              {l:'L',v:fmtPrice(priceStats.low),  c:C.error  },
+              {l:'V',v:fmtBig(priceStats.volume),  c:C.text   },
+            ].map(s=>(
               <View key={s.l} style={S.priceStat}>
                 <Text style={[S.psL,{color:C.muted}]}>{s.l}</Text>
                 <Text style={[S.psV,{color:s.c}]}>{s.v}</Text>
@@ -434,36 +410,53 @@ export default function TradingScreen() {
           </View>
         </View>
 
-        {/* Chart */}
+        {/* ── Chart ── */}
         <View style={[S.chartWrap,{height:CHART_H,backgroundColor:C.card}]}>
-          {chartLoading&&<View style={[S.chartOverlay,{backgroundColor:C.card}]}><ActivityIndicator size="large" color={primaryColor}/></View>}
-          <WebView ref={webviewRef} source={{html:chartHtml}} style={{flex:1,backgroundColor:C.card}}
-            scrollEnabled={false} bounces={false} javaScriptEnabled domStorageEnabled
-            onLoad={onWebViewLoad} showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}/>
+          {chartLoading && (
+            <View style={[S.chartOverlay,{backgroundColor:C.card}]}>
+              <ActivityIndicator size="large" color={primaryColor}/>
+            </View>
+          )}
+          <WebView
+            ref={webviewRef} source={{html:chartHtml}}
+            style={{flex:1,backgroundColor:C.card}}
+            scrollEnabled={false} bounces={false}
+            javaScriptEnabled domStorageEnabled
+            onLoad={onWebViewLoad}
+            showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
+          />
         </View>
 
-        {/* Timeframe */}
+        {/* ── Timeframe ── */}
         <View style={[S.tfRow,{backgroundColor:C.card,borderTopColor:C.border}]}>
           {TIMEFRAMES.map(tf=>(
-            <TouchableOpacity key={tf.label} style={[S.tfBtn,timeframe.label===tf.label&&{backgroundColor:primaryColor}]} onPress={()=>setTimeframe(tf)}>
+            <TouchableOpacity
+              key={tf.label}
+              style={[S.tfBtn, timeframe.label===tf.label&&{backgroundColor:primaryColor}]}
+              onPress={()=>setTimeframe(tf)}
+            >
               <Text style={[S.tfTxt,{color:timeframe.label===tf.label?'#FFF':C.muted}]}>{tf.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Order Panel */}
+        {/* ── Order Panel ── */}
         <View style={[S.orderPanel,{backgroundColor:C.card}]}>
 
-          {/* ✅ Market / Limit switcher */}
+          {/* Market / Limit */}
           <View style={[S.typeTabs,{backgroundColor:C.card2}]}>
             {[
-              { key:'market', label:t('market_order','سوق'),  icon:'flash'         },
-              { key:'limit',  label:t('limit_order','محدد'), icon:'timer-outline' },
+              {key:'market', label:t('market_order'), icon:'flash'        },
+              {key:'limit',  label:t('limit_order'),  icon:'timer-outline'},
             ].map(item=>(
               <TouchableOpacity
                 key={item.key}
                 style={[S.typeTab, orderType===item.key&&{backgroundColor:primaryColor}]}
-                onPress={()=>{setOrderType(item.key);if(item.key==='limit'&&priceStats.current)setLimitPrice(priceStats.current.toFixed(6));}}
+                onPress={()=>{
+                  setOrderType(item.key);
+                  if (item.key==='limit'&&priceStats.current) setLimitPrice(priceStats.current.toFixed(6));
+                }}
               >
                 <Ionicons name={item.icon} size={14} color={orderType===item.key?'#FFF':C.muted}/>
                 <Text style={[S.typeTabTxt,{color:orderType===item.key?'#FFF':C.muted}]}>{item.label}</Text>
@@ -473,8 +466,15 @@ export default function TradingScreen() {
 
           {/* Buy / Sell */}
           <View style={[S.orderTabs,{backgroundColor:C.card2}]}>
-            {[{side:'buy',icon:'trending-up',color:C.success,label:t('buy')},{side:'sell',icon:'trending-down',color:C.error,label:t('sell')}].map(item=>(
-              <TouchableOpacity key={item.side} style={[S.orderTab,orderSide===item.side&&{backgroundColor:item.color}]} onPress={()=>{setOrderSide(item.side);setOrderAmount('');}}>
+            {[
+              {side:'buy', icon:'trending-up',   color:C.success, label:t('buy') },
+              {side:'sell',icon:'trending-down',  color:C.error,   label:t('sell')},
+            ].map(item=>(
+              <TouchableOpacity
+                key={item.side}
+                style={[S.orderTab, orderSide===item.side&&{backgroundColor:item.color}]}
+                onPress={()=>{ setOrderSide(item.side); setOrderAmount(''); }}
+              >
                 <Ionicons name={item.icon} size={16} color={orderSide===item.side?'#FFF':C.muted}/>
                 <Text style={[S.orderTabTxt,{color:orderSide===item.side?'#FFF':C.muted}]}>{item.label}</Text>
               </TouchableOpacity>
@@ -483,7 +483,7 @@ export default function TradingScreen() {
 
           {/* عملة الاقتباس */}
           <View style={[S.quoteRow,{borderColor:C.border}]}>
-            <Text style={[S.quoteLabel,{color:C.muted}]}>{t('quote_currency','عملة التداول')}</Text>
+            <Text style={[S.quoteLabel,{color:C.muted}]}>{t('quote_currency')}</Text>
             <TouchableOpacity style={[S.quotePicker,{backgroundColor:C.card2}]} onPress={()=>setQuoteModal(true)}>
               <SafeImage uri={quoteToken.image} size={20}/>
               <Text style={[S.quotePickerTxt,{color:C.text}]}>{quoteToken.symbol}</Text>
@@ -491,35 +491,30 @@ export default function TradingScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ✅ حقل السعر المحدد — يظهر فقط في Limit */}
+          {/* حقل السعر المحدد */}
           {orderType==='limit' && (
             <View style={S.limitPriceWrap}>
-              <Text style={[S.inputLabel,{color:C.muted}]}>{t('limit_price','السعر المحدد')} ({quoteToken.symbol})</Text>
+              <Text style={[S.inputLabel,{color:C.muted}]}>
+                {t('limit_price')} ({quoteToken.symbol})
+              </Text>
               <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:C.warning+'80'}]}>
                 <Ionicons name="pricetag-outline" size={18} color={C.warning} style={{marginRight:8}}/>
                 <TextInput
                   style={[S.input,{color:C.text}]}
-                  value={limitPrice}
-                  onChangeText={setLimitPrice}
-                  placeholder={fmtPrice(priceStats.current).replace('$','')}
-                  placeholderTextColor={C.muted}
+                  value={limitPrice} onChangeText={setLimitPrice}
+                  placeholder="0.000000" placeholderTextColor={C.muted}
                   keyboardType="decimal-pad"
                 />
                 <Text style={[S.inputCur,{color:C.muted}]}>{quoteToken.symbol}</Text>
               </View>
-              {/* مقارنة بالسعر الحالي */}
-              {limitPrice && priceStats.current > 0 && (
-                <View style={[S.limitHint,{backgroundColor: parseFloat(limitPrice)<priceStats.current ? C.success+'15':C.error+'15'}]}>
+              {limitPrice && priceStats.current>0 && (
+                <View style={[S.limitHint,{backgroundColor:parseFloat(limitPrice)<priceStats.current?C.success+'15':C.error+'15'}]}>
                   <Ionicons
                     name={parseFloat(limitPrice)<priceStats.current?'arrow-down':'arrow-up'}
-                    size={12}
-                    color={parseFloat(limitPrice)<priceStats.current?C.success:C.error}
+                    size={12} color={parseFloat(limitPrice)<priceStats.current?C.success:C.error}
                   />
                   <Text style={[S.limitHintTxt,{color:parseFloat(limitPrice)<priceStats.current?C.success:C.error}]}>
-                    {parseFloat(limitPrice)<priceStats.current
-                      ? t('below_market','أقل من سعر السوق')
-                      : t('above_market','أعلى من سعر السوق')
-                    }
+                    {parseFloat(limitPrice)<priceStats.current ? t('below_market') : t('above_market')}
                     {` (${Math.abs(((parseFloat(limitPrice)-priceStats.current)/priceStats.current)*100).toFixed(2)}%)`}
                   </Text>
                 </View>
@@ -527,7 +522,7 @@ export default function TradingScreen() {
             </View>
           )}
 
-          {/* السعر الحالي — يظهر فقط في Market */}
+          {/* السعر الحالي — Market فقط */}
           {orderType==='market' && (
             <View style={[S.currentPriceRow,{backgroundColor:C.card2,borderColor:C.border}]}>
               <Text style={[S.cpL,{color:C.muted}]}>{t('current_price')}</Text>
@@ -537,43 +532,52 @@ export default function TradingScreen() {
 
           {/* حقل الكمية */}
           <Text style={[S.inputLabel,{color:C.muted}]}>
-            {orderSide==='buy'?`${t('amount_in','المبلغ بـ')} ${quoteToken.symbol}`:`${t('amount','الكمية')} (${selectedToken.symbol})`}
+            {orderSide==='buy'
+              ? `${t('amount_in')} ${quoteToken.symbol}`
+              : `${t('amount')} (${selectedToken.symbol})`}
           </Text>
           <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:orderSide==='buy'?C.success+'70':C.error+'70'}]}>
             <TextInput
               style={[S.input,{color:C.text}]}
               value={orderAmount} onChangeText={setOrderAmount}
-              placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad"
+              placeholder="0.00" placeholderTextColor={C.muted}
+              keyboardType="decimal-pad"
             />
-            <Text style={[S.inputCur,{color:C.muted}]}>{orderSide==='buy'?quoteToken.symbol:selectedToken.symbol}</Text>
+            <Text style={[S.inputCur,{color:C.muted}]}>
+              {orderSide==='buy' ? quoteToken.symbol : selectedToken.symbol}
+            </Text>
           </View>
 
           {/* الرصيد */}
-          <TouchableOpacity style={[S.balanceRow,{borderColor:C.border}]} onPress={()=>setOrderAmount(availBal.toFixed(4))}>
+          <TouchableOpacity
+            style={[S.balanceRow,{borderColor:C.border}]}
+            onPress={()=>setOrderAmount(availBal.toFixed(4))}
+          >
             <Ionicons name="wallet-outline" size={14} color={C.muted}/>
-            <Text style={[S.balanceLabel,{color:C.muted}]}>{t('available_balance','الرصيد المتاح')}</Text>
+            <Text style={[S.balanceLabel,{color:C.muted}]}>{t('available_balance')}</Text>
             <Text style={[S.balanceValue,{color:primaryColor}]}>{fmtBal(availBal)} {availCur}</Text>
-            <Text style={[S.balanceMax,{color:primaryColor}]}>{t('max','MAX')}</Text>
+            <Text style={[S.balanceMax,{color:primaryColor}]}>{t('max')}</Text>
           </TouchableOpacity>
 
           {/* الإجمالي التقديري */}
           <View style={[S.estimateRow,{borderColor:C.border}]}>
-            <Text style={[S.estimateL,{color:C.muted}]}>{t('you_receive','ستحصل على')} ≈</Text>
+            <Text style={[S.estimateL,{color:C.muted}]}>{t('you_receive')} ≈</Text>
             <Text style={[S.estimateV,{color:C.text}]}>
-              {orderType==='limit' && limitPrice && orderAmount
-                ? orderSide==='buy'
-                  ? `${(parseFloat(orderAmount)/parseFloat(limitPrice)).toFixed(6)} ${selectedToken.symbol}`
-                  : `${(parseFloat(orderAmount)*parseFloat(limitPrice)).toFixed(4)} ${quoteToken.symbol}`
-                : `${estimatedTotal} ${orderSide==='buy'?selectedToken.symbol:quoteToken.symbol}`
-              }
+              {estimatedTotal()} {orderSide==='buy' ? selectedToken.symbol : quoteToken.symbol}
             </Text>
           </View>
 
           {/* Quick % */}
           <View style={S.quickRow}>
             {['25%','50%','75%','MAX'].map(pct=>(
-              <TouchableOpacity key={pct} style={[S.quickBtn,{backgroundColor:C.card2,borderColor:C.border}]}
-                onPress={()=>{const m=pct==='MAX'?1:pct==='75%'?.75:pct==='50%'?.5:.25;setOrderAmount((availBal*m).toFixed(4));}}>
+              <TouchableOpacity
+                key={pct}
+                style={[S.quickBtn,{backgroundColor:C.card2,borderColor:C.border}]}
+                onPress={()=>{
+                  const m = pct==='MAX'?1:pct==='75%'?.75:pct==='50%'?.5:.25;
+                  setOrderAmount((availBal*m).toFixed(4));
+                }}
+              >
                 <Text style={[S.quickBtnTxt,{color:C.text}]}>{pct}</Text>
               </TouchableOpacity>
             ))}
@@ -581,16 +585,24 @@ export default function TradingScreen() {
 
           {/* زر التنفيذ */}
           <TouchableOpacity
-            style={[S.executeBtn,{backgroundColor:orderSide==='buy'?C.success:C.error},(executing||!orderAmount||parseFloat(orderAmount)<=0)&&{opacity:.6}]}
-            onPress={handleExecute} disabled={executing||!orderAmount||parseFloat(orderAmount)<=0}
+            style={[
+              S.executeBtn,
+              {backgroundColor: orderSide==='buy' ? C.success : C.error},
+              (executing||!orderAmount||parseFloat(orderAmount)<=0) && {opacity:.6},
+            ]}
+            onPress={handleExecute}
+            disabled={executing||!orderAmount||parseFloat(orderAmount)<=0}
           >
             {executing
               ? <ActivityIndicator color="#FFF" size="small"/>
               : <>
-                  <Ionicons name={orderType==='limit'?'timer-outline':orderSide==='buy'?'trending-up':'trending-down'} size={20} color="#FFF"/>
+                  <Ionicons
+                    name={orderType==='limit'?'timer-outline':orderSide==='buy'?'trending-up':'trending-down'}
+                    size={20} color="#FFF"
+                  />
                   <Text style={S.executeBtnTxt}>
                     {orderType==='limit'
-                      ? `${t('place_limit_order','تسجيل أمر محدد')}`
+                      ? t('place_limit_order')
                       : `${orderSide==='buy'?t('buy'):t('sell')} ${selectedToken.symbol}`
                     }
                   </Text>
@@ -598,23 +610,23 @@ export default function TradingScreen() {
             }
           </TouchableOpacity>
 
-          <Text style={[S.swapNote,{color:C.muted}]}>{t('powered_by_jupiter','يعمل بواسطة Jupiter Swap')}</Text>
+          <Text style={[S.swapNote,{color:C.muted}]}>{t('powered_by_jupiter')}</Text>
         </View>
 
-        {/* ✅ الأوامر المفتوحة (Limit Orders) */}
+        {/* ── الأوامر المفتوحة ── */}
         {openOrders.length > 0 && (
           <View style={[S.ordersCard,{backgroundColor:C.card}]}>
             <View style={S.ordersHeader}>
-              <Text style={[S.ordersTitle,{color:C.text}]}>{t('open_orders','الأوامر المفتوحة')}</Text>
+              <Text style={[S.ordersTitle,{color:C.text}]}>{t('open_orders')}</Text>
               <View style={[S.ordersBadge,{backgroundColor:C.warning+'25'}]}>
                 <Text style={[S.ordersBadgeTxt,{color:C.warning}]}>{openOrders.length}</Text>
               </View>
             </View>
             {ordersLoading
               ? <ActivityIndicator color={primaryColor} style={{marginVertical:16}}/>
-              : openOrders.map((order, i) => (
+              : openOrders.map((order,i)=>(
                   <View key={i} style={[S.orderItem,{borderColor:C.border}]}>
-                    <View style={[S.orderSideBadge,{backgroundColor:C.warning+'20'}]}>
+                    <View style={[S.orderIcon,{backgroundColor:C.warning+'20'}]}>
                       <Ionicons name="timer-outline" size={14} color={C.warning}/>
                     </View>
                     <View style={S.orderInfo}>
@@ -630,7 +642,7 @@ export default function TradingScreen() {
                       onPress={()=>handleCancelOrder(order)}
                     >
                       <Ionicons name="close" size={14} color={C.error}/>
-                      <Text style={[S.cancelOrderTxt,{color:C.error}]}>{t('cancel','إلغاء')}</Text>
+                      <Text style={[S.cancelOrderTxt,{color:C.error}]}>{t('cancel')}</Text>
                     </TouchableOpacity>
                   </View>
                 ))
@@ -638,7 +650,7 @@ export default function TradingScreen() {
           </View>
         )}
 
-        {/* إحصائيات */}
+        {/* ── إحصائيات السوق ── */}
         <View style={[S.statsCard,{backgroundColor:C.card}]}>
           <Text style={[S.statsTitle,{color:C.text}]}>{t('market_stats')}</Text>
           <View style={S.statsGrid}>
@@ -664,11 +676,12 @@ export default function TradingScreen() {
         <TouchableOpacity style={S.modalOverlay} activeOpacity={1} onPress={()=>setQuoteModal(false)}>
           <View style={[S.modalBox,{backgroundColor:C.card}]}>
             <View style={[S.modalHandle,{backgroundColor:C.border}]}/>
-            <Text style={[S.modalTitle,{color:C.text}]}>{t('select_quote_currency','اختر عملة التداول')}</Text>
+            <Text style={[S.modalTitle,{color:C.text}]}>{t('select_quote_currency')}</Text>
             {QUOTE_TOKENS.map(qt=>(
-              <TouchableOpacity key={qt.symbol}
+              <TouchableOpacity
+                key={qt.symbol}
                 style={[S.quoteOption,{borderColor:C.border},qt.symbol===quoteToken.symbol&&{borderColor:primaryColor,backgroundColor:primaryColor+'12'}]}
-                onPress={()=>{setQuoteToken(qt);setQuoteModal(false);setOrderAmount('');setLimitPrice('');}}
+                onPress={()=>{ setQuoteToken(qt); setQuoteModal(false); setOrderAmount(''); setLimitPrice(''); }}
               >
                 <SafeImage uri={qt.image} size={36}/>
                 <Text style={[S.quoteOptionTxt,{color:C.text}]}>{qt.symbol}</Text>
@@ -723,7 +736,8 @@ const S = StyleSheet.create({
   input:{flex:1,fontSize:18,fontWeight:'700'},
   inputCur:{fontSize:14,fontWeight:'600'},
   balanceRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,marginBottom:12,gap:6},
-  balanceLabel:{flex:1,fontSize:12},balanceValue:{fontSize:13,fontWeight:'700'},
+  balanceLabel:{flex:1,fontSize:12},
+  balanceValue:{fontSize:13,fontWeight:'700'},
   balanceMax:{fontSize:12,fontWeight:'800',paddingHorizontal:8,paddingVertical:3,borderRadius:6},
   estimateRow:{flexDirection:'row',justifyContent:'space-between',paddingVertical:10,borderTopWidth:1,marginBottom:14},
   estimateL:{fontSize:13},estimateV:{fontSize:14,fontWeight:'700'},
@@ -739,7 +753,7 @@ const S = StyleSheet.create({
   ordersBadge:{paddingHorizontal:8,paddingVertical:3,borderRadius:10},
   ordersBadgeTxt:{fontSize:12,fontWeight:'800'},
   orderItem:{flexDirection:'row',alignItems:'center',paddingVertical:12,borderBottomWidth:1,gap:12},
-  orderSideBadge:{width:34,height:34,borderRadius:10,justifyContent:'center',alignItems:'center'},
+  orderIcon:{width:34,height:34,borderRadius:10,justifyContent:'center',alignItems:'center'},
   orderInfo:{flex:1},
   orderPair:{fontSize:14,fontWeight:'700'},
   orderDetails:{fontSize:11,marginTop:2},
