@@ -92,7 +92,7 @@ export async function executeMarketSwap({ inputMint, outputMint, amount, walletP
 
 // ─── Jupiter Limit Order ──────────────────────────────────────────────────────
 export async function executeLimitOrder({ inputMint, outputMint, inAmount, outAmount, walletPublicKey, activeIndex }) {
-  const res = await fetch('https://jup.ag/api/limit/v1/createOrder', {
+  const res = await fetch('https://jup.ag/api/limit/v2/createOrder', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -111,7 +111,7 @@ export async function executeLimitOrder({ inputMint, outputMint, inAmount, outAm
 
 // ─── إلغاء أمر Limit ──────────────────────────────────────────────────────────
 export async function cancelLimitOrder({ orderPubkey, walletPublicKey, activeIndex }) {
-  const res = await fetch('https://jup.ag/api/limit/v1/cancelOrders', {
+  const res = await fetch('https://jup.ag/api/limit/v2/cancelOrders', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ owner: walletPublicKey, orders: [orderPubkey] }),
@@ -125,7 +125,7 @@ export async function cancelLimitOrder({ orderPubkey, walletPublicKey, activeInd
 // ─── جلب أوامر Limit المفتوحة ─────────────────────────────────────────────────
 export async function getOpenLimitOrders(walletPublicKey) {
   try {
-    const res = await fetch(`https://jup.ag/api/limit/v1/openOrders?wallet=${walletPublicKey}`);
+    const res = await fetch(`https://jup.ag/api/limit/v2/openOrders?wallet=${walletPublicKey}`);
     if (!res.ok) return [];
     return await res.json() || [];
   } catch (_) { return []; }
