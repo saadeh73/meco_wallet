@@ -37,7 +37,6 @@ const QUOTE_TOKENS = [
   { symbol:'SOL',  mint:'So11111111111111111111111111111111111111112',   decimals:9, image:'https://assets.coingecko.com/coins/images/4128/large/solana.png'  },
 ];
 
-// ─── Chart HTML ───────────────────────────────────────────────────────────────
 const buildChartHtml = (isDark, accent) => `
 <!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -89,7 +88,6 @@ const SafeImage = ({ uri, size=32 }) => {
   return <Image source={{uri}} style={{width:size,height:size,borderRadius:size/2}} onError={()=>setErr(true)}/>;
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
 export default function TradingScreen() {
   const navigation         = useNavigation();
   const route              = useRoute();
@@ -132,7 +130,6 @@ export default function TradingScreen() {
   const chartReady  = useRef(false);
   const pendingData = useRef(null);
 
-  // ── جلب الرصيد ──────────────────────────────────────────────────────────
   const fetchBalances = useCallback(async () => {
     if (!walletPublicKey) return;
     try {
@@ -146,7 +143,6 @@ export default function TradingScreen() {
     } catch (_) {}
   }, [walletPublicKey, selectedToken, quoteToken]);
 
-  // ── جلب أوامر Limit المفتوحة ────────────────────────────────────────────
   const fetchOpenOrders = useCallback(async () => {
     if (!walletPublicKey) return;
     try {
@@ -157,7 +153,6 @@ export default function TradingScreen() {
     finally { setOrdersLoading(false); }
   }, [walletPublicKey]);
 
-  // ── جلب بيانات السوق ─────────────────────────────────────────────────────
   const fetchMarket = useCallback(async () => {
     try {
       setMarketLoading(true);
@@ -172,7 +167,6 @@ export default function TradingScreen() {
     finally { setMarketLoading(false); }
   }, [selectedToken.mint]);
 
-  // ── جلب الرسم البياني ────────────────────────────────────────────────────
   const fetchChart = useCallback(async () => {
     try {
       setChartLoading(true); chartReady.current = false;
@@ -217,13 +211,13 @@ export default function TradingScreen() {
     }
   };
 
-  // ── تنفيذ الأمر عبر tradingService ───────────────────────────────────────
+  // ── تنفيذ الأمر ──────────────────────────────────────────────────────────
   const handleExecute = async () => {
     if (!orderAmount || parseFloat(orderAmount)<=0) return;
     if (!walletPublicKey) { Alert.alert(t('error'), t('no_wallet')); return; }
 
-    const amt        = parseFloat(orderAmount);
-    const availBal   = orderSide==='buy' ? userBalance.quote : userBalance.base;
+    const amt      = parseFloat(orderAmount);
+    const availBal = orderSide==='buy' ? userBalance.quote : userBalance.base;
     if (amt > availBal) { Alert.alert(t('error'), t('insufficient_balance')); return; }
 
     const inputToken  = orderSide==='buy' ? quoteToken    : selectedToken;
@@ -242,13 +236,13 @@ export default function TradingScreen() {
     }
 
     const typeLabel = orderType==='market' ? t('market_order') : t('limit_order');
-    const priceInfo = orderType==='limit' ? `\n${t('at_price')}: ${limitPrice} ${quoteToken.symbol}` : '';
+    const priceInfo = orderType==='limit'  ? `\n${t('at_price')}: ${limitPrice} ${quoteToken.symbol}` : '';
 
     Alert.alert(
       `${typeLabel} — ${orderSide==='buy'?t('buy'):t('sell')}`,
       `${amt} ${inputToken.symbol} → ${outputToken.symbol}${priceInfo}`,
       [
-        { text:t('cancel'), style:'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
           text: t('confirm'),
           onPress: async () => {
@@ -257,33 +251,70 @@ export default function TradingScreen() {
               let sig;
 
               if (orderType==='market') {
-                // ✅ تنفيذ أمر السوق عبر tradingService
                 sig = await executeMarketSwap({
-                  inputMint:      inputToken.mint,
-                  outputMint:     outputToken.mint,
-                  amount:         rawIn,
+                  inputMint:   inputToken.mint,
+                  outputMint:  outputToken.mint,
+                  amount:      rawIn,
                   walletPublicKey,
-                  activeIndex:    activeAccountIndex,
+                  activeIndex: activeAccountIndex,
                 });
-              } else {
-                // ✅ تنفيذ أمر محدد السعر عبر tradingService
-                sig = await executeLimitOrder({
-                  inputMint:      inputToken.mint,
-                  outputMint:     outputToken.mint,
-                  inAmount:       rawIn,
-                  outAmount:      rawOut,
-                  walletPublicKey,
-                  activeIndex:    activeAccountIndex,
-                });
-                await fetchOpenOrders();
-              }
+                setOrderAmount('');
+                await fetchBalances();
+                Alert.alert(t('success'), `✅ ${t('trade_success')}\n${sig.slice(0,8)}...${sig.slice(-4)}`);
 
-              setOrderAmount('');
-              await fetchBalances();
-              Alert.alert(
-                t('success'),
-                `✅ ${orderType==='limit' ? t('limit_order_placed') : t('trade_success')}\n${sig.slice(0,8)}...${sig.slice(-4)}`
-              );
+              } else {
+                // ── Limit Order ──────────────────────────────────────────────
+                try {
+                  sig = await executeLimitOrder({
+                    inputMint:   inputToken.mint,
+                    outputMint:  outputToken.mint,
+                    inAmount:    rawIn,
+                    outAmount:   rawOut,
+                    walletPublicKey,
+                    activeIndex: activeAccountIndex,
+                  });
+                  setOrderAmount('');
+                  await fetchBalances();
+                  await fetchOpenOrders();
+                  Alert.alert(t('success'), `✅ ${t('limit_order_placed')}\n${sig.slice(0,8)}...${sig.slice(-4)}`);
+
+                } catch (limitErr) {
+                  // ✅ إذا فشل Limit Order — عرض خيار تنفيذ بسعر السوق بدلاً منه
+                  if (limitErr.message === 'limit_order_unavailable') {
+                    Alert.alert(
+                      t('limit_order','أمر محدد'),
+                      t('limit_order_unavailable_msg','خدمة الأوامر المحددة غير متاحة حالياً. هل تريد التنفيذ بسعر السوق الحالي؟'),
+                      [
+                        { text: t('cancel'), style: 'cancel' },
+                        {
+                          text: t('market_order','سعر السوق'),
+                          onPress: async () => {
+                            try {
+                              setExecuting(true);
+                              const mSig = await executeMarketSwap({
+                                inputMint:   inputToken.mint,
+                                outputMint:  outputToken.mint,
+                                amount:      rawIn,
+                                walletPublicKey,
+                                activeIndex: activeAccountIndex,
+                              });
+                              setOrderAmount('');
+                              await fetchBalances();
+                              Alert.alert(t('success'), `✅ ${t('trade_success')}\n${mSig.slice(0,8)}...${mSig.slice(-4)}`);
+                            } catch (e) {
+                              Alert.alert(t('error'), e.message);
+                            } finally {
+                              setExecuting(false);
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  } else {
+                    throw limitErr;
+                  }
+                }
+              }
             } catch (e) {
               Alert.alert(t('error'), `${t('trade_failed')}: ${e.message}`);
             } finally {
@@ -295,7 +326,6 @@ export default function TradingScreen() {
     );
   };
 
-  // ── إلغاء أمر Limit ──────────────────────────────────────────────────────
   const handleCancelOrder = (order) => {
     Alert.alert(t('cancel_order'), t('cancel_order_confirm'), [
       { text:t('no'), style:'cancel' },
@@ -312,7 +342,6 @@ export default function TradingScreen() {
     ]);
   };
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   const fmtPrice = (p) => {
     if (!p) return '$0.00';
     if (p>1)      return `$${p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -334,19 +363,15 @@ export default function TradingScreen() {
   const availCur = orderSide==='buy' ? quoteToken.symbol : selectedToken.symbol;
 
   const estimatedTotal = () => {
-    if (!orderAmount || !priceStats.current) return '0';
+    if (!orderAmount) return '0';
     const amt = parseFloat(orderAmount);
-    const lp  = orderType==='limit' && limitPrice ? parseFloat(limitPrice) : priceStats.current;
+    const lp  = orderType==='limit'&&limitPrice ? parseFloat(limitPrice) : priceStats.current;
     if (!lp) return '0';
-    return orderSide==='buy'
-      ? (amt/lp).toFixed(6)
-      : (amt*lp).toFixed(4);
+    return orderSide==='buy' ? (amt/lp).toFixed(6) : (amt*lp).toFixed(4);
   };
 
   return (
     <SafeAreaView style={[S.root,{backgroundColor:C.bg}]}>
-
-      {/* ── Header ── */}
       <View style={[S.header,{backgroundColor:C.card,borderBottomColor:C.border}]}>
         <TouchableOpacity onPress={()=>navigation.goBack()} style={[S.iconBtn,{backgroundColor:C.card2}]}>
           <Ionicons name="arrow-back" size={22} color={C.text}/>
@@ -362,17 +387,15 @@ export default function TradingScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-
-        {/* ── Token Selector ── */}
         <FlatList
           data={tokens} horizontal showsHorizontalScrollIndicator={false}
           keyExtractor={i=>i.mint} contentContainerStyle={S.tokenRow}
           renderItem={({item})=>{
-            const active = item.mint===selectedToken.mint;
-            const tok    = CORE_TOKENS.find(c=>c.mint===item.mint);
+            const active=item.mint===selectedToken.mint;
+            const tok=CORE_TOKENS.find(c=>c.mint===item.mint);
             return (
               <TouchableOpacity
-                style={[S.tokenChip, active&&{backgroundColor:primaryColor,borderColor:primaryColor}]}
+                style={[S.tokenChip,active&&{backgroundColor:primaryColor,borderColor:primaryColor}]}
                 onPress={()=>{ setSelectedToken(tok||item); setOrderAmount(''); setLimitPrice(''); }}
               >
                 <SafeImage uri={item.image} size={16}/>
@@ -385,23 +408,16 @@ export default function TradingScreen() {
           }}
         />
 
-        {/* ── Price Header ── */}
         <View style={[S.priceHeader,{backgroundColor:C.card}]}>
           <View>
             <Text style={[S.priceMain,{color:C.text}]}>{marketLoading?'—':fmtPrice(priceStats.current)}</Text>
             <View style={[S.changePill,{backgroundColor:up?C.success+'20':C.error+'20'}]}>
               <Ionicons name={up?'trending-up':'trending-down'} size={12} color={up?C.success:C.error}/>
-              <Text style={[S.changeTxt,{color:up?C.success:C.error}]}>
-                {up?'+':''}{priceStats.change.toFixed(2)}%
-              </Text>
+              <Text style={[S.changeTxt,{color:up?C.success:C.error}]}>{up?'+':''}{priceStats.change.toFixed(2)}%</Text>
             </View>
           </View>
           <View style={S.priceStats}>
-            {[
-              {l:'H',v:fmtPrice(priceStats.high), c:C.success},
-              {l:'L',v:fmtPrice(priceStats.low),  c:C.error  },
-              {l:'V',v:fmtBig(priceStats.volume),  c:C.text   },
-            ].map(s=>(
+            {[{l:'H',v:fmtPrice(priceStats.high),c:C.success},{l:'L',v:fmtPrice(priceStats.low),c:C.error},{l:'V',v:fmtBig(priceStats.volume),c:C.text}].map(s=>(
               <View key={s.l} style={S.priceStat}>
                 <Text style={[S.psL,{color:C.muted}]}>{s.l}</Text>
                 <Text style={[S.psV,{color:s.c}]}>{s.v}</Text>
@@ -410,53 +426,28 @@ export default function TradingScreen() {
           </View>
         </View>
 
-        {/* ── Chart ── */}
         <View style={[S.chartWrap,{height:CHART_H,backgroundColor:C.card}]}>
-          {chartLoading && (
-            <View style={[S.chartOverlay,{backgroundColor:C.card}]}>
-              <ActivityIndicator size="large" color={primaryColor}/>
-            </View>
-          )}
-          <WebView
-            ref={webviewRef} source={{html:chartHtml}}
-            style={{flex:1,backgroundColor:C.card}}
-            scrollEnabled={false} bounces={false}
-            javaScriptEnabled domStorageEnabled
-            onLoad={onWebViewLoad}
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
-          />
+          {chartLoading&&<View style={[S.chartOverlay,{backgroundColor:C.card}]}><ActivityIndicator size="large" color={primaryColor}/></View>}
+          <WebView ref={webviewRef} source={{html:chartHtml}} style={{flex:1,backgroundColor:C.card}}
+            scrollEnabled={false} bounces={false} javaScriptEnabled domStorageEnabled
+            onLoad={onWebViewLoad} showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}/>
         </View>
 
-        {/* ── Timeframe ── */}
         <View style={[S.tfRow,{backgroundColor:C.card,borderTopColor:C.border}]}>
           {TIMEFRAMES.map(tf=>(
-            <TouchableOpacity
-              key={tf.label}
-              style={[S.tfBtn, timeframe.label===tf.label&&{backgroundColor:primaryColor}]}
-              onPress={()=>setTimeframe(tf)}
-            >
+            <TouchableOpacity key={tf.label} style={[S.tfBtn,timeframe.label===tf.label&&{backgroundColor:primaryColor}]} onPress={()=>setTimeframe(tf)}>
               <Text style={[S.tfTxt,{color:timeframe.label===tf.label?'#FFF':C.muted}]}>{tf.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ── Order Panel ── */}
         <View style={[S.orderPanel,{backgroundColor:C.card}]}>
 
-          {/* Market / Limit */}
           <View style={[S.typeTabs,{backgroundColor:C.card2}]}>
-            {[
-              {key:'market', label:t('market_order'), icon:'flash'        },
-              {key:'limit',  label:t('limit_order'),  icon:'timer-outline'},
-            ].map(item=>(
-              <TouchableOpacity
-                key={item.key}
-                style={[S.typeTab, orderType===item.key&&{backgroundColor:primaryColor}]}
-                onPress={()=>{
-                  setOrderType(item.key);
-                  if (item.key==='limit'&&priceStats.current) setLimitPrice(priceStats.current.toFixed(6));
-                }}
+            {[{key:'market',label:t('market_order'),icon:'flash'},{key:'limit',label:t('limit_order'),icon:'timer-outline'}].map(item=>(
+              <TouchableOpacity key={item.key}
+                style={[S.typeTab,orderType===item.key&&{backgroundColor:primaryColor}]}
+                onPress={()=>{ setOrderType(item.key); if(item.key==='limit'&&priceStats.current) setLimitPrice(priceStats.current.toFixed(6)); }}
               >
                 <Ionicons name={item.icon} size={14} color={orderType===item.key?'#FFF':C.muted}/>
                 <Text style={[S.typeTabTxt,{color:orderType===item.key?'#FFF':C.muted}]}>{item.label}</Text>
@@ -464,24 +455,16 @@ export default function TradingScreen() {
             ))}
           </View>
 
-          {/* Buy / Sell */}
           <View style={[S.orderTabs,{backgroundColor:C.card2}]}>
-            {[
-              {side:'buy', icon:'trending-up',   color:C.success, label:t('buy') },
-              {side:'sell',icon:'trending-down',  color:C.error,   label:t('sell')},
-            ].map(item=>(
-              <TouchableOpacity
-                key={item.side}
-                style={[S.orderTab, orderSide===item.side&&{backgroundColor:item.color}]}
-                onPress={()=>{ setOrderSide(item.side); setOrderAmount(''); }}
-              >
+            {[{side:'buy',icon:'trending-up',color:C.success,label:t('buy')},{side:'sell',icon:'trending-down',color:C.error,label:t('sell')}].map(item=>(
+              <TouchableOpacity key={item.side} style={[S.orderTab,orderSide===item.side&&{backgroundColor:item.color}]}
+                onPress={()=>{ setOrderSide(item.side); setOrderAmount(''); }}>
                 <Ionicons name={item.icon} size={16} color={orderSide===item.side?'#FFF':C.muted}/>
                 <Text style={[S.orderTabTxt,{color:orderSide===item.side?'#FFF':C.muted}]}>{item.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* عملة الاقتباس */}
           <View style={[S.quoteRow,{borderColor:C.border}]}>
             <Text style={[S.quoteLabel,{color:C.muted}]}>{t('quote_currency')}</Text>
             <TouchableOpacity style={[S.quotePicker,{backgroundColor:C.card2}]} onPress={()=>setQuoteModal(true)}>
@@ -491,30 +474,24 @@ export default function TradingScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* حقل السعر المحدد */}
           {orderType==='limit' && (
             <View style={S.limitPriceWrap}>
-              <Text style={[S.inputLabel,{color:C.muted}]}>
-                {t('limit_price')} ({quoteToken.symbol})
-              </Text>
+              <Text style={[S.inputLabel,{color:C.muted}]}>{t('limit_price')} ({quoteToken.symbol})</Text>
               <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:C.warning+'80'}]}>
                 <Ionicons name="pricetag-outline" size={18} color={C.warning} style={{marginRight:8}}/>
                 <TextInput
                   style={[S.input,{color:C.text}]}
                   value={limitPrice} onChangeText={setLimitPrice}
-                  placeholder="0.000000" placeholderTextColor={C.muted}
-                  keyboardType="decimal-pad"
+                  placeholder="0.000000" placeholderTextColor={C.muted} keyboardType="decimal-pad"
                 />
                 <Text style={[S.inputCur,{color:C.muted}]}>{quoteToken.symbol}</Text>
               </View>
               {limitPrice && priceStats.current>0 && (
                 <View style={[S.limitHint,{backgroundColor:parseFloat(limitPrice)<priceStats.current?C.success+'15':C.error+'15'}]}>
-                  <Ionicons
-                    name={parseFloat(limitPrice)<priceStats.current?'arrow-down':'arrow-up'}
-                    size={12} color={parseFloat(limitPrice)<priceStats.current?C.success:C.error}
-                  />
+                  <Ionicons name={parseFloat(limitPrice)<priceStats.current?'arrow-down':'arrow-up'} size={12}
+                    color={parseFloat(limitPrice)<priceStats.current?C.success:C.error}/>
                   <Text style={[S.limitHintTxt,{color:parseFloat(limitPrice)<priceStats.current?C.success:C.error}]}>
-                    {parseFloat(limitPrice)<priceStats.current ? t('below_market') : t('above_market')}
+                    {parseFloat(limitPrice)<priceStats.current?t('below_market'):t('above_market')}
                     {` (${Math.abs(((parseFloat(limitPrice)-priceStats.current)/priceStats.current)*100).toFixed(2)}%)`}
                   </Text>
                 </View>
@@ -522,7 +499,6 @@ export default function TradingScreen() {
             </View>
           )}
 
-          {/* السعر الحالي — Market فقط */}
           {orderType==='market' && (
             <View style={[S.currentPriceRow,{backgroundColor:C.card2,borderColor:C.border}]}>
               <Text style={[S.cpL,{color:C.muted}]}>{t('current_price')}</Text>
@@ -530,81 +506,45 @@ export default function TradingScreen() {
             </View>
           )}
 
-          {/* حقل الكمية */}
           <Text style={[S.inputLabel,{color:C.muted}]}>
-            {orderSide==='buy'
-              ? `${t('amount_in')} ${quoteToken.symbol}`
-              : `${t('amount')} (${selectedToken.symbol})`}
+            {orderSide==='buy'?`${t('amount_in')} ${quoteToken.symbol}`:`${t('amount')} (${selectedToken.symbol})`}
           </Text>
           <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:orderSide==='buy'?C.success+'70':C.error+'70'}]}>
-            <TextInput
-              style={[S.input,{color:C.text}]}
-              value={orderAmount} onChangeText={setOrderAmount}
-              placeholder="0.00" placeholderTextColor={C.muted}
-              keyboardType="decimal-pad"
-            />
-            <Text style={[S.inputCur,{color:C.muted}]}>
-              {orderSide==='buy' ? quoteToken.symbol : selectedToken.symbol}
-            </Text>
+            <TextInput style={[S.input,{color:C.text}]} value={orderAmount} onChangeText={setOrderAmount}
+              placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad"/>
+            <Text style={[S.inputCur,{color:C.muted}]}>{orderSide==='buy'?quoteToken.symbol:selectedToken.symbol}</Text>
           </View>
 
-          {/* الرصيد */}
-          <TouchableOpacity
-            style={[S.balanceRow,{borderColor:C.border}]}
-            onPress={()=>setOrderAmount(availBal.toFixed(4))}
-          >
+          <TouchableOpacity style={[S.balanceRow,{borderColor:C.border}]} onPress={()=>setOrderAmount(availBal.toFixed(4))}>
             <Ionicons name="wallet-outline" size={14} color={C.muted}/>
             <Text style={[S.balanceLabel,{color:C.muted}]}>{t('available_balance')}</Text>
             <Text style={[S.balanceValue,{color:primaryColor}]}>{fmtBal(availBal)} {availCur}</Text>
             <Text style={[S.balanceMax,{color:primaryColor}]}>{t('max')}</Text>
           </TouchableOpacity>
 
-          {/* الإجمالي التقديري */}
           <View style={[S.estimateRow,{borderColor:C.border}]}>
             <Text style={[S.estimateL,{color:C.muted}]}>{t('you_receive')} ≈</Text>
-            <Text style={[S.estimateV,{color:C.text}]}>
-              {estimatedTotal()} {orderSide==='buy' ? selectedToken.symbol : quoteToken.symbol}
-            </Text>
+            <Text style={[S.estimateV,{color:C.text}]}>{estimatedTotal()} {orderSide==='buy'?selectedToken.symbol:quoteToken.symbol}</Text>
           </View>
 
-          {/* Quick % */}
           <View style={S.quickRow}>
             {['25%','50%','75%','MAX'].map(pct=>(
-              <TouchableOpacity
-                key={pct}
-                style={[S.quickBtn,{backgroundColor:C.card2,borderColor:C.border}]}
-                onPress={()=>{
-                  const m = pct==='MAX'?1:pct==='75%'?.75:pct==='50%'?.5:.25;
-                  setOrderAmount((availBal*m).toFixed(4));
-                }}
-              >
+              <TouchableOpacity key={pct} style={[S.quickBtn,{backgroundColor:C.card2,borderColor:C.border}]}
+                onPress={()=>{ const m=pct==='MAX'?1:pct==='75%'?.75:pct==='50%'?.5:.25; setOrderAmount((availBal*m).toFixed(4)); }}>
                 <Text style={[S.quickBtnTxt,{color:C.text}]}>{pct}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* زر التنفيذ */}
           <TouchableOpacity
-            style={[
-              S.executeBtn,
-              {backgroundColor: orderSide==='buy' ? C.success : C.error},
-              (executing||!orderAmount||parseFloat(orderAmount)<=0) && {opacity:.6},
-            ]}
-            onPress={handleExecute}
-            disabled={executing||!orderAmount||parseFloat(orderAmount)<=0}
+            style={[S.executeBtn,{backgroundColor:orderSide==='buy'?C.success:C.error},(executing||!orderAmount||parseFloat(orderAmount)<=0)&&{opacity:.6}]}
+            onPress={handleExecute} disabled={executing||!orderAmount||parseFloat(orderAmount)<=0}
           >
-            {executing
-              ? <ActivityIndicator color="#FFF" size="small"/>
+            {executing ? <ActivityIndicator color="#FFF" size="small"/>
               : <>
-                  <Ionicons
-                    name={orderType==='limit'?'timer-outline':orderSide==='buy'?'trending-up':'trending-down'}
-                    size={20} color="#FFF"
-                  />
+                  <Ionicons name={orderType==='limit'?'timer-outline':orderSide==='buy'?'trending-up':'trending-down'} size={20} color="#FFF"/>
                   <Text style={S.executeBtnTxt}>
-                    {orderType==='limit'
-                      ? t('place_limit_order')
-                      : `${orderSide==='buy'?t('buy'):t('sell')} ${selectedToken.symbol}`
-                    }
+                    {orderType==='limit' ? t('place_limit_order') : `${orderSide==='buy'?t('buy'):t('sell')} ${selectedToken.symbol}`}
                   </Text>
                 </>
             }
@@ -613,7 +553,6 @@ export default function TradingScreen() {
           <Text style={[S.swapNote,{color:C.muted}]}>{t('powered_by_jupiter')}</Text>
         </View>
 
-        {/* ── الأوامر المفتوحة ── */}
         {openOrders.length > 0 && (
           <View style={[S.ordersCard,{backgroundColor:C.card}]}>
             <View style={S.ordersHeader}>
@@ -622,44 +561,30 @@ export default function TradingScreen() {
                 <Text style={[S.ordersBadgeTxt,{color:C.warning}]}>{openOrders.length}</Text>
               </View>
             </View>
-            {ordersLoading
-              ? <ActivityIndicator color={primaryColor} style={{marginVertical:16}}/>
+            {ordersLoading ? <ActivityIndicator color={primaryColor} style={{marginVertical:16}}/>
               : openOrders.map((order,i)=>(
-                  <View key={i} style={[S.orderItem,{borderColor:C.border}]}>
-                    <View style={[S.orderIcon,{backgroundColor:C.warning+'20'}]}>
-                      <Ionicons name="timer-outline" size={14} color={C.warning}/>
-                    </View>
-                    <View style={S.orderInfo}>
-                      <Text style={[S.orderPair,{color:C.text}]}>
-                        {order.inputMint?.slice(0,4)}... → {order.outputMint?.slice(0,4)}...
-                      </Text>
-                      <Text style={[S.orderDetails,{color:C.muted}]}>
-                        {order.inAmount} → {order.outAmount}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[S.cancelOrderBtn,{backgroundColor:C.error+'20',borderColor:C.error+'40'}]}
-                      onPress={()=>handleCancelOrder(order)}
-                    >
-                      <Ionicons name="close" size={14} color={C.error}/>
-                      <Text style={[S.cancelOrderTxt,{color:C.error}]}>{t('cancel')}</Text>
-                    </TouchableOpacity>
+                <View key={i} style={[S.orderItem,{borderColor:C.border}]}>
+                  <View style={[S.orderIcon,{backgroundColor:C.warning+'20'}]}>
+                    <Ionicons name="timer-outline" size={14} color={C.warning}/>
                   </View>
-                ))
+                  <View style={S.orderInfo}>
+                    <Text style={[S.orderPair,{color:C.text}]}>{order.inputMint?.slice(0,4)}... → {order.outputMint?.slice(0,4)}...</Text>
+                    <Text style={[S.orderDetails,{color:C.muted}]}>{order.inAmount} → {order.outAmount}</Text>
+                  </View>
+                  <TouchableOpacity style={[S.cancelOrderBtn,{backgroundColor:C.error+'20',borderColor:C.error+'40'}]} onPress={()=>handleCancelOrder(order)}>
+                    <Ionicons name="close" size={14} color={C.error}/>
+                    <Text style={[S.cancelOrderTxt,{color:C.error}]}>{t('cancel')}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
             }
           </View>
         )}
 
-        {/* ── إحصائيات السوق ── */}
         <View style={[S.statsCard,{backgroundColor:C.card}]}>
           <Text style={[S.statsTitle,{color:C.text}]}>{t('market_stats')}</Text>
           <View style={S.statsGrid}>
-            {[
-              {label:t('ohlc_open'),        value:fmtPrice(priceStats.open)  },
-              {label:t('ohlc_high'),        value:fmtPrice(priceStats.high)  },
-              {label:t('ohlc_low'),         value:fmtPrice(priceStats.low)   },
-              {label:t('volume_24h_label'), value:fmtBig(priceStats.volume)  },
-            ].map(item=>(
+            {[{label:t('ohlc_open'),value:fmtPrice(priceStats.open)},{label:t('ohlc_high'),value:fmtPrice(priceStats.high)},{label:t('ohlc_low'),value:fmtPrice(priceStats.low)},{label:t('volume_24h_label'),value:fmtBig(priceStats.volume)}].map(item=>(
               <View key={item.label} style={[S.statItem,{backgroundColor:C.card2}]}>
                 <Text style={[S.statL,{color:C.muted}]}>{item.label}</Text>
                 <Text style={[S.statV,{color:C.text}]}>{item.value}</Text>
@@ -671,15 +596,13 @@ export default function TradingScreen() {
         <View style={{height:40}}/>
       </ScrollView>
 
-      {/* Modal عملة الاقتباس */}
       <Modal visible={quoteModal} transparent animationType="slide" onRequestClose={()=>setQuoteModal(false)}>
         <TouchableOpacity style={S.modalOverlay} activeOpacity={1} onPress={()=>setQuoteModal(false)}>
           <View style={[S.modalBox,{backgroundColor:C.card}]}>
             <View style={[S.modalHandle,{backgroundColor:C.border}]}/>
             <Text style={[S.modalTitle,{color:C.text}]}>{t('select_quote_currency')}</Text>
             {QUOTE_TOKENS.map(qt=>(
-              <TouchableOpacity
-                key={qt.symbol}
+              <TouchableOpacity key={qt.symbol}
                 style={[S.quoteOption,{borderColor:C.border},qt.symbol===quoteToken.symbol&&{borderColor:primaryColor,backgroundColor:primaryColor+'12'}]}
                 onPress={()=>{ setQuoteToken(qt); setQuoteModal(false); setOrderAmount(''); setLimitPrice(''); }}
               >
@@ -736,8 +659,7 @@ const S = StyleSheet.create({
   input:{flex:1,fontSize:18,fontWeight:'700'},
   inputCur:{fontSize:14,fontWeight:'600'},
   balanceRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,marginBottom:12,gap:6},
-  balanceLabel:{flex:1,fontSize:12},
-  balanceValue:{fontSize:13,fontWeight:'700'},
+  balanceLabel:{flex:1,fontSize:12},balanceValue:{fontSize:13,fontWeight:'700'},
   balanceMax:{fontSize:12,fontWeight:'800',paddingHorizontal:8,paddingVertical:3,borderRadius:6},
   estimateRow:{flexDirection:'row',justifyContent:'space-between',paddingVertical:10,borderTopWidth:1,marginBottom:14},
   estimateL:{fontSize:13},estimateV:{fontSize:14,fontWeight:'700'},

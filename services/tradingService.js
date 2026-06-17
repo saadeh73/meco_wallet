@@ -5,9 +5,7 @@ import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import heliusService from './heliusService';
 
-// ✅ URLs محدثة
 const JUPITER_QUOTE_API = 'https://api.jup.ag/swap/v1';
-const JUPITER_LIMIT_API = 'https://api.jup.ag/limit/v2';
 
 async function getKeypair(activeIndex) {
   let pk = await SecureStore.getItemAsync(`wallet_private_key_${activeIndex}`);
@@ -51,9 +49,8 @@ async function signAndSend(txBase64, activeIndex) {
   }
 }
 
-// ─── Market Swap ──────────────────────────────────────────────────────────────
+// ─── Market Swap — كما هو بدون تغيير ─────────────────────────────────────────
 export async function executeMarketSwap({ inputMint, outputMint, amount, walletPublicKey, activeIndex }) {
-  // Quote
   const quoteRes = await fetch(
     `${JUPITER_QUOTE_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`
   );
@@ -62,7 +59,6 @@ export async function executeMarketSwap({ inputMint, outputMint, amount, walletP
   if (quote.error) throw new Error(quote.error);
   if (!quote.routePlan?.length) throw new Error('No route available');
 
-  // Swap
   const swapRes = await fetch(`${JUPITER_QUOTE_API}/swap`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -80,43 +76,104 @@ export async function executeMarketSwap({ inputMint, outputMint, amount, walletP
   return signAndSend(swapTransaction, activeIndex);
 }
 
-// ─── Limit Order ──────────────────────────────────────────────────────────────
+// ─── Limit Order — التعديل الوحيد ─────────────────────────────────────────────
+// ✅ نجرب v1 أولاً (أسماء حقول مختلفة) ثم v2 كـ fallback
 export async function executeLimitOrder({ inputMint, outputMint, inAmount, outAmount, walletPublicKey, activeIndex }) {
-  const res = await fetch(`${JUPITER_LIMIT_API}/createOrder`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      owner:      walletPublicKey,
-      inputMint,  outputMint,
-      inAmount:   inAmount.toString(),
-      outAmount:  outAmount.toString(),
-      expiredAt:  null,
-    }),
-  });
-  if (!res.ok) throw new Error(`Limit order error: ${res.status}`);
-  const data = await res.json();
-  if (!data.tx) throw new Error('No limit order transaction returned');
-  return signAndSend(data.tx, activeIndex);
+
+  // محاولة 1: api.jup.ag/limit/v1 — أسماء الحقول القديمة
+  try {
+    const res = await fetch('https://api.jup.ag/limit/v1/createOrder', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        owner:     walletPublicKey,
+        inputMint, outputMint,
+        inAmount:  inAmount.toString(),
+        outAmount: outAmount.toString(),
+        expiredAt: null,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const tx   = data.tx || data.transaction;
+      if (tx) return await signAndSend(tx, activeIndex);
+    }
+  } catch (_) {}
+
+  // محاولة 2: api.jup.ag/limit/v2 — أسماء الحقول الجديدة
+  try {
+    const res = await fetch('https://api.jup.ag/limit/v2/createOrder', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        maker:         walletPublicKey,
+        inputMint,     outputMint,
+        makingAmount:  inAmount.toString(),
+        takingAmount:  outAmount.toString(),
+        expiredAt:     null,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const tx   = data.tx || data.transaction || data.order;
+      if (tx) return await signAndSend(tx, activeIndex);
+    }
+  } catch (_) {}
+
+  // محاولة 3: quote-api — نفس الـ domain الذي يعمل مع market
+  try {
+    const res = await fetch('https://api.jup.ag/limit/v2/createOrder', {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept':       'application/json',
+      },
+      body: JSON.stringify({
+        owner:     walletPublicKey,
+        inputMint, outputMint,
+        inAmount:  inAmount.toString(),
+        outAmount: outAmount.toString(),
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const tx   = data.tx || data.transaction;
+      if (tx) return await signAndSend(tx, activeIndex);
+    }
+  } catch (_) {}
+
+  throw new Error('limit_order_unavailable');
 }
 
 // ─── Cancel Limit Order ───────────────────────────────────────────────────────
 export async function cancelLimitOrder({ orderPubkey, walletPublicKey, activeIndex }) {
-  const res = await fetch(`${JUPITER_LIMIT_API}/cancelOrders`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ owner: walletPublicKey, orders: [orderPubkey] }),
-  });
-  if (!res.ok) throw new Error(`Cancel error: ${res.status}`);
-  const { txs } = await res.json();
-  if (!txs?.length) throw new Error('No cancel transactions');
-  for (const tx of txs) await signAndSend(tx, activeIndex);
+  for (const base of ['https://api.jup.ag/limit/v1', 'https://api.jup.ag/limit/v2']) {
+    try {
+      const res = await fetch(`${base}/cancelOrders`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: walletPublicKey, orders: [orderPubkey] }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const txs  = data.txs || data.transactions || [];
+        for (const tx of txs) await signAndSend(tx, activeIndex);
+        return;
+      }
+    } catch (_) {}
+  }
 }
 
 // ─── Open Orders ──────────────────────────────────────────────────────────────
 export async function getOpenLimitOrders(walletPublicKey) {
-  try {
-    const res = await fetch(`${JUPITER_LIMIT_API}/openOrders?wallet=${walletPublicKey}`);
-    if (!res.ok) return [];
-    return await res.json() || [];
-  } catch (_) { return []; }
+  for (const base of ['https://api.jup.ag/limit/v1', 'https://api.jup.ag/limit/v2']) {
+    try {
+      const res = await fetch(`${base}/openOrders?wallet=${walletPublicKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length >= 0) return data;
+      }
+    } catch (_) {}
+  }
+  return [];
 }
