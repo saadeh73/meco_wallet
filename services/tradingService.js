@@ -56,8 +56,13 @@ async function getConnection() {
   }
 }
 
-// ─── جلب الـ Quote — مع fallback ─────────────────────────────────────────────
+// ─── جلب الـ Quote — مع دعم MECO ─────────────────────────────────────────────
 async function getQuote(inputMint, outputMint, amount, slippageBps = 50) {
+  const MECO_MINT = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
+  const isMeco = inputMint === MECO_MINT || outputMint === MECO_MINT;
+  const finalSlippage = isMeco ? 300 : slippageBps;
+  const extraParams = isMeco ? '&onlyDirectRoutes=false' : '';
+
   const endpoints = [
     { name: 'Main V6',  url: JUPITER_QUOTE_API      },
     { name: 'Lite API', url: JUPITER_LITE_QUOTE_API },
@@ -65,7 +70,7 @@ async function getQuote(inputMint, outputMint, amount, slippageBps = 50) {
   let lastError;
   for (const ep of endpoints) {
     try {
-      const url = `${ep.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`;
+      const url = `${ep.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${finalSlippage}${extraParams}`;
       const res = await fetchWT(url, { method: 'GET', headers: BROWSER_HEADERS }, 15000);
       if (!res.ok) throw new Error(await res.text());
       const quote = await res.json();
