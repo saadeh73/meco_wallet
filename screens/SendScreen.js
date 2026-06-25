@@ -14,7 +14,6 @@ import {
   getCurrentNetworkFee, getLatestBlockhash, clearBalanceCache, heliusRpcRequest
 } from '../services/heliusService';
 import heliusService from '../services/heliusService'; // ✅ للحصول على connection مع fallback
-import { logTransaction } from '../services/transactionService';
 import { Ionicons } from '@expo/vector-icons';
 import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
@@ -311,12 +310,6 @@ export default function SendScreen() {
       }
 
       const signature = await web3.sendAndConfirmTransaction(connection, transaction, [keypair], { commitment: 'confirmed' });
-
-      await logTransaction({
-        type: 'send', to: recipient, amount, currency: token.symbol,
-        networkFee: state.networkFee, serviceFee: SERVICE_FEE_SOL,
-        transactionSignature: signature, timestamp: new Date().toISOString(), status: 'completed',
-      });
 
       await loadInitialBalance();
       clearBalanceCache();

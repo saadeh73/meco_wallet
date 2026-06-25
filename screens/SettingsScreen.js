@@ -121,40 +121,26 @@ export default function SettingsScreen() {
     } finally { setCheckingUpdate(false); }
   };
 
-  // ✅ حذف التخزين المؤقت
   const handleClearCache = () => {
-    Alert.alert(
-      t('clear_cache'),
-      t('clear_cache_confirm'),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('clear'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setClearingCache(true);
-              // مسح الكاش في الذاكرة
-              clearPriceChartCache();
-              clearMarketOverviewCache();
-              // مسح مفاتيح cache في AsyncStorage (ليست بيانات المحفظة)
-              const allKeys    = await AsyncStorage.getAllKeys();
-              const cacheKeys  = allKeys.filter(k =>
-                k.startsWith('@cache_') ||
-                k.startsWith('@price_') ||
-                k.startsWith('@market_')
-              );
-              if (cacheKeys.length > 0) await AsyncStorage.multiRemove(cacheKeys);
-              Alert.alert(t('success'), t('cache_cleared'));
-            } catch (_) {
-              Alert.alert(t('success'), t('cache_cleared'));
-            } finally {
-              setClearingCache(false);
-            }
-          },
+    Alert.alert(t('clear_cache'), t('clear_cache_confirm'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('clear'), style: 'destructive',
+        onPress: async () => {
+          try {
+            setClearingCache(true);
+            clearPriceChartCache();
+            clearMarketOverviewCache();
+            const allKeys   = await AsyncStorage.getAllKeys();
+            const cacheKeys = allKeys.filter(k => k.startsWith('@cache_') || k.startsWith('@price_') || k.startsWith('@market_'));
+            if (cacheKeys.length > 0) await AsyncStorage.multiRemove(cacheKeys);
+            Alert.alert(t('success'), t('cache_cleared'));
+          } catch (_) {
+            Alert.alert(t('success'), t('cache_cleared'));
+          } finally { setClearingCache(false); }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleLogout = async () => {
@@ -180,12 +166,8 @@ export default function SettingsScreen() {
     i18n.changeLanguage(next);
   };
 
-  // ─── مكوّنات ──────────────────────────────────────────────────────────────
   const SettingItem = ({ icon, title, subtitle, onPress, rightComponent, danger=false }) => (
-    <TouchableOpacity
-      style={[styles.item, { backgroundColor:C.card }]}
-      onPress={onPress} activeOpacity={0.7} disabled={!onPress}
-    >
+    <TouchableOpacity style={[styles.item, { backgroundColor:C.card }]} onPress={onPress} activeOpacity={0.7} disabled={!onPress}>
       <View style={styles.itemLeft}>
         <View style={[styles.iconWrap, { backgroundColor: danger ? C.danger+'20' : primaryColor+'20' }]}>{icon}</View>
         <View style={styles.itemText}>
@@ -220,20 +202,23 @@ export default function SettingsScreen() {
     <ScrollView style={{ backgroundColor:C.background, flex:1 }} showsVerticalScrollIndicator={false}>
       <Animated.View style={[styles.container, { opacity:fadeAnim, transform:[{ translateY:slideAnim }] }]}>
 
-        {/* Header */}
+        {/* ✅ Header مع زر رجوع */}
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color:C.text }]}>{t('settings')}</Text>
-          <Text style={[styles.headerSub,   { color:C.textSecondary }]}>{t('manage_your_wallet_preferences')}</Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={[styles.backBtn, { backgroundColor: C.card }]}
+          >
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color:C.text }]}>{t('settings')}</Text>
+            <Text style={[styles.headerSub, { color:C.textSecondary }]}>{t('manage_your_wallet_preferences')}</Text>
+          </View>
         </View>
 
-        {/* Wallet */}
+        {/* Wallet — بدون سجل المعاملات */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color:C.textSecondary }]}>{t('wallet_settings').toUpperCase()}</Text>
-          <SettingItem
-            icon={<Ionicons name="list-outline" size={22} color={primaryColor} />}
-            title={t('transaction_history')} subtitle={t('view_all_transactions')}
-            onPress={() => navigation.navigate('TransactionHistory')} rightComponent={<Chevron />}
-          />
           <SettingItem
             icon={<Ionicons name="language-outline" size={22} color={primaryColor} />}
             title={t('language')} subtitle={language==='ar'?'العربية':'English'}
@@ -289,7 +274,7 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* ✅ قسم البيانات — حذف التخزين المؤقت */}
+        {/* Data */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color:C.textSecondary }]}>{t('data','البيانات').toUpperCase()}</Text>
           <SettingItem
@@ -297,11 +282,7 @@ export default function SettingsScreen() {
             title={t('clear_cache','مسح التخزين المؤقت')}
             subtitle={t('clear_cache_desc','مسح بيانات الأسعار المحفوظة مؤقتاً')}
             onPress={clearingCache ? null : handleClearCache}
-            rightComponent={
-              clearingCache
-                ? <ActivityIndicator size="small" color={C.warning} />
-                : <Ionicons name="chevron-forward" size={20} color={C.warning} />
-            }
+            rightComponent={clearingCache ? <ActivityIndicator size="small" color={C.warning} /> : <Ionicons name="chevron-forward" size={20} color={C.warning} />}
           />
         </View>
 
@@ -321,7 +302,8 @@ export default function SettingsScreen() {
           <SettingItem
             icon={<Ionicons name="log-out-outline" size={22} color={C.danger} />}
             title={t('logout')} subtitle={t('sign_out_from_wallet')}
-            onPress={handleLogout} danger rightComponent={<Ionicons name="chevron-forward" size={20} color={C.danger} />}
+            onPress={handleLogout} danger
+            rightComponent={<Ionicons name="chevron-forward" size={20} color={C.danger} />}
           />
         </View>
 
@@ -389,38 +371,40 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { padding:20, paddingBottom:40 },
-  header:      { alignItems:'center', marginBottom:32, paddingTop:10 },
-  headerTitle: { fontSize:32, fontWeight:'700', marginBottom:8 },
-  headerSub:   { fontSize:14, textAlign:'center' },
-  section:     { marginBottom:28 },
-  sectionTitle:{ fontSize:12, fontWeight:'600', marginBottom:12, letterSpacing:1 },
-  item:        { flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:16, borderRadius:16, marginBottom:12, shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.05, shadowRadius:4, elevation:2 },
-  itemLeft:    { flexDirection:'row', alignItems:'center', flex:1 },
-  iconWrap:    { width:44, height:44, borderRadius:12, justifyContent:'center', alignItems:'center', marginRight:12 },
-  itemText:    { flex:1 },
-  itemTitle:   { fontSize:16, fontWeight:'600', marginBottom:2 },
-  itemSub:     { fontSize:12 },
-  langBadge:   { paddingHorizontal:12, paddingVertical:6, borderRadius:12, backgroundColor:'rgba(0,0,0,0.05)' },
-  langText:    { fontSize:12, fontWeight:'600' },
-  colorDot:    { width:24, height:24, borderRadius:12, marginRight:8 },
-  version:     { alignItems:'center', marginTop:20, padding:20 },
-  versionTxt:  { fontSize:12 },
-  modalOverlay:{ flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center', padding:20 },
-  modalBox:    { width:'100%', borderRadius:24, padding:24, shadowColor:'#000', shadowOffset:{width:0,height:20}, shadowOpacity:0.25, shadowRadius:40, elevation:10 },
-  safetyBox:   { width:'100%', borderRadius:24, padding:24, maxHeight:'80%' },
-  modalHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:24 },
-  modalTitle:  { fontSize:20, fontWeight:'600' },
-  colorsGrid:  { flexDirection:'row', flexWrap:'wrap', justifyContent:'space-between', marginBottom:20 },
-  colorItem:   { width:'23%', aspectRatio:1, marginBottom:12 },
-  colorCircle: { width:'100%', height:'100%', borderRadius:50, justifyContent:'center', alignItems:'center' },
-  colorHint:   { fontSize:12, textAlign:'center', marginTop:8 },
-  warningBox:  { flexDirection:'row', alignItems:'center', padding:16, borderRadius:12, borderWidth:1, marginBottom:20, gap:12 },
-  warningTxt:  { flex:1, fontSize:14, fontWeight:'500' },
-  phraseBox:   { width:'100%', padding:16, borderRadius:12, borderWidth:1, marginBottom:20 },
-  phraseText:  { fontFamily:Platform.OS==='ios'?'Courier':'monospace', fontSize:14 },
-  copyBtn:     { flexDirection:'row', alignItems:'center', justifyContent:'center', padding:12, borderRadius:12, borderWidth:1, gap:8, marginBottom:12 },
-  copyBtnTxt:  { fontSize:16, fontWeight:'500' },
-  closeBtn:    { paddingVertical:16, borderRadius:12, alignItems:'center' },
-  closeBtnTxt: { color:'#FFF', fontSize:16, fontWeight:'600' },
+  container:    { padding:20, paddingBottom:40 },
+  header:       { flexDirection:'row', alignItems:'center', paddingTop: Platform.OS==='ios'?52:28, marginBottom:32, gap:16 },
+  backBtn:      { width:44, height:44, borderRadius:14, justifyContent:'center', alignItems:'center', shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.06, shadowRadius:4, elevation:2 },
+  headerCenter: { flex:1 },
+  headerTitle:  { fontSize:28, fontWeight:'800' },
+  headerSub:    { fontSize:13, marginTop:2 },
+  section:      { marginBottom:28 },
+  sectionTitle: { fontSize:12, fontWeight:'600', marginBottom:12, letterSpacing:1 },
+  item:         { flexDirection:'row', alignItems:'center', justifyContent:'space-between', padding:16, borderRadius:16, marginBottom:12, shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.05, shadowRadius:4, elevation:2 },
+  itemLeft:     { flexDirection:'row', alignItems:'center', flex:1 },
+  iconWrap:     { width:44, height:44, borderRadius:12, justifyContent:'center', alignItems:'center', marginRight:12 },
+  itemText:     { flex:1 },
+  itemTitle:    { fontSize:16, fontWeight:'600', marginBottom:2 },
+  itemSub:      { fontSize:12 },
+  langBadge:    { paddingHorizontal:12, paddingVertical:6, borderRadius:12, backgroundColor:'rgba(0,0,0,0.05)' },
+  langText:     { fontSize:12, fontWeight:'600' },
+  colorDot:     { width:24, height:24, borderRadius:12, marginRight:8 },
+  version:      { alignItems:'center', marginTop:20, padding:20 },
+  versionTxt:   { fontSize:12 },
+  modalOverlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center', padding:20 },
+  modalBox:     { width:'100%', borderRadius:24, padding:24, shadowColor:'#000', shadowOffset:{width:0,height:20}, shadowOpacity:0.25, shadowRadius:40, elevation:10 },
+  safetyBox:    { width:'100%', borderRadius:24, padding:24, maxHeight:'80%' },
+  modalHeader:  { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:24 },
+  modalTitle:   { fontSize:20, fontWeight:'600' },
+  colorsGrid:   { flexDirection:'row', flexWrap:'wrap', justifyContent:'space-between', marginBottom:20 },
+  colorItem:    { width:'23%', aspectRatio:1, marginBottom:12 },
+  colorCircle:  { width:'100%', height:'100%', borderRadius:50, justifyContent:'center', alignItems:'center' },
+  colorHint:    { fontSize:12, textAlign:'center', marginTop:8 },
+  warningBox:   { flexDirection:'row', alignItems:'center', padding:16, borderRadius:12, borderWidth:1, marginBottom:20, gap:12 },
+  warningTxt:   { flex:1, fontSize:14, fontWeight:'500' },
+  phraseBox:    { width:'100%', padding:16, borderRadius:12, borderWidth:1, marginBottom:20 },
+  phraseText:   { fontFamily:Platform.OS==='ios'?'Courier':'monospace', fontSize:14 },
+  copyBtn:      { flexDirection:'row', alignItems:'center', justifyContent:'center', padding:12, borderRadius:12, borderWidth:1, gap:8, marginBottom:12 },
+  copyBtnTxt:   { fontSize:16, fontWeight:'500' },
+  closeBtn:     { paddingVertical:16, borderRadius:12, alignItems:'center' },
+  closeBtnTxt:  { color:'#FFF', fontSize:16, fontWeight:'600' },
 });

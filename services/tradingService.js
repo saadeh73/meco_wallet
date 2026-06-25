@@ -4,7 +4,6 @@ import * as SecureStore from 'expo-secure-store';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import { default as heliusService } from './heliusService';
-import { logTransaction } from './transactionService';
 
 // ─── ثوابت — موحدة مع SwapService ───────────────────────────────────────────
 const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
@@ -188,19 +187,6 @@ export async function executeMarketSwap({
   const sig     = await executeVersionedTx(swapTx, keypair, connection, walletPublicKey);
 
   const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
-
-  // ✅ تسجيل المعاملة — موحد مع SwapService
-  await logTransaction({
-    type:                 'swap',
-    transactionSignature: sig,
-    from:                 inputSymbol  || inputMint.slice(0,8),
-    to:                   outputSymbol || outputMint.slice(0,8),
-    fromAmount:           amount / Math.pow(10, inputDecimals),
-    toAmount:             outputAmount,
-    status:               'completed',
-    timestamp:            new Date().toISOString(),
-    serviceFee:           SERVICE_FEE_SOL,
-  }).catch(() => {});
 
   return sig;
 }

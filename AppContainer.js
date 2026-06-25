@@ -27,7 +27,6 @@ import SettingsScreen           from './screens/SettingsScreen';
 import ReceiveScreen            from './screens/ReceiveScreen';
 import SendScreen               from './screens/SendScreen';
 import BackupScreen             from './screens/BackupScreen';
-import TransactionHistoryScreen from './screens/TransactionHistoryScreen';
 import MarketScreen             from './screens/MarketScreen';
 import AppPortalScreen          from './screens/AppPortalScreen';
 import TokenDetailsScreen       from './screens/TokenDetailsScreen';
@@ -35,6 +34,7 @@ import QRScannerScreen          from './screens/QRScannerScreen';
 import SwapScreen               from './screens/SwapScreen';
 import StakingScreen            from './screens/StakingScreen';
 import TradingScreen            from './screens/TradingScreen';
+import PortfolioScreen          from './screens/PortfolioScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -59,7 +59,7 @@ function BottomTabs() {
           else if (route.name === 'Market')    iconName = focused ? 'stats-chart' : 'stats-chart-outline';
           else if (route.name === 'Trading')   iconName = focused ? 'trending-up' : 'trending-up-outline';
           else if (route.name === 'AppPortal') iconName = focused ? 'compass'     : 'compass-outline';
-          else if (route.name === 'Settings')  iconName = focused ? 'settings'    : 'settings-outline';
+          else if (route.name === 'Portfolio') iconName = focused ? 'pie-chart'   : 'pie-chart-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarStyle: {
@@ -82,16 +82,16 @@ function BottomTabs() {
         },
       })}
     >
-      <Tab.Screen name="Wallet"    component={WalletScreen}    options={{ tabBarLabel: t('wallet')       }} />
-      <Tab.Screen name="Market"    component={MarketScreen}    options={{ tabBarLabel: t('market')       }} />
+      <Tab.Screen name="Wallet"    component={WalletScreen}    options={{ tabBarLabel: t('wallet')              }} />
+      <Tab.Screen name="Market"    component={MarketScreen}    options={{ tabBarLabel: t('market')              }} />
 
-      {/* ✅ تبويب التداول في المنتصف */}
+      {/* ✅ تبويب التداول في المنتصف مرتفع */}
       <Tab.Screen
         name="Trading"
         component={TradingScreen}
         options={{
           tabBarLabel: t('trading', 'تداول'),
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ focused }) => (
             <View style={{
               width: 52, height: 52, borderRadius: 26,
               backgroundColor: focused ? primaryColor : primaryColor + '25',
@@ -103,21 +103,17 @@ function BottomTabs() {
               shadowRadius: 8,
               elevation: focused ? 8 : 4,
             }}>
-              <Ionicons
-                name={focused ? 'trending-up' : 'trending-up-outline'}
-                size={26}
-                color={focused ? '#FFF' : primaryColor}
-              />
+              <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={26} color={focused ? '#FFF' : primaryColor} />
             </View>
           ),
-          tabBarLabelStyle: {
-            fontSize: 12, fontWeight: '700', marginTop: 4,
-          },
+          tabBarLabelStyle: { fontSize: 12, fontWeight: '700', marginTop: 4 },
         }}
       />
 
-      <Tab.Screen name="AppPortal" component={AppPortalScreen} options={{ tabBarLabel: t('explore') || 'استكشف' }} />
-      <Tab.Screen name="Settings"  component={SettingsScreen}  options={{ tabBarLabel: t('user_settings')           }} />
+      <Tab.Screen name="AppPortal" component={AppPortalScreen} options={{ tabBarLabel: t('explore') || 'استكشف'      }} />
+
+      {/* ✅ Portfolio بدلاً من Settings */}
+      <Tab.Screen name="Portfolio" component={PortfolioScreen} options={{ tabBarLabel: t('portfolio', 'محفظتي')     }} />
     </Tab.Navigator>
   );
 }
@@ -144,9 +140,7 @@ export default function AppContainer() {
     }
   }, [language]);
 
-  useEffect(() => {
-    initWalletConnect().catch(console.warn);
-  }, []);
+  useEffect(() => { initWalletConnect().catch(console.warn); }, []);
 
   const handleDeepLink = async (url) => {
     if (!url) return;
@@ -174,15 +168,12 @@ export default function AppContainer() {
           const hasBio = await LocalAuthentication.isEnrolledAsync();
           if (hasHW && hasBio) {
             const result = await LocalAuthentication.authenticateAsync({
-              promptMessage: 'تأكيد الهوية للدخول',
-              cancelLabel:   'إلغاء',
-              disableDeviceFallback: true,
+              promptMessage: 'تأكيد الهوية للدخول', cancelLabel: 'إلغاء', disableDeviceFallback: true,
             });
             if (!result.success) { setInitialRoute('Home'); return; }
           }
           setInitialRoute('BottomTabs'); return;
         }
-
         const initialized = await SecureStore.getItemAsync('wallet_initialized');
         if (initialized === 'true') {
           const ok = await useAppStore.getState().loadWallet();
@@ -191,9 +182,7 @@ export default function AppContainer() {
             const hasBio = await LocalAuthentication.isEnrolledAsync();
             if (hasHW && hasBio) {
               const result = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'تأكيد الهوية للدخول',
-                cancelLabel:   'إلغاء',
-                disableDeviceFallback: true,
+                promptMessage: 'تأكيد الهوية للدخول', cancelLabel: 'إلغاء', disableDeviceFallback: true,
               });
               if (!result.success) { setInitialRoute('Home'); return; }
             }
@@ -232,9 +221,11 @@ export default function AppContainer() {
         <Stack.Screen name="Staking"            component={StakingScreen}            options={{ title: t('staking.title')||'تخزين السيولة', headerBackTitle: t('back')||'رجوع' }} />
         <Stack.Screen name="QRScanner"          component={QRScannerScreen}          options={{ headerShown:false }} />
         <Stack.Screen name="TokenDetails"       component={TokenDetailsScreen}       options={{ title: t('token_details'), headerBackTitle: t('back') }} />
-        <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: t('transaction_history') }} />
         <Stack.Screen name="AppPortal"          component={AppPortalScreen}          options={{ title: t('explore')||'استكشف' }} />
         <Stack.Screen name="Trading"            component={TradingScreen}            options={{ headerShown:false }} />
+        {/* ✅ Settings كشاشة Stack يُصل إليها من قائمة Wallet */}
+        <Stack.Screen name="Settings"           component={SettingsScreen}           options={{ headerShown:false }} />
+        <Stack.Screen name="Portfolio"          component={PortfolioScreen}          options={{ headerShown:false }} />
       </Stack.Navigator>
       <WalletConnectSignModal />
     </NavigationContainer>

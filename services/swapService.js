@@ -5,7 +5,6 @@ import { Buffer } from 'buffer';
 
 import { getSolBalance, getTokenBalance } from './heliusService';
 import { default as heliusService } from './heliusService';
-import { logTransaction } from './transactionService'; // ✅ تسجيل المعاملات
 
 // ─── TOKEN_MINTS ──────────────────────────────────────────────────────────────
 export const TOKEN_MINTS = {
@@ -309,19 +308,6 @@ export async function executeSwap(
       console.log(`🎉 [Swap] نجاح تام: ${swapSignature}`);
 
       const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
-
-      // ✅ تسجيل المعاملة في السجل المحلي بعد النجاح مباشرة
-      await logTransaction({
-        type:       'swap',
-        transactionSignature: swapSignature, // ✅ متسق مع SendScreen
-        from:       inputSymbol,
-        to:         outputSymbol,
-        fromAmount: amount,
-        toAmount:   outputAmount,
-        status:     'completed',
-        timestamp:  new Date().toISOString(),
-        serviceFee: SERVICE_FEE_SOL,
-      });
 
       return {
         success:      true,

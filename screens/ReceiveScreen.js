@@ -17,7 +17,6 @@ import * as SecureStore from 'expo-secure-store';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'react-native-qrcode-styled';
-import { logTransaction } from '../services/transactionService';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
@@ -26,7 +25,6 @@ export default function ReceiveScreen() {
   const { theme, primaryColor } = useAppStore();
   const { t } = useTranslation();
   const [walletAddress, setWalletAddress] = useState('');
-  const [logged, setLogged] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
   const [copied, setCopied] = useState(false);
@@ -62,23 +60,13 @@ export default function ReceiveScreen() {
 
     // Fetch wallet address
     SecureStore.getItemAsync('wallet_public_key')
-      .then(async (addr) => {
+      .then((addr) => {
         if (addr) {
           setWalletAddress(addr);
-
-          if (!logged) {
-            await logTransaction({
-              type: 'receive',
-              to: addr,
-              timestamp: new Date().toISOString(),
-              action: 'address_viewed'
-            });
-            setLogged(true);
-          }
         }
       })
       .catch(console.log);
-  }, [logged]);
+  }, []);
 
   const copyToClipboard = async () => {
     if (!walletAddress) return;

@@ -228,6 +228,14 @@ const resources = {
       portfolio: 'محفظتي',
       portfolio_value: 'قيمة المحفظة',
       your_holdings: 'أصولك',
+      asset_distribution: 'توزيع الأصول',
+      pnl_summary: 'ملخص الأرباح والخسائر',
+      pnl_today: 'ربح/خسارة اليوم',
+      best_asset: 'أفضل أصل',
+      assets_count: 'عدد الأصول',
+      largest_position: 'أكبر مركز',
+      no_assets: 'لا توجد أصول بعد',
+      total: 'الإجمالي',
 
       // ========== Time Periods (جديد) ==========
       time_1h: '1 ساعة',
@@ -861,6 +869,14 @@ const resources = {
       portfolio: 'Portfolio',
       portfolio_value: 'Portfolio Value',
       your_holdings: 'Your Holdings',
+      asset_distribution: 'Asset Distribution',
+      pnl_summary: 'P&L Summary',
+      pnl_today: "Today's P&L",
+      best_asset: 'Best Asset',
+      assets_count: 'Assets Count',
+      largest_position: 'Largest Position',
+      no_assets: 'No assets yet',
+      total: 'Total',
 
       // ========== Time Periods (New) ==========
       time_1h: '1H',
