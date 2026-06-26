@@ -172,6 +172,7 @@ export async function buildSwapTransaction(quote, userPublicKey) {
 }
 
 // ─── executeSwapTransaction ───────────────────────────────────────────────────
+// ✅ معاملة ذرية Atomic: التبادل + رسوم الخدمة في معاملة Versioned واحدة
 async function executeSwapTransaction(quote, userPubKey, keypair, connection) {
   const swapData           = await buildSwapTransaction(quote, userPubKey);
   const swapTransactionBuf = Buffer.from(swapData.swapTransaction, 'base64');
@@ -187,6 +188,7 @@ async function executeSwapTransaction(quote, userPubKey, keypair, connection) {
     addressLookupTableAccounts,
   });
 
+  // ✅ إضافة رسوم الخدمة — المعاملة ذرية Atomic
   message.instructions.push(
     web3.SystemProgram.transfer({
       fromPubkey: userPubKey,
@@ -203,6 +205,7 @@ async function executeSwapTransaction(quote, userPubKey, keypair, connection) {
   );
   transaction.sign([keypair]);
 
+  // الإرسال مع Fallback
   let swapSignature;
   try {
     swapSignature = await connection.sendRawTransaction(transaction.serialize(), {
@@ -220,6 +223,7 @@ async function executeSwapTransaction(quote, userPubKey, keypair, connection) {
 
   console.log(`⏳ [Swap] تم الإرسال: ${swapSignature}. جاري التأكيد...`);
 
+  // التأكيد مع 3 محاولات وتحديث Blockhash
   let confirmation;
   let currentBlockhash = latestBlockhash;
 
@@ -260,6 +264,7 @@ export async function executeSwap(
     return { success: false, error: 'عملة غير مدعومة في التبادل' };
   }
 
+  // ── إعداد أولي ────────────────────────────────────────────────────────────
   let keypair, userPubKey, connection;
   try {
     keypair    = privateKey ? getKeypairFromPrivateKey(privateKey) : await getKeypair();
@@ -269,6 +274,7 @@ export async function executeSwap(
     return { success: false, error: `خطأ في التهيئة: ${err.message}` };
   }
 
+  // ── التحقق من الرصيد ──────────────────────────────────────────────────────
   try {
     const balanceCheck = await checkBalance(inputSymbol, amount, userPubKey.toString());
     if (!balanceCheck.hasBalance) {
@@ -278,6 +284,7 @@ export async function executeSwap(
     return { success: false, error: `فشل التحقق من الرصيد: ${err.message}` };
   }
 
+  // ── حلقة Retry — الرسوم لا تتكرر لأن المعاملة ذرية ─────────────────────
   const inputDecimals    = TOKEN_DECIMALS[inputSymbol]  || 9;
   const outputDecimals   = TOKEN_DECIMALS[outputSymbol] || 9;
   const amountInLamports = Math.floor(amount * Math.pow(10, inputDecimals));
@@ -301,6 +308,8 @@ export async function executeSwap(
       console.log(`🎉 [Swap] نجاح تام: ${swapSignature}`);
 
       const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
+
+     
 
       return {
         success:      true,
@@ -340,13 +349,13 @@ export async function checkBalance(tokenSymbol, amount, publicKey) {
     const solBalance = await getSolBalance(true, pubKeyStr);
 
     if (tokenSymbol === 'SOL') {
-      const required = amount + SERVICE_FEE_SOL + 0.005;
+      const required = amount + SERVICE_FEE_SOL + 0.001;
       return { hasBalance: solBalance >= required, balance: solBalance, required };
     }
 
     const tokenBalance   = await getTokenBalance(TOKEN_MINTS[tokenSymbol], true, pubKeyStr);
     const hasEnoughToken = tokenBalance >= amount;
-    const hasEnoughSol   = solBalance >= SERVICE_FEE_SOL + 0.002;
+    const hasEnoughSol   = solBalance >= SERVICE_FEE_SOL + 0.001;
 
     return {
       hasBalance: hasEnoughToken && hasEnoughSol,
