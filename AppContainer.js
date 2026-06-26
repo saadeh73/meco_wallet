@@ -35,6 +35,7 @@ import SwapScreen               from './screens/SwapScreen';
 import StakingScreen            from './screens/StakingScreen';
 import TradingScreen            from './screens/TradingScreen';
 import PortfolioScreen          from './screens/PortfolioScreen';
+import DappBrowserScreen        from './screens/DappBrowserScreen'; // ✅ استيراد الشاشة الجديدة للمتصفح
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -206,6 +207,8 @@ export default function AppContainer() {
     );
   }
 
+  const isDark = theme === 'dark';
+
   return (
     <NavigationContainer theme={theme==='dark' ? DarkTheme : DefaultTheme}>
       <Stack.Navigator initialRouteName={initialRoute}>
@@ -223,9 +226,25 @@ export default function AppContainer() {
         <Stack.Screen name="TokenDetails"       component={TokenDetailsScreen}       options={{ title: t('token_details'), headerBackTitle: t('back') }} />
         <Stack.Screen name="AppPortal"          component={AppPortalScreen}          options={{ title: t('explore')||'استكشف' }} />
         <Stack.Screen name="Trading"            component={TradingScreen}            options={{ headerShown:false }} />
-        {/* ✅ Settings كشاشة Stack يُصل إليها من قائمة Wallet */}
         <Stack.Screen name="Settings"           component={SettingsScreen}           options={{ headerShown:false }} />
         <Stack.Screen name="Portfolio"          component={PortfolioScreen}          options={{ headerShown:false }} />
+
+        {/* ✅ شاشة المتصفح المخصصة لـ Web3 خالية تماماً من شريط التبويبات السفلية */}
+        <Stack.Screen 
+          name="DappBrowser" 
+          component={DappBrowserScreen} 
+          options={{ 
+            title: 'Web3 Browser',
+            headerShown: true, // يظهر شريط علوي مع زر الرجوع للخروج من المتصفح
+            headerBackTitle: t('back') || 'رجوع',
+            headerStyle: {
+              backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+              elevation: 0,
+              shadowOpacity: 0,
+            },
+            headerTintColor: isDark ? '#FFFFFF' : '#000000',
+          }} 
+        />
       </Stack.Navigator>
       <WalletConnectSignModal />
     </NavigationContainer>
