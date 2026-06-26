@@ -5,10 +5,10 @@ import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import { default as heliusService } from './heliusService';
 
-// ─── ثوابت — موحدة مع SwapService ───────────────────────────────────────────
 const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
 const SERVICE_FEE_SOL       = 0.0005;
 const JUPITER_API_KEY       = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
+const MECO_MINT             = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
 
 const JUPITER_QUOTE_API      = 'https://quote-api.jup.ag/v6/quote';
 const JUPITER_SWAP_API       = 'https://quote-api.jup.ag/v6/swap';
@@ -25,7 +25,6 @@ const BROWSER_HEADERS = {
   'x-api-key':    JUPITER_API_KEY,
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fetchWT = async (url, options = {}, ms = 20000) => {
   const ctrl  = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
@@ -49,52 +48,47 @@ async function getKeypair(activeIndex) {
 }
 
 async function getConnection() {
-  try {
-    return await heliusService.getConnection();
-  } catch (_) {
-    return new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-  }
+  try { return await heliusService.getConnection(); }
+  catch (_) { return new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed'); }
 }
 
-// ─── جلب الـ Quote — مع دعم MECO ─────────────────────────────────────────────
+// ─── Quote — مع معالجة MECO مطابقة لـ swapService ───────────────────────────
 async function getQuote(inputMint, outputMint, amount, slippageBps = 50) {
-  const MECO_MINT = 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W';
-  const isMeco = inputMint === MECO_MINT || outputMint === MECO_MINT;
-  const finalSlippage = isMeco ? 300 : slippageBps;
-  const extraParams = isMeco ? '&onlyDirectRoutes=false' : '';
+  // ✅ نفس منطق swapService للـ MECO
+  const isMeco          = inputMint === MECO_MINT || outputMint === MECO_MINT;
+  const extraParams     = isMeco ? '&onlyDirectRoutes=false' : '';
+  const effectiveSlippage = isMeco ? Math.max(slippageBps, 300) : slippageBps;
 
   const endpoints = [
     { name: 'Main V6',  url: JUPITER_QUOTE_API      },
     { name: 'Lite API', url: JUPITER_LITE_QUOTE_API },
   ];
+
   let lastError;
   for (const ep of endpoints) {
     try {
-      const url = `${ep.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${finalSlippage}${extraParams}`;
+      const url = `${ep.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${effectiveSlippage}${extraParams}`;
       const res = await fetchWT(url, { method: 'GET', headers: BROWSER_HEADERS }, 15000);
       if (!res.ok) throw new Error(await res.text());
       const quote = await res.json();
       if (!quote?.routePlan?.length) throw new Error('لا يوجد مسار للتداول');
       return quote;
-    } catch (err) {
-      lastError = err;
-    }
+    } catch (err) { lastError = err; }
   }
   throw new Error(`تعذر الحصول على السعر: ${lastError?.message || ''}`);
 }
 
-// ─── بناء معاملة Swap — مع fallback ──────────────────────────────────────────
+// ─── Swap TX ──────────────────────────────────────────────────────────────────
 async function buildSwapTx(quote, walletPublicKey) {
   const endpoints = [
-    { name: 'Main V6',  url: JUPITER_SWAP_API      },
-    { name: 'Lite API', url: JUPITER_LITE_SWAP_API },
+    { url: JUPITER_SWAP_API      },
+    { url: JUPITER_LITE_SWAP_API },
   ];
   let lastError;
   for (const ep of endpoints) {
     try {
       const res = await fetchWT(ep.url, {
-        method:  'POST',
-        headers: BROWSER_HEADERS,
+        method: 'POST', headers: BROWSER_HEADERS,
         body: JSON.stringify({
           quoteResponse:             quote,
           userPublicKey:             walletPublicKey,
@@ -108,14 +102,12 @@ async function buildSwapTx(quote, walletPublicKey) {
       const data = await res.json();
       if (!data.swapTransaction) throw new Error('بيانات المعاملة غير مكتملة');
       return data.swapTransaction;
-    } catch (err) {
-      lastError = err;
-    }
+    } catch (err) { lastError = err; }
   }
   throw new Error(`فشل بناء المعاملة: ${lastError?.message || ''}`);
 }
 
-// ─── تنفيذ المعاملة — الرسوم atomic داخل نفس المعاملة ───────────────────────
+// ─── تنفيذ المعاملة — الرسوم atomic ─────────────────────────────────────────
 async function executeVersionedTx(swapTxBase64, keypair, connection, walletPublicKey) {
   const buffer = Buffer.from(swapTxBase64, 'base64');
   let tx       = web3.VersionedTransaction.deserialize(buffer);
@@ -131,7 +123,6 @@ async function executeVersionedTx(swapTxBase64, keypair, connection, walletPubli
     addressLookupTableAccounts: validLuts,
   });
 
-  // ✅ رسوم الخدمة atomic داخل نفس المعاملة — موحد مع SwapService
   msg.instructions.push(
     web3.SystemProgram.transfer({
       fromPubkey: new web3.PublicKey(walletPublicKey),
@@ -142,11 +133,9 @@ async function executeVersionedTx(swapTxBase64, keypair, connection, walletPubli
 
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
   msg.recentBlockhash = blockhash;
-
   tx = new web3.VersionedTransaction(msg.compileToV0Message(validLuts));
   tx.sign([keypair]);
 
-  // إرسال مع Fallback
   let sig;
   try {
     sig = await connection.sendRawTransaction(tx.serialize(), {
@@ -158,7 +147,6 @@ async function executeVersionedTx(swapTxBase64, keypair, connection, walletPubli
     });
   }
 
-  // تأكيد مع 3 محاولات
   let blockhashData = { blockhash, lastValidBlockHeight };
   for (let i = 0; i < 3; i++) {
     try {
@@ -180,20 +168,13 @@ async function executeVersionedTx(swapTxBase64, keypair, connection, walletPubli
 
 // ─── Market Swap ✅ ────────────────────────────────────────────────────────────
 export async function executeMarketSwap({
-  inputMint, outputMint, amount,
-  walletPublicKey, activeIndex,
-  inputSymbol, outputSymbol, inputDecimals = 6, outputDecimals = 6,
+  inputMint, outputMint, amount, walletPublicKey, activeIndex,
 }) {
   const keypair    = await getKeypair(activeIndex);
   const connection = await getConnection();
-
-  const quote   = await getQuote(inputMint, outputMint, amount);
-  const swapTx  = await buildSwapTx(quote, walletPublicKey);
-  const sig     = await executeVersionedTx(swapTx, keypair, connection, walletPublicKey);
-
-  const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
-
-  return sig;
+  const quote      = await getQuote(inputMint, outputMint, amount);
+  const swapTx     = await buildSwapTx(quote, walletPublicKey);
+  return executeVersionedTx(swapTx, keypair, connection, walletPublicKey);
 }
 
 // ─── Limit Order ─────────────────────────────────────────────────────────────
@@ -201,20 +182,15 @@ export async function executeLimitOrder({
   inputMint, outputMint, inAmount, outAmount, walletPublicKey, activeIndex,
 }) {
   const res = await fetchWT(`${JUPITER_LIMIT_API}/createOrder`, {
-    method:  'POST',
-    headers: BROWSER_HEADERS,
+    method: 'POST', headers: BROWSER_HEADERS,
     body: JSON.stringify({
-      owner: walletPublicKey,
-      inputMint, outputMint,
-      inAmount:  inAmount.toString(),
-      outAmount: outAmount.toString(),
-      expiredAt: null,
+      owner: walletPublicKey, inputMint, outputMint,
+      inAmount: inAmount.toString(), outAmount: outAmount.toString(), expiredAt: null,
     }),
   });
   if (!res.ok) throw new Error(`Limit order error: ${res.status}`);
   const data = await res.json();
   if (!data.tx) throw new Error('No limit order transaction returned');
-
   const keypair    = await getKeypair(activeIndex);
   const connection = await getConnection();
   return executeVersionedTx(data.tx, keypair, connection, walletPublicKey);
@@ -223,8 +199,7 @@ export async function executeLimitOrder({
 // ─── Cancel Limit Order ───────────────────────────────────────────────────────
 export async function cancelLimitOrder({ orderPubkey, walletPublicKey, activeIndex }) {
   const res = await fetchWT(`${JUPITER_LIMIT_API}/cancelOrders`, {
-    method:  'POST',
-    headers: BROWSER_HEADERS,
+    method: 'POST', headers: BROWSER_HEADERS,
     body: JSON.stringify({ owner: walletPublicKey, orders: [orderPubkey] }),
   });
   if (!res.ok) throw new Error(`Cancel error: ${res.status}`);
