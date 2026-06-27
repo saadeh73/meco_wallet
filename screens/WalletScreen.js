@@ -43,13 +43,13 @@ export default function WalletScreen() {
   const walletPublicKey    = useAppStore(state => state.walletPublicKey);
 
   const colors = {
-    background:    isDark ? '#0A0A0F' : '#F2F3F7',
-    card:          isDark ? '#1A1A2E' : '#FFFFFF',
-    text:          isDark ? '#FFFFFF' : '#1A1A2E',
-    textSecondary: isDark ? '#A0A0B0' : '#8E8E93',
-    border:        isDark ? '#2A2A3E' : '#E5E5EA',
-    success:       '#4CAF50',
-    error:         '#FF3B30',
+    background:    isDark ? '#07070F' : '#F4F5F9',
+    card:          isDark ? '#111122' : '#FFFFFF',
+    text:          isDark ? '#EEEEFF' : '#1C1C24',
+    textSecondary: isDark ? '#7E7EAA' : '#8A8A9E',
+    border:        isDark ? '#1E1E38' : '#E8E8F2',
+    success:       '#10B981',
+    error:         '#EF4444',
   };
 
   const [walletName,            setWalletName]            = useState('');
@@ -72,8 +72,8 @@ export default function WalletScreen() {
   const [accountEmojis,         setAccountEmojis]         = useState({});
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const swipeableRefs        = useRef({});
   const accountSwipeableRefs = useRef({});
 
@@ -91,9 +91,9 @@ export default function WalletScreen() {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, friction: 6,   useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 6,   useNativeDriver: true }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8,   useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 8,   useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -301,10 +301,10 @@ export default function WalletScreen() {
     return (
       <Animated.View style={[styles.leftAction, { transform: [{ translateX: trans }] }]}>
         <TouchableOpacity
-          style={[styles.swipeActionBtn, { backgroundColor: '#6366F1' }]}
+          style={[styles.swipeActionBtn, { backgroundColor: primaryColor }]}
           onPress={() => { swipeableRefs.current[asset.symbol]?.close(); navigation.navigate('Swap', { fromToken: asset.symbol }); }}
         >
-          <Ionicons name="swap-horizontal" size={24} color="#FFF" />
+          <Ionicons name="swap-horizontal" size={20} color="#FFF" />
           <Text style={styles.swipeActionLabel}>{t('swap_title')}</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -316,17 +316,17 @@ export default function WalletScreen() {
     return (
       <Animated.View style={[styles.rightAction, { transform: [{ translateX: trans }] }]}>
         <TouchableOpacity
-          style={[styles.swipeActionBtn, { backgroundColor: '#10B981' }]}
+          style={[styles.swipeActionBtn, { backgroundColor: colors.success }]}
           onPress={() => { swipeableRefs.current[asset.symbol]?.close(); navigation.navigate('Send', { preselectedToken: asset.symbol }); }}
         >
-          <Ionicons name="paper-plane" size={24} color="#FFF" />
+          <Ionicons name="paper-plane" size={20} color="#FFF" />
           <Text style={styles.swipeActionLabel}>{t('send')}</Text>
         </TouchableOpacity>
       </Animated.View>
     );
   };
 
-  const renderAssetItem = ({ item }) => {
+  const renderAssetItem = ({ item, index }) => {
     const isPositive = item.valueUSD > 0;
     return (
       <Animated.View style={[styles.assetItemWrapper, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }]}>
@@ -338,9 +338,9 @@ export default function WalletScreen() {
           renderRightActions={(p,d) => renderRightActions(p,d,item)}
           onSwipeableWillOpen={() => closeOtherSwipeables(item.symbol, swipeableRefs)}
         >
-          <View style={[styles.assetItem, { backgroundColor: colors.card }]}>
+          <View style={[styles.assetItem, { backgroundColor: colors.card, borderBottomColor: colors.border, borderBottomWidth: index === assets.length - 1 ? 0 : 1 }]}>
             <View style={styles.assetLeft}>
-              <View style={[styles.assetIconContainer, { backgroundColor: primaryColor + '15' }]}>
+              <View style={[styles.assetIconContainer, { backgroundColor: isDark ? '#171730' : '#ECECF4' }]}>
                 <Image source={{ uri: item.image }} style={styles.assetIcon} />
                 {item.symbol === 'SOL' && (
                   <View style={[styles.badgeDot, { backgroundColor: '#14F195', borderColor: colors.card }]} />
@@ -355,12 +355,12 @@ export default function WalletScreen() {
               <Text style={[styles.assetBalance, { color: colors.text }]}>
                 {item.amount > 0 ? item.amount.toFixed(item.amount > 100 ? 2 : 4) : '0'}
               </Text>
-              <Text style={[styles.assetValue, { color: isPositive ? colors.success : colors.textSecondary }]}>
+              <Text style={[styles.assetValue, { color: colors.textSecondary }]}>
                 {item.valueUSD > 0 ? `$${item.valueUSD.toFixed(2)}` : '$0.00'}
               </Text>
             </View>
             <View style={styles.assetChevron}>
-              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
             </View>
           </View>
         </Swipeable>
@@ -382,14 +382,14 @@ export default function WalletScreen() {
             setTimeout(() => setModalVisible(true), 300);
           }}
         >
-          <Ionicons name="pencil" size={20} color="#FFF" />
+          <Ionicons name="pencil" size={18} color="#FFF" />
           <Text style={styles.actionText}>{t('edit')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.accountActionBtn, { backgroundColor: '#F59E0B' }]}
           onPress={() => { accountSwipeableRefs.current[item.index]?.close(); handleExportPrivateKey(item); }}
         >
-          <Ionicons name="key" size={20} color="#FFF" />
+          <Ionicons name="key" size={18} color="#FFF" />
           <Text style={styles.actionText}>{t('export')}</Text>
         </TouchableOpacity>
         {!isActive && (
@@ -397,7 +397,7 @@ export default function WalletScreen() {
             style={[styles.accountActionBtn, { backgroundColor: colors.error }]}
             onPress={() => { accountSwipeableRefs.current[item.index]?.close(); handleDeleteAccount(item); }}
           >
-            <Ionicons name="trash" size={20} color="#FFF" />
+            <Ionicons name="trash" size={18} color="#FFF" />
             <Text style={styles.actionText}>{t('delete')}</Text>
           </TouchableOpacity>
         )}
@@ -411,7 +411,7 @@ export default function WalletScreen() {
         style={[styles.accountActionBtn, { backgroundColor: colors.success, borderTopRightRadius: 16, borderBottomRightRadius: 16, width: 80 }]}
         onPress={() => { accountSwipeableRefs.current[item.index]?.close(); copyAddress(item.publicKey); }}
       >
-        <Ionicons name="copy" size={20} color="#FFF" />
+        <Ionicons name="copy" size={18} color="#FFF" />
         <Text style={styles.actionText}>{t('copy')}</Text>
       </TouchableOpacity>
     </View>
@@ -451,13 +451,13 @@ export default function WalletScreen() {
               </View>
             </View>
             <View style={styles.accountBalanceContainer}>
+              {isActive && <Ionicons name="checkmark-circle" size={18} color={primaryColor} style={{ marginRight: 8 }} />}
               {isLoading
                 ? <ActivityIndicator size="small" color={primaryColor} />
                 : <Text style={[styles.accountBalance, { color: colors.text }]}>
                     ${usdBalance?.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }) || '0.00'}
                   </Text>
               }
-              {isActive && <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={{ marginLeft: 8 }} />}
             </View>
           </TouchableOpacity>
         </Swipeable>
@@ -469,27 +469,27 @@ export default function WalletScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
 
-        {/* Header Card */}
-        <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        {/* ── البطاقة العلوية الاحترافية والذكية (Solflare Header Layout) ── */}
+        <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }], borderColor: colors.border, borderWidth: 1 }]}>
           <View style={styles.topBar}>
             <View style={styles.walletInfoRow}>
               <TouchableOpacity
                 onPress={() => setAccountsModalVisible(true)}
-                style={[styles.walletIconWrapper, { backgroundColor: primaryColor + '20' }]}
+                style={[styles.walletIconWrapper, { backgroundColor: primaryColor + '15', borderColor: colors.border, borderWidth: 1 }]}
                 activeOpacity={0.7}
               >
                 {activeEmoji
                   ? <Text style={styles.walletIconEmoji}>{activeEmoji}</Text>
-                  : <Ionicons name="wallet" size={22} color={primaryColor} />
+                  : <Ionicons name="wallet-outline" size={20} color={primaryColor} />
                 }
               </TouchableOpacity>
-              <View>
+              <View style={{ alignItems:'flex-start' }}>
                 <View style={styles.walletNameRow}>
                   <Text style={[styles.walletName, { color: colors.text }]}>{walletName}</Text>
                   <TouchableOpacity onPress={() => copyAddress()} style={styles.inlineCopyBtn}>
                     <Ionicons
                       name={copyFeedback ? 'checkmark-circle' : 'copy-outline'}
-                      size={16}
+                      size={14}
                       color={copyFeedback ? colors.success : primaryColor}
                     />
                   </TouchableOpacity>
@@ -502,9 +502,9 @@ export default function WalletScreen() {
 
             <TouchableOpacity
               onPress={() => setMenuVisible(true)}
-              style={[styles.dotsButton, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
+              style={[styles.dotsButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
             >
-              <Ionicons name="ellipsis-vertical" size={20} color={primaryColor} />
+              <Ionicons name="ellipsis-vertical" size={18} color={colors.text} />
             </TouchableOpacity>
           </View>
 
@@ -521,16 +521,17 @@ export default function WalletScreen() {
             )}
           </View>
 
+          {/* أزرار الإجراءات السريعة ككبسولات تفاعلية متناسقة ومصممة بدقة */}
           <View style={styles.actionsGrid}>
             {[
-              { icon:'arrow-up',        color:'#10B981', screen:'Send',    label:t('send')              },
-              { icon:'arrow-down',      color:'#6366F1', screen:'Receive', label:t('receive')           },
-              { icon:'swap-horizontal', color:'#F59E0B', screen:'Swap',    label:t('swap_title')        },
-              { icon:'trending-up',     color:'#EC4899', screen:'Staking', label:t('staking.stake_tab') },
+              { icon:'arrow-up',        color:colors.success, screen:'Send',    label:t('send')              },
+              { icon:'arrow-down',      color:'#6366F1',      screen:'Receive', label:t('receive')           },
+              { icon:'swap-horizontal', color:'#F59E0B',      screen:'Swap',    label:t('swap_title')        },
+              { icon:'trending-up',     color:'#EC4899',      screen:'Staking', label:t('staking.stake_tab') },
             ].map(btn => (
               <TouchableOpacity key={btn.screen} style={styles.actionBtn} onPress={() => navigation.navigate(btn.screen)}>
-                <View style={[styles.actionCircle, { backgroundColor: btn.color + '20' }]}>
-                  <Ionicons name={btn.icon} size={24} color={btn.color} />
+                <View style={[styles.actionCircle, { backgroundColor: btn.color + '12' }]}>
+                  <Ionicons name={btn.icon} size={22} color={btn.color} />
                 </View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>{btn.label}</Text>
               </TouchableOpacity>
@@ -538,45 +539,46 @@ export default function WalletScreen() {
           </View>
         </Animated.View>
 
-        {/* Assets List */}
+        {/* ── قائمة الأصول (تصميم مسطح موحد) ── */}
         <View style={styles.assetsSection}>
           <View style={styles.assetsHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('wallet_your_assets')}</Text>
             <TouchableOpacity onPress={handleRefresh} style={styles.refreshBtn}>
-              <Ionicons name="refresh" size={20} color={primaryColor} />
+              <Ionicons name="refresh" size={18} color={primaryColor} />
             </TouchableOpacity>
           </View>
+          
           <FlatList
             data={assets}
             renderItem={renderAssetItem}
             keyExtractor={item => item.mint || item.symbol}
-            contentContainerStyle={{ paddingBottom: 120 }}
+            contentContainerStyle={[styles.listContainer, { backgroundColor: colors.card, borderColor: colors.border }]}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={primaryColor} colors={[primaryColor]} />}
             ListEmptyComponent={(!loadingInitial && !isSwitchingAccount) && (
               <View style={styles.emptyContainer}>
-                <Ionicons name="wallet-outline" size={48} color={colors.textSecondary} />
+                <Ionicons name="wallet-outline" size={36} color={colors.textSecondary} />
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('loading_market_data')}</Text>
               </View>
             )}
           />
         </View>
 
-        {/* ✅ قائمة النقاط — Settings أول عنصر */}
+        {/* ── قائمة الخيارات (Modal Menu) ── */}
         <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
           <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
-            <View style={[styles.menuCard, { backgroundColor: colors.card }]}>
+            <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
 
-              {/* ✅ الإعدادات */}
+              {/* الإعدادات */}
               <TouchableOpacity
                 style={[styles.menuItem, { borderBottomColor: colors.border }]}
                 onPress={() => { setMenuVisible(false); navigation.navigate('Settings'); }}
               >
-                <View style={[styles.menuItemIcon, { backgroundColor: primaryColor + '20' }]}>
-                  <Ionicons name="settings-outline" size={20} color={primaryColor} />
+                <View style={[styles.menuItemIcon, { backgroundColor: primaryColor + '15' }]}>
+                  <Ionicons name="settings-outline" size={18} color={primaryColor} />
                 </View>
                 <Text style={[styles.menuItemText, { color: colors.text }]}>{t('settings')}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
               </TouchableOpacity>
 
               {/* تغيير الاسم */}
@@ -589,11 +591,11 @@ export default function WalletScreen() {
                   setTimeout(() => setModalVisible(true), 200);
                 }}
               >
-                <View style={[styles.menuItemIcon, { backgroundColor: '#6366F1' + '20' }]}>
-                  <Ionicons name="pencil" size={20} color="#6366F1" />
+                <View style={[styles.menuItemIcon, { backgroundColor: 'rgba(99,102,241,0.15)' }]}>
+                  <Ionicons name="pencil" size={18} color="#6366F1" />
                 </View>
                 <Text style={[styles.menuItemText, { color: colors.text }]}>{t('edit_wallet_name')}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
               </TouchableOpacity>
 
               {/* اختيار إيموجي */}
@@ -601,31 +603,31 @@ export default function WalletScreen() {
                 style={styles.menuItem}
                 onPress={() => { setMenuVisible(false); setTimeout(() => setEmojiPickerVisible(true), 200); }}
               >
-                <View style={[styles.menuItemIcon, { backgroundColor: primaryColor + '20' }]}>
-                  <Text style={{ fontSize: 20 }}>🎨</Text>
+                <View style={[styles.menuItemIcon, { backgroundColor: primaryColor + '15' }]}>
+                  <Text style={{ fontSize: 18 }}>🎨</Text>
                 </View>
                 <Text style={[styles.menuItemText, { color: colors.text }]}>{t('change')}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
               </TouchableOpacity>
 
             </View>
           </TouchableOpacity>
         </Modal>
 
-        {/* منتقي الإيموجي */}
+        {/* منتقي الإيموجي (Bottom Sheet) */}
         <Modal visible={emojiPickerVisible} transparent animationType="slide" onRequestClose={() => setEmojiPickerVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.emojiPickerContent, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHandle} />
+              <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
               <View style={styles.emojiPickerHeader}>
                 <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>🎨 {t('change')}</Text>
                 <TouchableOpacity onPress={() => setEmojiPickerVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.background }]}>
-                  <Ionicons name="close" size={20} color={colors.text} />
+                  <Ionicons name="close" size={18} color={colors.text} />
                 </TouchableOpacity>
               </View>
               {activeAccount && accountEmojis[activeAccount.publicKey] && (
                 <TouchableOpacity
-                  style={[styles.removeEmojiBtn, { borderColor: colors.error + '50' }]}
+                  style={[styles.removeEmojiBtn, { borderColor: colors.error + '30' }]}
                   onPress={async () => {
                     if (activeAccount) {
                       const updated = { ...accountEmojis };
@@ -636,7 +638,7 @@ export default function WalletScreen() {
                     setEmojiPickerVisible(false);
                   }}
                 >
-                  <Ionicons name="trash-outline" size={16} color={colors.error} />
+                  <Ionicons name="trash-outline" size={14} color={colors.error} />
                   <Text style={[styles.removeEmojiText, { color: colors.error }]}>{t('delete')}</Text>
                 </TouchableOpacity>
               )}
@@ -649,7 +651,7 @@ export default function WalletScreen() {
                   const isSelected = activeAccount && accountEmojis[activeAccount.publicKey] === item;
                   return (
                     <TouchableOpacity
-                      style={[styles.emojiItem, isSelected && { backgroundColor: primaryColor + '30', borderRadius: 12 }]}
+                      style={[styles.emojiItem, isSelected && { backgroundColor: primaryColor + '20', borderRadius: 12 }]}
                       onPress={async () => {
                         if (activeAccount) await saveEmoji(activeAccount.publicKey, item);
                         setEmojiPickerVisible(false);
@@ -664,18 +666,19 @@ export default function WalletScreen() {
           </View>
         </Modal>
 
-        {/* Edit Name Modal */}
+        {/* تعديل الاسم (Modal Input) */}
         <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => { setModalVisible(false); setEditingAccountIndex(null); }}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
               <View style={styles.modalHeader}>
-                <Ionicons name="create-outline" size={28} color={primaryColor} />
+                <Ionicons name="create-outline" size={24} color={primaryColor} />
               </View>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t('edit_wallet_name')}</Text>
               <TextInput
-                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background, paddingVertical: 0 }]}
                 value={tempWalletName} onChangeText={setTempWalletName}
                 autoFocus placeholder={t('enter_wallet_name')} placeholderTextColor={colors.textSecondary}
+                autoCorrect={false}
               />
               <View style={styles.modalButtons}>
                 <TouchableOpacity style={[styles.modalBtn, { borderColor: colors.border }]} onPress={() => { setModalVisible(false); setEditingAccountIndex(null); }}>
@@ -689,21 +692,21 @@ export default function WalletScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* Accounts Modal */}
+        {/* منتقي الحسابات المطور (Bottom Sheet) */}
         <Modal visible={accountsModalVisible} transparent animationType="slide" onRequestClose={() => setAccountsModalVisible(false)}>
           <View style={styles.modalOverlayBottom}>
             <View style={[styles.accountsModalContent, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHandle} />
+              <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
               <View style={styles.accountsModalHeader}>
                 <View style={styles.accountsHeaderLeft}>
-                  <Ionicons name="layers" size={24} color={primaryColor} />
+                  <Ionicons name="layers" size={20} color={primaryColor} />
                   <Text style={[styles.modalTitle, { color: colors.text, marginBottom: 0 }]}>{t('accounts')}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setAccountsModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.background }]}>
-                  <Ionicons name="close" size={20} color={colors.text} />
+                  <Ionicons name="close" size={18} color={colors.text} />
                 </TouchableOpacity>
               </View>
-              <Text style={{ textAlign:'center', fontSize:12, color:colors.textSecondary, marginBottom:16 }}>
+              <Text style={{ textAlign:'center', fontSize:11, color:colors.textSecondary, marginBottom:16 }}>
                 {t('swipe_hint')}
               </Text>
               <GestureHandlerRootView style={{ flex: 1 }}>
@@ -718,14 +721,14 @@ export default function WalletScreen() {
                 <TouchableOpacity style={[styles.addAccountBtn, { borderColor: primaryColor }]} onPress={handleAddAccount} disabled={addingAccount}>
                   {addingAccount
                     ? <ActivityIndicator size="small" color={primaryColor} />
-                    : <><Ionicons name="add-circle" size={22} color={primaryColor} /><Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text></>
+                    : <><Ionicons name="add-circle" size={20} color={primaryColor} /><Text style={[styles.addAccountText, { color: primaryColor }]}>{t('add_account')}</Text></>
                   }
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.addAccountBtn, { borderColor: primaryColor }]}
                   onPress={() => { setAccountsModalVisible(false); navigation.navigate('ImportPrivateKey'); }}
                 >
-                  <Ionicons name="key" size={22} color={primaryColor} />
+                  <Ionicons name="key" size={20} color={primaryColor} />
                   <Text style={[styles.addAccountText, { color: primaryColor }]}>{t('import_private_key.title')}</Text>
                 </TouchableOpacity>
               </View>
@@ -738,88 +741,95 @@ export default function WalletScreen() {
   );
 }
 
+const S_CARD_HEIGHT = Platform.OS === 'ios' ? 300 : 280;
+
 const styles = StyleSheet.create({
   container:    { flex:1 },
-  headerCard:   { borderBottomLeftRadius:32, borderBottomRightRadius:32, paddingTop:Platform.OS==='ios'?60:40, paddingHorizontal:24, paddingBottom:24, shadowColor:'#000', shadowOffset:{width:0,height:8}, shadowOpacity:0.12, shadowRadius:20, elevation:10, zIndex:10 },
-  topBar:       { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:24 },
-  walletInfoRow:{ flexDirection:'row', alignItems:'center', gap:12 },
-  walletIconWrapper: { width:48, height:48, borderRadius:14, justifyContent:'center', alignItems:'center' },
-  walletIconEmoji:   { fontSize:26 },
-  walletNameRow:{ flexDirection:'row', alignItems:'center', gap:6 },
-  walletName:   { fontSize:20, fontWeight:'800' },
+  headerCard:   { borderBottomLeftRadius:28, borderBottomRightRadius:28, paddingTop:Platform.OS==='ios'?56:32, paddingHorizontal:20, paddingBottom:20, elevation:4, shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.04, shadowRadius:10, zIndex:10, borderWidth: 1 },
+  topBar:       { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:18 },
+  walletInfoRow:{ flexDirection:'row', alignItems:'center', gap:10 },
+  walletIconWrapper: { width:40, height:40, borderRadius:12, justifyContent:'center', alignItems:'center', borderWidth: 1 },
+  walletIconEmoji:   { fontSize:22 },
+  walletNameRow:{ flexDirection:'row', alignItems:'center', gap:4 },
+  walletName:   { fontSize:18, fontWeight:'800' },
   inlineCopyBtn:{ padding:4 },
-  accountsCount:{ fontSize:12, fontWeight:'500', marginTop:2 },
-  dotsButton:   { width:48, height:48, borderRadius:14, justifyContent:'center', alignItems:'center', shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.1, shadowRadius:4, elevation:3 },
-  balanceSection:{ alignItems:'center', marginBottom:28 },
-  balanceLabel: { fontSize:14, fontWeight:'500', marginBottom:8 },
-  balanceAmount:{ fontSize:42, fontWeight:'800', letterSpacing:-1 },
-  loadingBalance:{ height:50, justifyContent:'center' },
-  actionsGrid:  { flexDirection:'row', justifyContent:'space-around', marginBottom:16 },
-  actionBtn:    { alignItems:'center', gap:8 },
-  actionCircle: { width:56, height:56, borderRadius:20, justifyContent:'center', alignItems:'center', shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.1, shadowRadius:8, elevation:4 },
+  accountsCount:{ fontSize:11, fontWeight:'500', marginTop:2 },
+  dotsButton:   { width:40, height:40, borderRadius:12, justifyContent:'center', alignItems:'center', borderWidth: 1 },
+  balanceSection:{ alignItems:'center', marginBottom:20 },
+  balanceLabel: { fontSize:13, fontWeight:'500', marginBottom:6 },
+  balanceAmount:{ fontSize:36, fontWeight:'800', letterSpacing:-0.5 },
+  loadingBalance:{ height:40, justifyContent:'center' },
+  actionsGrid:  { flexDirection:'row', justifyContent:'space-around', width: '100%', paddingHorizontal: 4 },
+  actionBtn:    { alignItems:'center', gap:6, flex: 1 },
+  actionCircle: { width:46, height:46, borderRadius:15, justifyContent:'center', alignItems:'center' },
   actionLabel:  { fontSize:12, fontWeight:'600' },
-  assetsSection:{ flex:1, paddingHorizontal:20, paddingTop:24 },
-  assetsHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
-  sectionTitle: { fontSize:18, fontWeight:'700' },
+  
+  assetsSection:{ flex:1, paddingHorizontal:20, paddingTop:16 },
+  assetsHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12 },
+  sectionTitle: { fontSize:16, fontWeight:'800' },
   refreshBtn:   { width:36, height:36, borderRadius:12, justifyContent:'center', alignItems:'center' },
-  assetItemWrapper:{ marginBottom:12 },
-  assetItem:    { flexDirection:'row', alignItems:'center', padding:16, borderRadius:18, shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.05, shadowRadius:8, elevation:3 },
-  assetLeft:    { flexDirection:'row', alignItems:'center', flex:1, gap:14 },
-  assetIconContainer:{ position:'relative', width:48, height:48, borderRadius:14, justifyContent:'center', alignItems:'center' },
-  assetIcon:    { width:32, height:32, borderRadius:16 },
-  badgeDot:     { position:'absolute', bottom:0, right:0, width:12, height:12, borderRadius:6, borderWidth:2 },
-  assetInfo:    { flex:1 },
-  assetSymbol:  { fontSize:16, fontWeight:'700' },
-  assetName:    { fontSize:12, marginTop:2 },
-  assetRight:   { alignItems:'flex-end', marginLeft:8 },
-  assetBalance: { fontSize:16, fontWeight:'700' },
-  assetValue:   { fontSize:12, marginTop:2 },
-  assetChevron: { marginLeft:8 },
-  leftAction:   { justifyContent:'center', marginBottom:12 },
-  rightAction:  { justifyContent:'center', marginBottom:12 },
-  swipeActionBtn:{ width:80, height:'100%', justifyContent:'center', alignItems:'center', borderRadius:18 },
-  swipeActionLabel:{ color:'#FFF', fontSize:12, fontWeight:'600', marginTop:4 },
-  emptyContainer:{ alignItems:'center', paddingVertical:60, gap:12 },
-  emptyText:    { fontSize:14, marginTop:8 },
-  menuOverlay:  { flex:1, backgroundColor:'rgba(0,0,0,0.3)', justifyContent:'flex-start', alignItems:'flex-end', paddingTop:Platform.OS==='ios'?110:90, paddingRight:20 },
-  menuCard:     { width:220, borderRadius:16, overflow:'hidden', shadowColor:'#000', shadowOffset:{width:0,height:8}, shadowOpacity:0.15, shadowRadius:16, elevation:10 },
-  menuItem:     { flexDirection:'row', alignItems:'center', padding:14, borderBottomWidth:1, gap:12 },
-  menuItemIcon: { width:36, height:36, borderRadius:10, justifyContent:'center', alignItems:'center' },
-  menuItemText: { flex:1, fontSize:15, fontWeight:'600' },
-  emojiPickerContent:{ borderTopLeftRadius:28, borderTopRightRadius:28, padding:24, paddingTop:12, maxHeight:height*0.6 },
-  emojiPickerHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
-  emojiGrid:    { paddingBottom:20 },
+  listContainer:{ borderRadius:18, borderWidth:1, overflow:'hidden', paddingVertical:4 },
+  assetItemWrapper:{},
+  assetItem:    { flexDirection:'row', alignItems:'center', padding:12, borderBottomWidth:1 },
+  assetLeft:    { flexDirection:'row', alignItems:'center', flex:1, gap:10 },
+  assetIcon:   { width:36, height:36, borderRadius:18, justifyContent:'center', alignItems:'center' },
+  tokenIconImg: { width:36, height:36, borderRadius:18 },
+  tokenIconTxt: { fontSize:14, fontWeight:'bold' },
+  assetInfo:   { flex:1 },
+  assetSym:    { fontSize:14, fontWeight:'700' },
+  assetAmt:    { fontSize:11, marginTop:2 },
+  assetRight:  { alignItems:'flex-end' },
+  assetUSD:    { fontSize:14, fontWeight:'700' },
+  pnlRow:      { flexDirection:'row', alignItems:'center', gap:2, marginTop:2 },
+  pnlText:     { fontSize:11, fontWeight:'600' },
+  pnlUSD:      { fontSize:10 },
+  badgeDot:     { position:'absolute', bottom:0, right:0, width:10, height:10, borderRadius:5, borderWidth:2 },
+  leftAction:   { justifyContent:'center' },
+  rightAction:  { justifyContent:'center' },
+  swipeActionBtn:{ width:80, height:'100%', justifyContent:'center', alignItems:'center' },
+  swipeActionLabel:{ color:'#FFF', fontSize:11, fontWeight:'600', marginTop:4 },
+  emptyContainer:{ alignItems:'center', paddingVertical:50, gap:8 },
+  emptyText:    { fontSize:13, marginTop:4 },
+  
+  menuOverlay:  { flex:1, backgroundColor:'rgba(0,0,0,0.2)', justifyContent:'flex-start', alignItems:'flex-end', paddingTop:Platform.OS==='ios'?100:80, paddingRight:20 },
+  menuCard:     { width:210, borderRadius:16, overflow:'hidden', elevation:10, shadowOffset:{width:0,height:4}, shadowOpacity:0.1, shadowRadius:10 },
+  menuItem:     { flexDirection:'row', alignItems:'center', padding:12, borderBottomWidth:1, gap:10 },
+  menuItemIcon: { width:34, height:34, borderRadius:10, justifyContent:'center', alignItems:'center' },
+  menuItemText: { flex:1, fontSize:14, fontWeight:'600' },
+  emojiPickerContent:{ borderTopLeftRadius:24, borderTopRightRadius:24, padding:20, paddingTop:12, maxHeight:height*0.55 },
+  emojiPickerHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12 },
+  emojiGrid:    { paddingBottom:16 },
   emojiItem:    { flex:1, aspectRatio:1, justifyContent:'center', alignItems:'center', margin:4 },
-  emojiText:    { fontSize:28 },
-  removeEmojiBtn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, paddingVertical:10, borderRadius:12, borderWidth:1, marginBottom:16 },
-  removeEmojiText:{ fontSize:14, fontWeight:'600' },
+  emojiText:    { fontSize:26 },
+  removeEmojiBtn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:6, paddingVertical:8, borderRadius:10, borderWidth:1, marginBottom:12 },
+  removeEmojiText:{ fontSize:13, fontWeight:'600' },
   modalOverlay: { flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'center', alignItems:'center', padding:20 },
   modalOverlayBottom:{ flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end', padding:20 },
-  modalContent: { width:'100%', padding:28, borderRadius:24, alignItems:'center' },
-  modalHeader:  { marginBottom:16 },
-  modalTitle:   { fontSize:20, fontWeight:'bold', marginBottom:20, textAlign:'center' },
-  input:        { width:'100%', borderWidth:1.5, borderRadius:14, padding:16, fontSize:16, marginBottom:20, textAlign:'center' },
-  modalButtons: { flexDirection:'row', gap:12, width:'100%' },
-  modalBtn:     { flex:1, padding:16, borderRadius:14, alignItems:'center', borderWidth:1.5 },
-  modalBtnPrimary:{ flex:1, padding:16, borderRadius:14, alignItems:'center' },
-  accountsModalContent:{ width:'100%', maxHeight:height*0.85, padding:24, paddingTop:12, borderTopLeftRadius:28, borderTopRightRadius:28, flex:1 },
-  modalHandle:  { width:40, height:5, backgroundColor:'#E5E5EA', borderRadius:3, alignSelf:'center', marginBottom:16 },
-  accountsModalHeader:{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8 },
-  accountsHeaderLeft: { flexDirection:'row', alignItems:'center', gap:10 },
-  closeBtn:     { width:36, height:36, borderRadius:12, justifyContent:'center', alignItems:'center' },
-  accountItem:  { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingVertical:16, paddingHorizontal:16, borderRadius:16 },
+  modalContent: { width:'100%', padding:20, borderRadius:20, alignItems:'center' },
+  modalHeader:  { marginBottom:12 },
+  modalTitle:   { fontSize:18, fontWeight:'bold', marginBottom:16, textAlign:'center' },
+  input:        { width:'100%', borderWidth:1.5, borderRadius:12, padding:12, fontSize:15, marginBottom:16, textAlign:'center', height:46 },
+  modalButtons: { flexDirection:'row', gap:10, width:'100%' },
+  modalBtn:     { flex:1, padding:14, borderRadius:12, alignItems:'center', borderWidth:1.5 },
+  modalBtnPrimary:{ flex:1, padding:14, borderRadius:12, alignItems:'center' },
+  accountsModalContent:{ width:'100%', maxHeight:height*0.8, padding:20, paddingTop:12, borderTopLeftRadius:24, borderTopRightRadius:24, flex:1 },
+  modalHandle:  { width:36, height:4, borderRadius:2, alignSelf:'center', marginBottom:16 },
+  accountsModalHeader:{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:6 },
+  accountsHeaderLeft: { flexDirection:'row', alignItems:'center', gap:8 },
+  closeBtn:     { width:36, height:36, borderRadius:10, justifyContent:'center', alignItems:'center' },
+  accountItem:  { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingVertical:12, paddingHorizontal:12, borderRadius:14 },
   accountActionContainer:{ flexDirection:'row', height:'100%' },
   accountActionBtn:{ justifyContent:'center', alignItems:'center', width:80, height:'100%' },
-  accountInfo:  { flexDirection:'row', alignItems:'center', flex:1, gap:14 },
-  accountAvatar:{ width:48, height:48, borderRadius:14, justifyContent:'center', alignItems:'center' },
-  accountAvatarEmoji:{ fontSize:26 },
-  accountAvatarText: { fontSize:20, fontWeight:'800' },
-  accountName:  { fontSize:16, fontWeight:'600', marginBottom:2 },
-  accountAddress:{ fontSize:12 },
+  accountInfo:  { flexDirection:'row', alignItems:'center', flex:1, gap:10 },
+  accountAvatar:{ width:40, height:40, borderRadius:12, justifyContent:'center', alignItems:'center' },
+  accountAvatarEmoji:{ fontSize:22 },
+  accountAvatarText: { fontSize:18, fontWeight:'800' },
+  accountName:  { fontSize:14, fontWeight:'600', marginBottom:2 },
+  accountAddress:{ fontSize:11 },
   accountBalanceContainer:{ flexDirection:'row', alignItems:'center' },
-  accountBalance:{ fontSize:16, fontWeight:'600' },
-  addAccountButtons:{ gap:8, marginTop:16, paddingTop:16, borderTopWidth:1, borderTopColor:'rgba(128,128,128,0.2)' },
-  addAccountBtn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', paddingVertical:16, borderWidth:1.5, borderRadius:16, gap:10, marginBottom:4 },
-  addAccountText:{ fontSize:16, fontWeight:'600' },
+  accountBalance:{ fontSize:14, fontWeight:'600' },
+  addAccountButtons:{ gap:6, marginTop:12, paddingTop:12, borderTopWidth:1, borderTopColor:'rgba(128,128,128,0.15)' },
+  addAccountBtn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', paddingVertical:14, borderWidth:1.5, borderRadius:14, gap:8, marginBottom:2 },
+  addAccountText:{ fontSize:14, fontWeight:'600' },
   actionText:   { color:'#FFF', fontSize:11, fontWeight:'600', marginTop:4 },
 });
