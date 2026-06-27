@@ -10,6 +10,7 @@ import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { G, Path, Circle } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ استيراد للتحكم بالهوامش الآمنة
 import { getSolBalance, getTokenAccounts } from '../services/heliusService';
 import { getJupiterMarketData, CORE_TOKENS, getCustomTokens } from '../services/jupiterMarketService';
 
@@ -26,7 +27,7 @@ const ASSET_COLORS = [
   '#06B6D4','#A855F7','#64748B','#0EA5E9','#22C55E',
 ];
 
-// ── Pie Chart المطور بالفواصل المتناسقة مع الثيم ──────────────────────────────
+// ── Pie Chart ─────────────────────────────────────────────────────────────────
 function PieChart({ slices, total, isDark }) {
   const bgStroke = isDark ? '#07070F' : '#F4F5F9';
 
@@ -34,7 +35,7 @@ function PieChart({ slices, total, isDark }) {
     <View style={[S.pieWrap, { width:PIE_SIZE, height:PIE_SIZE }]}>
       <Svg width={PIE_SIZE} height={PIE_SIZE}>
         <Circle cx={PIE_CX} cy={PIE_CY} r={PIE_R} fill="rgba(128,128,128,0.1)" />
-        <Circle cx={PIE_CX} cy={PIE_CY} r={46} fill="transparent" />
+        <Circle cx={PIE_CX} cy={PIE_CY} r={48} fill="transparent" />
       </Svg>
     </View>
   );
@@ -75,6 +76,7 @@ export default function PortfolioScreen() {
   const primaryColor = useAppStore(s => s.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
   const walletPublicKey = useAppStore(s => s.walletPublicKey);
+  const insets       = useSafeAreaInsets(); // جلب مسافات الأمان
 
   const C = {
     bg:      isDark ? '#07070F' : '#F4F5F9',
@@ -181,10 +183,10 @@ export default function PortfolioScreen() {
   };
 
   return (
-    <SafeAreaView style={[S.root, { backgroundColor: C.bg }]}>
+    <SafeAreaView style={[S.root, { backgroundColor: C.bg, paddingTop: Platform.OS === 'ios' ? 0 : insets.top }]}>
 
-      {/* شريط العنوان المطور */}
-       <View style={S.header}>
+      {/* شريط العنوان المطور والآمن من تداخل الـ Notch */}
+       <View style={[S.header, { borderBottomColor: C.border }]}>
             <TouchableOpacity style={[S.backBtn, { backgroundColor: C.card, borderColor: C.border, borderWidth: 1 }]} onPress={() => navigation.goBack()}>
                  <Ionicons name="arrow-back" size={18} color={C.text} />
             </TouchableOpacity>
@@ -201,10 +203,10 @@ export default function PortfolioScreen() {
         <Animated.ScrollView
           style={{ opacity: fadeAnim }}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={S.scroll}
+          contentContainerStyle={[S.scroll, { paddingBottom: insets.bottom + 100 }]} // حشوة سفلية آمنة تمنع الاختفاء
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryColor} colors={[primaryColor]} />}
         >
-          {/* ── إجمالي المحفظة المتناسق ── */}
+          {/* إجمالي المحفظة المتناسق */}
           <View style={[S.totalCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[S.totalLabel, { color: C.muted }]}>{t('total_balance')}</Text>
             <Text style={[S.totalAmount, { color: C.text }]}>{fmtUSD(totalUSD)}</Text>
@@ -216,7 +218,7 @@ export default function PortfolioScreen() {
             </View>
           </View>
 
-          {/* ── الرسم الدائري الأنيق ── */}
+          {/* الرسم الدائري الأنيق */}
           {pieSlices.length > 0 && (
             <View style={[S.pieCard, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[S.sectionTitle, { color: C.text }]}>{t('asset_distribution', 'توزيع الأصول')}</Text>
@@ -257,7 +259,7 @@ export default function PortfolioScreen() {
             </View>
           )}
 
-          {/* ── قائمة الأصول (تصميم مسطح موحد كالمحترفين) ── */}
+          {/* قائمة الأصول */}
           <View style={[S.assetsCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[S.sectionTitle, { color: C.text }]}>{t('wallet_your_assets')}</Text>
             {assets.map((asset, i) => {
@@ -270,7 +272,6 @@ export default function PortfolioScreen() {
                   onPress={() => navigation.navigate('TokenDetails', { token: asset })}
                   activeOpacity={0.7}
                 >
-                  {/* أيقونة الأصل */}
                   <View style={[S.assetIcon, { backgroundColor: isDark ? '#171730' : '#ECECF4' }]}>
                     {asset.image
                       ? <Image source={{ uri: asset.image }} style={{ width:32, height:32, borderRadius:16 }} />
@@ -278,13 +279,11 @@ export default function PortfolioScreen() {
                     }
                   </View>
 
-                  {/* تفاصيل الرصيد */}
                   <View style={S.assetInfo}>
                     <Text style={[S.assetSym, { color: C.text }]}>{asset.symbol}</Text>
                     <Text style={[S.assetAmt, { color: C.muted }]}>{fmtAmt(asset.amount, asset.symbol)}</Text>
                   </View>
 
-                  {/* القيمة المالية و P&L */}
                   <View style={S.assetRight}>
                     <Text style={[S.assetUSD, { color: C.text }]}>{fmtUSD(asset.valueUSD)}</Text>
                     <View style={S.pnlRow}>
@@ -311,7 +310,7 @@ export default function PortfolioScreen() {
             )}
           </View>
 
-          {/* ── ملخص الأداء المطور والمقسم برقة ── */}
+          {/* ── ملخص الأرباح والخسائر المطور (مربعين فوق مربعين متناسق 100%) ── */}
           {totalUSD > 0 && (
             <View style={[S.pnlCard, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[S.sectionTitle, { color: C.text }]}>{t('pnl_summary', 'ملخص الأرباح والخسائر')}</Text>
@@ -342,7 +341,6 @@ export default function PortfolioScreen() {
             </View>
           )}
 
-          <View style={{ height: 40 }} />
         </Animated.ScrollView>
       )}
     </SafeAreaView>
@@ -351,7 +349,7 @@ export default function PortfolioScreen() {
 
 const S = StyleSheet.create({
   root:        { flex:1 },
-  header:      { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal:20, paddingVertical:14 },
+  header:      { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal:20, paddingVertical:14, borderBottomWidth: 1 },
   headerTitle: { fontSize:28, fontWeight:'800', letterSpacing:-0.5 },
   backBtn:     { width:40, height:40, borderRadius:12, justifyContent:'center', alignItems:'center', borderWidth: 1 },
   loadCenter:  { flex:1, justifyContent:'center', alignItems:'center' },
@@ -391,6 +389,7 @@ const S = StyleSheet.create({
   empty:       { alignItems:'center', paddingVertical:30, gap:8 },
   emptyText:   { fontSize:14 },
   
+  // ضبط شبكة الأداء (2×2 Grid) لتبدو كمربعات متساوية الارتفاع والعرض والمسافات
   pnlCard:     { borderRadius:18, padding:16, marginBottom:12, borderWidth:1, elevation:1, shadowOffset:{width:0,height:2}, shadowOpacity:0.02, shadowRadius:4 },
   pnlGrid:     { flexDirection:'row', flexWrap:'wrap', gap:8 },
   pnlItem:     { width:(width-40-32-8)/2, padding:12, borderRadius:14, borderWidth: 1 },
