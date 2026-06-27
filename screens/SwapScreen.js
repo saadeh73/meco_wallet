@@ -1,25 +1,26 @@
+// screens/SwapScreen.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   SafeAreaView, ScrollView, Alert, ActivityIndicator,
-  Modal, FlatList, Image, Linking, Animated, Dimensions, Platform
+  Modal, FlatList, Image, Linking, Animated, Dimensions, Platform, Keyboard
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ استيراد للهوامش الآمنة
 import * as Clipboard from 'expo-clipboard';
 import * as SwapAPI from '../services/swapService';
 import NetInfo from '@react-native-community/netinfo';
 import { CORE_TOKENS } from '../services/jupiterMarketService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
 
-const { height } = Dimensions.get('window');
+const { height, width } = Dimensions.get('window');
 
 // ── ثوابت ──────────────────────────────────────────────────────────────────
 const SOL_FEE_RESERVE = 0.001; // الحد الأدنى لرسوم الشبكة
 
-// نوع الخطأ — بدلاً من مقارنة النص المترجم
 const ERROR_TYPE = {
   NETWORK: 'network',
   ROUTE:   'route',
@@ -27,16 +28,18 @@ const ERROR_TYPE = {
   NONE:    null,
 };
 
-export default function SwapScreen({ route }) {
+export default function SwapScreen() {
   const navigation   = useNavigation();
+  const route        = useRoute();
   const { t }        = useTranslation();
   const theme        = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
+  const insets       = useSafeAreaInsets(); // مسافات الأمان للهاتف
 
   // ── Animations ────────────────────────────────────────────────────────────
   const fadeAnim       = useRef(new Animated.Value(0)).current;
-  const slideAnim      = useRef(new Animated.Value(30)).current;
+  const slideAnim      = useRef(new Animated.Value(20)).current;
   const swapRotateAnim = useRef(new Animated.Value(0)).current;
 
   // ── Active account ────────────────────────────────────────────────────────
@@ -61,22 +64,23 @@ export default function SwapScreen({ route }) {
   const [loading,          setLoading]          = useState(false);
   const [quoteLoading,     setQuoteLoading]     = useState(false);
   const [balances,         setBalances]         = useState({});
-  const [balancesCached,   setBalancesCached]   = useState(false); // ✅ cache بسيط
+  const [balancesCached,   setBalancesCached]   = useState(false);
   const [fromModalVisible, setFromModalVisible] = useState(false);
   const [toModalVisible,   setToModalVisible]   = useState(false);
   const [errorMsg,         setErrorMsg]         = useState('');
-  const [errorType,        setErrorType]        = useState(ERROR_TYPE.NONE); // ✅ flag منفصل
+  const [errorType,        setErrorType]        = useState(ERROR_TYPE.NONE);
   const [isOffline,        setIsOffline]        = useState(false);
 
   // ── Colours ───────────────────────────────────────────────────────────────
   const colors = {
-    background:    isDark ? '#0A0A0F' : '#F2F3F7',
-    card:          isDark ? '#1A1A2E' : '#FFFFFF',
-    text:          isDark ? '#FFFFFF' : '#1A1A2E',
-    textSecondary: isDark ? '#A0A0B0' : '#8E8E93',
-    border:        isDark ? '#2A2A3E' : '#E5E5EA',
-    success:       '#4CAF50',
-    error:         '#FF3B30',
+    background:    isDark ? '#07070F' : '#F4F5F9',
+    card:          isDark ? '#111122' : '#FFFFFF',
+    card2:         isDark ? '#171730' : '#ECECF4',
+    text:          isDark ? '#EEEEFF' : '#1C1C24',
+    textSecondary: isDark ? '#7E7EAA' : '#8A8A9E',
+    border:        isDark ? '#1E1E38' : '#E8E8F2',
+    success:       '#10B981',
+    error:         '#EF4444',
     warning:       '#F59E0B',
   };
 
@@ -127,7 +131,7 @@ export default function SwapScreen({ route }) {
       }
 
       setBalances(newBalances);
-      setBalancesCached(true); // ✅ لا تُعاد الاستدعاء عند كل focus
+      setBalancesCached(true);
     } catch (err) {
       console.error('Error loading balances:', err);
     }
@@ -146,7 +150,7 @@ export default function SwapScreen({ route }) {
     const netState = await NetInfo.fetch();
     if (!netState.isConnected) {
       setErrorMsg(t('network_error'));
-      setErrorType(ERROR_TYPE.NETWORK); // ✅ flag واضح
+      setErrorType(ERROR_TYPE.NETWORK);
       setToAmount('');
       setRate(null);
       return;
@@ -167,7 +171,6 @@ export default function SwapScreen({ route }) {
       setPriceImpact(result.priceImpact);
     } catch (err) {
       const msg = err.message || '';
-      // ✅ تحديد نوع الخطأ من رسالة الـ API وليس من النص المترجم
       if (msg.includes('Network') || msg.includes('Timeout') || msg.includes('fetch')) {
         setErrorMsg(t('network_error'));
         setErrorType(ERROR_TYPE.NETWORK);
@@ -185,7 +188,6 @@ export default function SwapScreen({ route }) {
     }
   };
 
-  // debounce 600ms
   useEffect(() => {
     const timer = setTimeout(fetchSwapRate, 600);
     return () => clearTimeout(timer);
@@ -198,7 +200,6 @@ export default function SwapScreen({ route }) {
       return;
     }
 
-    // ✅ التحقق من toAmount قبل عرض الـ Alert
     if (!toAmount || parseFloat(toAmount) <= 0) {
       Alert.alert(t('error'), t('swap_error'));
       return;
@@ -230,7 +231,6 @@ export default function SwapScreen({ route }) {
             setErrorMsg('');
             setErrorType(ERROR_TYPE.NONE);
             try {
-              // ✅ getState() صحيح هنا — ليس hook
               const privateKey = useAppStore.getState().walletPrivateKey;
               const result = await SwapAPI.executeSwap(
                 fromToken.symbol,
@@ -251,7 +251,7 @@ export default function SwapScreen({ route }) {
                     {
                       text: t('ok'),
                       onPress: () => {
-                        setBalancesCached(false); // ✅ تحديث الأرصدة بعد swap ناجح
+                        setBalancesCached(false);
                         loadBalances();
                         setFromAmount('');
                         setToAmount('');
@@ -275,7 +275,6 @@ export default function SwapScreen({ route }) {
     );
   };
 
-  // ── Swap tokens ───────────────────────────────────────────────────────────
   const swapTokens = () => {
     if (fromToken.mint === toToken.mint) {
       Alert.alert(t('error'), t('swap_same_token'));
@@ -298,42 +297,38 @@ export default function SwapScreen({ route }) {
     setErrorType(ERROR_TYPE.NONE);
   };
 
-  // ── Max balance ───────────────────────────────────────────────────────────
   const useMaxBalance = () => {
     let balance = balances[fromToken.symbol] || 0;
-    // ✅ طرح رسوم الشبكة إذا كانت العملة SOL
     if (fromToken.symbol === 'SOL') {
       balance = Math.max(0, balance - SOL_FEE_RESERVE);
     }
     if (balance > 0) setFromAmount(balance.toString());
   };
 
-  // ── Copy address ──────────────────────────────────────────────────────────
   const copyMintAddress = async (address) => {
     if (!address) return;
     await Clipboard.setStringAsync(address);
     Alert.alert(t('success'), t('copied_to_clipboard'));
   };
 
-  // ── Rotate interpolation ──────────────────────────────────────────────────
   const rotateInterpolate = swapRotateAnim.interpolate({
     inputRange:  [0, 1],
     outputRange: ['0deg', '180deg'],
   });
 
-  // ── Token selector modal ──────────────────────────────────────────────────
+  // منتقي العملات الأنيق كـ Bottom Sheet سفلية فاخرة
   const renderTokenModal = (visible, onClose, onSelect, selectedToken) => (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+        <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+          <View style={styles.modalHandle} />
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>{t('select_token')}</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close-circle" size={28} color={colors.textSecondary} />
+            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.background }]}>
+              <Ionicons name="close" size={18} color={colors.text} />
             </TouchableOpacity>
           </View>
           <FlatList
-            // ✅ إصلاح تعارض اسم t — تغيير parameter إلى tk
             data={CORE_TOKENS.filter(tk => tk.swapAvailable)}
             keyExtractor={item => item.symbol}
             renderItem={({ item }) => (
@@ -341,7 +336,7 @@ export default function SwapScreen({ route }) {
                 style={[styles.tokenItem, { borderBottomColor: colors.border }]}
                 onPress={() => { onSelect(item); onClose(); }}
               >
-                <View style={[styles.tokenIconWrapper, { backgroundColor: primaryColor + '15' }]}>
+                <View style={[styles.tokenIconWrapper, { backgroundColor: isDark ? '#171730' : '#ECECF4' }]}>
                   <Image source={{ uri: item.image }} style={styles.tokenIcon} />
                 </View>
                 <View style={styles.tokenInfo}>
@@ -353,7 +348,7 @@ export default function SwapScreen({ route }) {
                     {balances[item.symbol]?.toFixed(4) || '0.0000'}
                   </Text>
                   {item.symbol === selectedToken.symbol && (
-                    <Ionicons name="checkmark-circle" size={22} color={primaryColor} />
+                    <Ionicons name="checkmark-circle" size={18} color={primaryColor} />
                   )}
                 </View>
               </TouchableOpacity>
@@ -364,154 +359,148 @@ export default function SwapScreen({ route }) {
     </Modal>
   );
 
-  // ── Error card ────────────────────────────────────────────────────────────
   const renderError = () => {
     if (!errorMsg) return null;
-    // ✅ استخدام errorType flag بدلاً من مقارنة النص المترجم
     const isNetworkErr = errorType === ERROR_TYPE.NETWORK;
     return (
-      <View style={[styles.errorCard, { backgroundColor: colors.error + '15' }]}>
-        <Ionicons name="warning" size={20} color={colors.error} />
-        <Text style={[styles.errorText, { color: colors.error }]}>{errorMsg}</Text>
+      <View style={[styles.errCard, { backgroundColor: colors.error + '12', borderColor: colors.error + '30' }]}>
+        <Ionicons name={isNetworkErr ? 'cloud-offline-outline' : 'warning-outline'} size={16} color={colors.error} />
+        <Text style={[styles.errTxt, { color: colors.error }]}>{errorMsg}</Text>
         {isNetworkErr && (
-          <TouchableOpacity onPress={fetchSwapRate} style={styles.retryButton}>
-            <Ionicons name="refresh" size={20} color={colors.error} />
+          <TouchableOpacity onPress={fetchSwapRate} style={[styles.retryBtn, { backgroundColor: colors.error + '20' }]}>
+            <Text style={{ color: colors.error, fontSize: 11, fontWeight: '700' }}>{t('browser_reload') || 'تحديث'}</Text>
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? 0 : insets.top }]}>
       <Animated.View style={[styles.mainContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
-          {/* Header */}
-          <View style={styles.headerSection}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={colors.text} />
-            </TouchableOpacity>
-            <View style={styles.headerTitle}>
-              <Text style={[styles.title,    { color: colors.text }]}>{t('swap_title')}</Text>
-              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
-            </View>
+        
+        {/* شريط الرأس المطور المانع للتداخل */}
+        <View style={styles.headerSection}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+            <Ionicons name="arrow-back" size={18} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerTitle}>
+            <Text style={[styles.title,    { color: colors.text }]}>{t('swap_title')}</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('swap_subtitle')}</Text>
           </View>
+        </View>
 
-          {/* Active Account Card */}
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 80 }]} showsVerticalScrollIndicator={false}>
+
+          {/* معلومات الحساب النشط المدمجة كسطر هادئ تحت الهيدر */}
           {activeAccount && (
-            <Animated.View style={[styles.accountCard, { backgroundColor: colors.card, opacity: fadeAnim }]}>
-              <View style={[styles.accountIconWrapper, { backgroundColor: primaryColor + '20' }]}>
-                <Ionicons name="wallet" size={20} color={primaryColor} />
+            <View style={[styles.accountBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.accountIconWrapper, { backgroundColor: primaryColor + '12' }]}>
+                <Ionicons name="wallet-outline" size={16} color={primaryColor} />
               </View>
-              <View style={styles.accountInfo}>
-                <Text style={[styles.accountName,    { color: colors.text }]}>{activeAccount.name}</Text>
-                <Text style={[styles.accountAddress, { color: primaryColor }]}>
+              <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={[styles.accountName, { color: colors.text }]}>{activeAccount.name}</Text>
+                <Text style={[styles.accountAddress, { color: colors.textSecondary }]}>
                   {activeAccount.publicKey.slice(0, 6)}...{activeAccount.publicKey.slice(-4)}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => copyMintAddress(activeAccount.publicKey)} style={styles.copyBtn}>
-                <Ionicons name="copy-outline" size={18} color={primaryColor} />
-              </TouchableOpacity>
-            </Animated.View>
+            </View>
           )}
 
-          {/* Offline Banner */}
           {isOffline && (
-            <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '20' }]}>
-              <Ionicons name="cloud-offline" size={18} color={colors.warning} />
+            <View style={[styles.offlineBanner, { backgroundColor: colors.warning + '12', borderColor: colors.warning + '30' }]}>
+              <Ionicons name="cloud-offline" size={16} color={colors.warning} />
               <Text style={[styles.offlineText, { color: colors.warning }]}>{t('offline_mode')}</Text>
             </View>
           )}
 
-          {/* From Card */}
-          <View style={[styles.tokenCard, { backgroundColor: colors.card }]}>
-            <View style={styles.cardTopRow}>
-              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{t('swap_from')}</Text>
-              <TouchableOpacity onPress={useMaxBalance} style={[styles.maxButton, { backgroundColor: primaryColor + '15' }]}>
-                <Text style={[styles.maxButtonText, { color: primaryColor }]}>{t('swap_max')}</Text>
-              </TouchableOpacity>
+          {/* ── كبسولة التبادل المسطحة الموحدة (Phantom/Solflare Style) ── */}
+          <View style={[styles.unifiedSwapContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            
+            {/* جهة الإرسال (From) */}
+            <View style={styles.swapInputRow}>
+              <View style={styles.swapInputLeft}>
+                <Text style={[styles.rowLabel, { color: colors.textSecondary }]}>{t('swap_from')}</Text>
+                <TextInput
+                  style={[styles.amountInput, { color: colors.text, paddingVertical: 0 }]}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                  value={fromAmount}
+                  onChangeText={setFromAmount}
+                  autoCorrect={false}
+                />
+                <Text style={[styles.balanceHint, { color: colors.textSecondary }]}>
+                  {t('swap_balance')}: {balances[fromToken.symbol]?.toFixed(4) || '0.0000'}
+                </Text>
+              </View>
+              <View style={styles.swapInputRight}>
+                <TouchableOpacity onPress={useMaxBalance} style={[styles.maxBtn, { backgroundColor: primaryColor + '12' }]}>
+                  <Text style={{ color: primaryColor, fontWeight: '700', fontSize: 11 }}>{t('swap_max')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tokenSelectorPill, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setFromModalVisible(true)}
+                >
+                  <Image source={{ uri: fromToken.image }} style={styles.tokenImage} />
+                  <Text style={[styles.tokenSelectorTxt, { color: colors.text }]}>{fromToken.symbol}</Text>
+                  <Ionicons name="chevron-down" size={13} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.tokenRow}>
-              <TextInput
-                style={[styles.amountInput, { color: colors.text }]}
-                placeholder="0.00"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={fromAmount}
-                onChangeText={setFromAmount}
-              />
+            {/* الفاصل الذكي المتضمن زر التبديل التفاعلي بالمنتصف */}
+            <View style={[styles.swapDivider, { backgroundColor: colors.border }]}>
               <TouchableOpacity
-                style={[styles.tokenSelector, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
-                onPress={() => setFromModalVisible(true)}
+                onPress={swapTokens}
+                style={[styles.swapButtonCircle, { backgroundColor: colors.card, borderColor: colors.border }]}
+                activeOpacity={0.8}
               >
-                <Image source={{ uri: fromToken.image }} style={styles.tokenImage} />
-                <Text style={[styles.tokenSymbolTxt, { color: colors.text }]}>{fromToken.symbol}</Text>
-                <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+                <Animated.View style={{ transform: [{ rotate: rotateInterpolate }] }}>
+                  <Ionicons name="swap-vertical" size={18} color={primaryColor} />
+                </Animated.View>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.balanceRow}>
-              <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>{t('swap_balance')}:</Text>
-              <Text style={[styles.balanceValue, { color: colors.text }]}>
-                {balances[fromToken.symbol]?.toFixed(4) || '0.0000'} {fromToken.symbol}
-              </Text>
-            </View>
-          </View>
-
-          {/* Swap Direction Button */}
-          <View style={styles.swapButtonWrapper}>
-            <TouchableOpacity
-              onPress={swapTokens}
-              style={[styles.swapButton, { backgroundColor: colors.card }]}
-              activeOpacity={0.8}
-            >
-              <Animated.View style={{ transform: [{ rotate: rotateInterpolate }] }}>
-                <Ionicons name="swap-vertical" size={24} color={primaryColor} />
-              </Animated.View>
-            </TouchableOpacity>
-          </View>
-
-          {/* To Card */}
-          <View style={[styles.tokenCard, { backgroundColor: colors.card }]}>
-            <View style={styles.cardTopRow}>
-              <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>{t('swap_to')}</Text>
-              <TouchableOpacity onPress={() => copyMintAddress(toToken.mint)} style={styles.copySmallBtn}>
-                <Ionicons name="link" size={16} color={primaryColor} />
-              </TouchableOpacity>
+            {/* جهة الاستقبال (To) */}
+            <View style={styles.swapInputRow}>
+              <View style={styles.swapInputLeft}>
+                <Text style={[styles.rowLabel, { color: colors.textSecondary }]}>{t('swap_to')}</Text>
+                <Text style={[styles.amountOutput, { color: colors.text }]} numberOfLines={1}>
+                  {toAmount || '0.00'}
+                </Text>
+              </View>
+              <View style={styles.swapInputRight}>
+                <TouchableOpacity onPress={() => copyMintAddress(toToken.mint)} style={[styles.copyPill, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <Ionicons name="link" size={12} color={primaryColor} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tokenSelectorPill, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setToModalVisible(true)}
+                >
+                  <Image source={{ uri: toToken.image }} style={styles.tokenImage} />
+                  <Text style={[styles.tokenSelectorTxt, { color: colors.text }]}>{toToken.symbol}</Text>
+                  <Ionicons name="chevron-down" size={13} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.tokenRow}>
-              <Text style={[styles.amountOutput, { color: colors.text }]}>
-                {toAmount || '0.00'}
-              </Text>
-              <TouchableOpacity
-                style={[styles.tokenSelector, { backgroundColor: isDark ? '#2A2A3E' : '#F2F2F7' }]}
-                onPress={() => setToModalVisible(true)}
-              >
-                <Image source={{ uri: toToken.image }} style={styles.tokenImage} />
-                <Text style={[styles.tokenSymbolTxt, { color: colors.text }]}>{toToken.symbol}</Text>
-                <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
           </View>
 
-          {/* Quote Loading */}
+          {/* مؤشر التحميل المؤقت للأسعار */}
           {quoteLoading && (
-            <View style={[styles.loadingCard, { backgroundColor: colors.card }]}>
+            <View style={[styles.loadingCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
               <ActivityIndicator size="small" color={primaryColor} />
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>{t('swap_loading_quote')}</Text>
             </View>
           )}
 
-          {/* Rate Info */}
+          {/* تفاصيل وحسابات الصفقة المنسقة */}
           {rate && !quoteLoading && (
-            <Animated.View style={[styles.rateCard, { backgroundColor: colors.card }]}>
+            <Animated.View style={[styles.rateCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
               <View style={styles.rateRow}>
                 <View style={styles.rateLabelWrapper}>
-                  <Ionicons name="swap-horizontal" size={16} color={colors.textSecondary} />
+                  <Ionicons name="swap-horizontal" size={14} color={colors.textSecondary} />
                   <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('swap_rate')}</Text>
                 </View>
                 <Text style={[styles.rateValue, { color: colors.text }]}>
@@ -522,8 +511,7 @@ export default function SwapScreen({ route }) {
               {priceImpact > 0 && (
                 <View style={styles.rateRow}>
                   <View style={styles.rateLabelWrapper}>
-                    <Ionicons name="trending-down" size={16} color={colors.textSecondary} />
-                    {/* ✅ إزالة fallback الثابت — المفتاح موجود في i18n */}
+                    <Ionicons name="trending-down" size={14} color={colors.textSecondary} />
                     <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('price_impact')}</Text>
                   </View>
                   <Text style={[styles.rateValue, { color: priceImpact > 5 ? colors.error : colors.success }]}>
@@ -532,9 +520,9 @@ export default function SwapScreen({ route }) {
                 </View>
               )}
 
-              <View style={styles.rateRow}>
+              <View style={[styles.rateRow, { marginBottom: 0, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }]}>
                 <View style={styles.rateLabelWrapper}>
-                  <Ionicons name="arrow-down-circle" size={16} color={colors.textSecondary} />
+                  <Ionicons name="arrow-down-circle" size={14} color={colors.textSecondary} />
                   <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('swap_receive')}</Text>
                 </View>
                 <Text style={[styles.rateValueHighlight, { color: colors.success }]}>
@@ -544,10 +532,9 @@ export default function SwapScreen({ route }) {
             </Animated.View>
           )}
 
-          {/* Error */}
           {renderError()}
 
-          {/* Execute Button */}
+          {/* زر التأكيد المسطح بملء العرض */}
           <TouchableOpacity
             style={[
               styles.executeButton,
@@ -564,7 +551,7 @@ export default function SwapScreen({ route }) {
               <ActivityIndicator color="#FFF" />
             ) : (
               <>
-                <Ionicons name="swap-horizontal" size={22} color="#FFF" />
+                <Ionicons name="swap-horizontal" size={18} color="#FFF" />
                 <Text style={styles.executeButtonText}>
                   {isOffline ? t('offline_mode') : t('swap_confirm')}
                 </Text>
@@ -590,99 +577,82 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20, paddingBottom: 40 },
 
   // Header
-  headerSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  backButton:    { padding: 8, marginRight: 12 },
-  headerTitle:   { flex: 1 },
-  title:         { fontSize: 24, fontWeight: '800' },
+  headerSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingHorizontal: 4 },
+  backButton:    { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  headerTitle:   { flex: 1, alignItems: 'flex-start' },
+  title:         { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   subtitle:      { fontSize: 13, marginTop: 2 },
 
   // Account card
-  accountCard: {
+  accountBar: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: 16, padding: 14, marginBottom: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    borderRadius: 14, padding: 10, marginBottom: 16, borderWidth: 1, gap: 10
   },
-  accountIconWrapper: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  accountInfo:        { flex: 1 },
-  accountName:        { fontSize: 15, fontWeight: '600' },
-  accountAddress:     { fontSize: 12, fontWeight: '500', marginTop: 2 },
-  copyBtn:            { padding: 8 },
+  accountIconWrapper: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  accountName:        { fontSize: 14, fontWeight: '700' },
+  accountAddress:     { fontSize: 12, fontWeight: '500' },
+  copyBtn:            { padding: 6 },
 
   // Offline
-  offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginBottom: 16, gap: 8 },
-  offlineText:   { fontSize: 14, fontWeight: '600' },
+  offlineBanner: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, marginBottom: 16, gap: 8, borderWidth: 1 },
+  offlineText:   { fontSize: 12, fontWeight: '700' },
 
-  // Token card
-  tokenCard: {
-    borderRadius: 20, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 12, elevation: 3,
-  },
-  cardTopRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  cardLabel:     { fontSize: 14, fontWeight: '500' },
-  maxButton:     { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  maxButtonText: { fontSize: 13, fontWeight: '700' },
-  tokenRow:      { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  amountInput:   { flex: 1, fontSize: 28, fontWeight: '700', padding: 0 },
-  amountOutput:  { flex: 1, fontSize: 28, fontWeight: '700' },
-  tokenSelector: { flexDirection: 'row', alignItems: 'center', borderRadius: 30, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
-  tokenImage:    { width: 28, height: 28, borderRadius: 14 },
-  tokenSymbolTxt:{ fontSize: 16, fontWeight: '700' }, // ✅ اسم مختلف عن parameter
-  balanceRow:    { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 6 },
-  balanceLabel:  { fontSize: 12 },
-  balanceValue:  { fontSize: 12, fontWeight: '600' },
-  copySmallBtn:  { padding: 4 },
+  // Unified Swap Container (Phantom/Solflare Style)
+  unifiedSwapContainer: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  swapInputRow: { padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  swapInputLeft: { flex: 1, alignItems: 'flex-start' },
+  swapInputRight: { alignItems: 'flex-end', gap: 6 },
+  rowLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  amountInput: { fontSize: 26, fontWeight: '800', padding: 0, height: 36, width: '100%' },
+  amountOutput: { fontSize: 26, fontWeight: '800', height: 36, paddingVertical: 0 },
+  balanceHint: { fontSize: 11, marginTop: 6, fontWeight: '600' },
+  maxBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  tokenSelectorPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, gap: 6 },
+  tokenImage: { width: 22, height: 22, borderRadius: 11 },
+  tokenSelectorTxt: { fontSize: 13, fontWeight: '700' },
+  copyPill: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
 
-  // Swap direction button
-  swapButtonWrapper: { alignItems: 'center', marginVertical: -10, zIndex: 10 },
-  swapButton: {
-    width: 48, height: 48, borderRadius: 24,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
-  },
+  // Floating Swap Divider
+  swapDivider: { height: 1, position: 'relative', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  swapButtonCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, justifyContent: 'center', alignItems: 'center', position: 'absolute' },
 
   // Loading
-  loadingCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 16, marginTop: 16, gap: 10 },
-  loadingText: { fontSize: 14 },
+  loadingCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 16, marginTop: 14, gap: 8, borderWidth: 1 },
+  loadingText: { fontSize: 13, fontWeight: '600' },
 
   // Rate card
-  rateCard: {
-    borderRadius: 18, padding: 16, marginTop: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-  },
+  rateCard: { borderRadius: 16, padding: 14, marginTop: 14 },
   rateRow:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  rateLabelWrapper:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rateLabel:          { fontSize: 14 },
-  rateValue:          { fontSize: 14, fontWeight: '600' },
-  rateValueHighlight: { fontSize: 16, fontWeight: '800' },
+  rateLabelWrapper:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rateLabel:          { fontSize: 12, fontWeight: '600' },
+  rateValue:          { fontSize: 12, fontWeight: '700' },
+  rateValueHighlight: { fontSize: 14, fontWeight: '800' },
 
   // Error
-  errorCard:   { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, marginTop: 16, gap: 10 },
-  errorText:   { flex: 1, fontSize: 14, fontWeight: '500' },
+  errorCard:   { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, marginTop: 14, gap: 8, borderWidth: 1 },
+  errorText:   { flex: 1, fontSize: 12, fontWeight: '600' },
   retryButton: { padding: 4 },
 
   // Execute button
   executeButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 18, borderRadius: 18, marginTop: 20, gap: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
+    padding: 16, borderRadius: 16, marginTop: 16, gap: 8,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 4
   },
-  executeButtonText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  executeButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 
-  // Modal
+  // Modal (Bottom Sheet style)
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent:  { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, maxHeight: height * 0.7 },
-  modalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle:    { fontSize: 20, fontWeight: '800' },
-  tokenItem:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1 },
-  tokenIconWrapper:   { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  tokenIcon:          { width: 28, height: 28, borderRadius: 14 },
+  modalContent:  { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingTop: 12, maxHeight: height * 0.75 },
+  modalHandle:   { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16, backgroundColor: '#E5E5EA' },
+  modalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle:    { fontSize: 18, fontWeight: '800' },
+  tokenItem:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1 },
+  tokenIconWrapper:   { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  tokenIcon:          { width: 24, height: 24, borderRadius: 12 },
   tokenInfo:          { flex: 1 },
-  tokenName:          { fontSize: 12, marginTop: 2 },
-  tokenBalanceWrapper:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
-  tokenBalance:       { fontSize: 14, fontWeight: '600' },
+  tokenSymbolTxt:     { fontSize: 14, fontWeight: '700' },
+  tokenName:          { fontSize: 11, marginTop: 2 },
+  tokenBalanceWrapper:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tokenBalance:       { fontSize: 13, fontWeight: '700' },
 });
