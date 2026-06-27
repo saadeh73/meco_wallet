@@ -10,6 +10,7 @@ import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ استيراد لحساب الهوامش الآمنة
 import { getFullChartData } from '../services/priceChartService';
 import { getJupiterMarketData, CORE_TOKENS } from '../services/jupiterMarketService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
@@ -21,7 +22,7 @@ import {
 } from '../services/tradingService';
 
 const { width, height } = Dimensions.get('window');
-const CHART_H = Math.round(height * 0.36);
+const CHART_H = Math.round(height * 0.34);
 
 const TIMEFRAMES = [
   { label:'1D', days:1   },
@@ -37,25 +38,26 @@ const QUOTE_TOKENS = [
   { symbol:'SOL',  mint:'So11111111111111111111111111111111111111112',   decimals:9, image:'https://assets.coingecko.com/coins/images/4128/large/solana.png'  },
 ];
 
+// دمج لون كروت التداول الخلفي لتنسيق شمعات الرسم البياني بشكل مدمج
 const buildChartHtml = (isDark, accent) => `
 <!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:${isDark?'#0F0F1E':'#FFFFFF'}}#chart{width:100%;height:100vh}
-#tt{position:absolute;top:12px;left:12px;z-index:100;background:${isDark?'rgba(15,15,30,.92)':'rgba(255,255,255,.92)'};border:1px solid ${isDark?'#2A2A3E':'#E5E7EB'};border-radius:10px;padding:8px 12px;font-size:12px;color:${isDark?'#EEEEFF':'#0D0D1A'};display:none;font-family:-apple-system,sans-serif}
-#tt span{display:block;margin:1px 0}.l{color:${isDark?'#6060A0':'#9090A8'};font-size:11px}.v{font-weight:700;font-size:13px}.u{color:#10B981}.d{color:#EF4444}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:${isDark?'#111122':'#FFFFFF'}}#chart{width:100%;height:100vh}
+#tt{position:absolute;top:12px;left:12px;z-index:100;background:${isDark?'rgba(17,17,34,.94)':'rgba(255,255,255,.94)'};border:1px solid ${isDark?'#1E1E38':'#E8E8F2'};border-radius:10px;padding:8px 12px;font-size:12px;color:${isDark?'#EEEEFF':'#0D0D1A'};display:none;font-family:-apple-system,sans-serif}
+#tt span{display:block;margin:1px 0}.l{color:${isDark?'#7E7EAA':'#8A8A9E'};font-size:11px}.v{font-weight:700;font-size:13px}.u{color:#10B981}.d{color:#EF4444}</style>
 </head><body><div id="chart"></div>
 <div id="tt"><span class="l" id="tt_t"></span><span class="v" id="tt_o"></span><span class="v u" id="tt_h"></span><span class="v d" id="tt_l"></span><span class="v" id="tt_c"></span></div>
 <script>
 const chart=LightweightCharts.createChart(document.getElementById('chart'),{
   width:window.innerWidth,height:window.innerHeight,
-  layout:{background:{type:'solid',color:'${isDark?'#0F0F1E':'#FFFFFF'}'},textColor:'${isDark?'#8080A0':'#9090A8'}',fontSize:11},
-  grid:{vertLines:{color:'${isDark?'#1E1E38':'#F0F0F8'}'},horzLines:{color:'${isDark?'#1E1E38':'#F0F0F8'}'}},
+  layout:{background:{type:'solid',color:'${isDark?'#111122':'#FFFFFF'}'},textColor:'${isDark?'#7E7EAA':'#8A8A9E'}',fontSize:11},
+  grid:{vertLines:{color:'${isDark?'#1E1E38':'#F4F5F9'}'},horzLines:{color:'${isDark?'#1E1E38':'#F4F5F9'}'}},
   crosshair:{mode:LightweightCharts.CrosshairMode.Normal,
     vertLine:{color:'${accent}80',width:1,style:0,labelBackgroundColor:'${accent}'},
     horzLine:{color:'${accent}80',width:1,style:0,labelBackgroundColor:'${accent}'}},
-  rightPriceScale:{borderColor:'${isDark?'#1E1E38':'#F0F0F8'}'},
-  timeScale:{borderColor:'${isDark?'#1E1E38':'#F0F0F8'}',timeVisible:true,secondsVisible:false},
+  rightPriceScale:{borderColor:'${isDark?'#1E1E38':'#F4F5F9'}'},
+  timeScale:{borderColor:'${isDark?'#1E1E38':'#F4F5F9'}',timeVisible:true,secondsVisible:false},
   handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true},
   handleScale:{axisPressedMouseMove:true,mouseWheel:true,pinch:true},
 });
@@ -82,6 +84,30 @@ window.setChartData=function(cd,vd,dec){
 window.addEventListener('resize',()=>chart.resize(window.innerWidth,window.innerHeight));
 </script></body></html>`;
 
+// دالة التنسيق الاحترافي لعملات الميم والتخلص من كثرة الأصفار المشوهة
+const fmtPrice = (p) => {
+  if (p === undefined || p === null || p === 0) return '$0.00';
+  if (p >= 1) {
+    return `$${p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  if (p >= 0.001) {
+    return `$${p.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`;
+  }
+  
+  const pStr = p.toFixed(12);
+  const leadingZerosMatch = pStr.match(/^0\.(0+)/);
+  if (leadingZerosMatch) {
+    const zeroCount = leadingZerosMatch[1].length;
+    if (zeroCount >= 4) {
+      const subscripts = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
+      const subStr = zeroCount.toString().split('').map(d => subscripts[parseInt(d)]).join('');
+      const significantPart = pStr.slice(2 + zeroCount).slice(0, 4).replace(/0+$/, '');
+      return `$0.0${subStr}${significantPart}`;
+    }
+  }
+  return `$${p.toFixed(8).replace(/\.?0+$/, '')}`;
+};
+
 const SafeImage = ({ uri, size=32 }) => {
   const [err, setErr] = useState(false);
   if (err||!uri) return <View style={{width:size,height:size,borderRadius:size/2,backgroundColor:'rgba(0,0,0,0.1)'}}/>;
@@ -97,14 +123,15 @@ export default function TradingScreen() {
   const isDark             = theme === 'dark';
   const activeAccountIndex = useAppStore(s => s.activeAccountIndex);
   const walletPublicKey    = useAppStore(s => s.walletPublicKey);
+  const insets             = useSafeAreaInsets(); // حساب هوامش الأمان
 
   const C = {
-    bg:      isDark?'#07070F':'#F5F6FA',
-    card:    isDark?'#0F0F1E':'#FFFFFF',
-    card2:   isDark?'#161628':'#F4F5FF',
-    text:    isDark?'#EEEEFF':'#0D0D1A',
-    muted:   isDark?'#6060A0':'#9090A8',
-    border:  isDark?'#1E1E38':'#E4E4F0',
+    bg:      isDark?'#07070F':'#F4F5F9',
+    card:    isDark?'#111122':'#FFFFFF',
+    card2:   isDark?'#171730':'#ECECF4',
+    text:    isDark?'#EEEEFF':'#1C1C24',
+    muted:   isDark?'#7E7EAA':'#8A8A9E',
+    border:  isDark?'#1E1E38':'#E8E8F2',
     success: '#10B981', error:'#EF4444', warning:'#F59E0B',
   };
 
@@ -211,7 +238,6 @@ export default function TradingScreen() {
     }
   };
 
-  // ── تنفيذ الأمر ──────────────────────────────────────────────────────────
   const handleExecute = async () => {
     if (!orderAmount || parseFloat(orderAmount)<=0) return;
     if (!walletPublicKey) { Alert.alert(t('error'), t('no_wallet')); return; }
@@ -263,7 +289,6 @@ export default function TradingScreen() {
                 Alert.alert(t('success'), `✅ ${t('trade_success')}\n${sig.slice(0,8)}...${sig.slice(-4)}`);
 
               } else {
-                // ── Limit Order ──────────────────────────────────────────────
                 try {
                   sig = await executeLimitOrder({
                     inputMint:   inputToken.mint,
@@ -279,7 +304,6 @@ export default function TradingScreen() {
                   Alert.alert(t('success'), `✅ ${t('limit_order_placed')}\n${sig.slice(0,8)}...${sig.slice(-4)}`);
 
                 } catch (limitErr) {
-                  // ✅ إذا فشل Limit Order — عرض خيار تنفيذ بسعر السوق بدلاً منه
                   if (limitErr.message === 'limit_order_unavailable') {
                     Alert.alert(
                       t('limit_order','أمر محدد'),
@@ -342,13 +366,6 @@ export default function TradingScreen() {
     ]);
   };
 
-  const fmtPrice = (p) => {
-    if (!p) return '$0.00';
-    if (p>1)      return `$${p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
-    if (p>0.01)   return `$${p.toFixed(4)}`;
-    if (p>0.0001) return `$${p.toFixed(6)}`;
-    return `$${p.toFixed(8)}`;
-  };
   const fmtBig = (n) => {
     if (!n) return 'N/A';
     if (n>=1e9) return `$${(n/1e9).toFixed(2)}B`;
@@ -371,22 +388,25 @@ export default function TradingScreen() {
   };
 
   return (
-    <SafeAreaView style={[S.root,{backgroundColor:C.bg}]}>
-      <View style={[S.header,{backgroundColor:C.card,borderBottomColor:C.border}]}>
-        <TouchableOpacity onPress={()=>navigation.goBack()} style={[S.iconBtn,{backgroundColor:C.card2}]}>
-          <Ionicons name="arrow-back" size={22} color={C.text}/>
+    <SafeAreaView style={[S.root,{backgroundColor:C.bg, paddingTop: Platform.OS === 'ios' ? 0 : insets.top}]}>
+      
+      {/* ── شريط هيدر التداول المتناسق والآمن ── */}
+      <View style={[S.header,{backgroundColor:C.card, borderBottomColor:C.border}]}>
+        <TouchableOpacity onPress={()=>navigation.goBack()} style={[S.iconBtn,{backgroundColor:C.card2, borderColor: C.border, borderWidth: 1}]}>
+          <Ionicons name="arrow-back" size={18} color={C.text}/>
         </TouchableOpacity>
         <View style={S.headerCenter}>
-          <SafeImage uri={selectedToken.image} size={26}/>
+          <SafeImage uri={selectedToken.image} size={24}/>
           <Text style={[S.headerSym,{color:C.text}]}>{selectedToken.symbol}/{quoteToken.symbol}</Text>
         </View>
-        <TouchableOpacity style={[S.iconBtn,{backgroundColor:C.card2}]}
+        <TouchableOpacity style={[S.iconBtn,{backgroundColor:C.card2, borderColor: C.border, borderWidth: 1}]}
           onPress={()=>{ fetchMarket(); fetchChart(); fetchBalances(); fetchOpenOrders(); }}>
-          <Ionicons name="refresh" size={20} color={primaryColor}/>
+          <Ionicons name="refresh" size={18} color={primaryColor}/>
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+      {/* حشوة سفلية ديناميكية تمنع تداخل الحقول مع شريط الهواتف السفلي */}
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
         <FlatList
           data={tokens} horizontal showsHorizontalScrollIndicator={false}
           keyExtractor={i=>i.mint} contentContainerStyle={S.tokenRow}
@@ -411,7 +431,7 @@ export default function TradingScreen() {
         <View style={[S.priceHeader,{backgroundColor:C.card}]}>
           <View>
             <Text style={[S.priceMain,{color:C.text}]}>{marketLoading?'—':fmtPrice(priceStats.current)}</Text>
-            <View style={[S.changePill,{backgroundColor:up?C.success+'20':C.error+'20'}]}>
+            <View style={[S.changePill,{backgroundColor:up?'rgba(16,185,129,0.08)':'rgba(239,68,68,0.08)'}]}>
               <Ionicons name={up?'trending-up':'trending-down'} size={12} color={up?C.success:C.error}/>
               <Text style={[S.changeTxt,{color:up?C.success:C.error}]}>{up?'+':''}{priceStats.change.toFixed(2)}%</Text>
             </View>
@@ -426,11 +446,17 @@ export default function TradingScreen() {
           </View>
         </View>
 
+        {/* ✅ حل مشكلة تكرار الرسم البياني: تحديث مفتاح الـ WebView ديناميكياً للعملة المحددة والفترة الزمنية لمنع الكاش */}
         <View style={[S.chartWrap,{height:CHART_H,backgroundColor:C.card}]}>
           {chartLoading&&<View style={[S.chartOverlay,{backgroundColor:C.card}]}><ActivityIndicator size="large" color={primaryColor}/></View>}
-          <WebView ref={webviewRef} source={{html:chartHtml}} style={{flex:1,backgroundColor:C.card}}
+          <WebView 
+            key={`${selectedToken.symbol}_${timeframe.label}`}
+            ref={webviewRef} 
+            source={{html:chartHtml}} 
+            style={{flex:1,backgroundColor:C.card}}
             scrollEnabled={false} bounces={false} javaScriptEnabled domStorageEnabled
-            onLoad={onWebViewLoad} showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}/>
+            onLoad={onWebViewLoad} showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false}
+          />
         </View>
 
         <View style={[S.tfRow,{backgroundColor:C.card,borderTopColor:C.border}]}>
@@ -441,7 +467,7 @@ export default function TradingScreen() {
           ))}
         </View>
 
-        <View style={[S.orderPanel,{backgroundColor:C.card}]}>
+        <View style={[S.orderPanel,{backgroundColor:C.card, borderColor: C.border, borderWidth: 1}]}>
 
           <View style={[S.typeTabs,{backgroundColor:C.card2}]}>
             {[{key:'market',label:t('market_order'),icon:'flash'},{key:'limit',label:t('limit_order'),icon:'timer-outline'}].map(item=>(
@@ -450,24 +476,29 @@ export default function TradingScreen() {
                 onPress={()=>{ setOrderType(item.key); if(item.key==='limit'&&priceStats.current) setLimitPrice(priceStats.current.toFixed(6)); }}
               >
                 <Ionicons name={item.icon} size={14} color={orderType===item.key?'#FFF':C.muted}/>
-                <Text style={[S.typeTabTxt,{color:orderType===item.key?'#FFF':C.muted}]}>{item.label}</Text>
+                <Text style={[S.typeTabTxt, {color: orderType===item.key?'#FFF':C.muted}]}>{t(item.key)}</Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <View style={[S.orderTabs,{backgroundColor:C.card2}]}>
-            {[{side:'buy',icon:'trending-up',color:C.success,label:t('buy')},{side:'sell',icon:'trending-down',color:C.error,label:t('sell')}].map(item=>(
-              <TouchableOpacity key={item.side} style={[S.orderTab,orderSide===item.side&&{backgroundColor:item.color}]}
-                onPress={()=>{ setOrderSide(item.side); setOrderAmount(''); }}>
-                <Ionicons name={item.icon} size={16} color={orderSide===item.side?'#FFF':C.muted}/>
-                <Text style={[S.orderTabTxt,{color:orderSide===item.side?'#FFF':C.muted}]}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={[S.typeTabs,{backgroundColor:C.card2, marginTop: 8}]}>
+            {[{id:'buy', label:t('buy') || 'شراء', color:C.success}, {id:'sell', label:t('sell') || 'بيع', color:C.error}].map(item => {
+              const active = orderSide === item.id;
+              return (
+                <TouchableOpacity 
+                  key={item.id} 
+                  style={[S.typeTab, active && {backgroundColor: item.color}]}
+                  onPress={() => setOrderSide(item.id)}
+                >
+                  <Text style={[S.typeTabTxt,{color: active ? '#FFF' : C.muted}]}>{item.label}</Text>
+                </TouchableOpacity>
+              )
+            })}
           </View>
 
           <View style={[S.quoteRow,{borderColor:C.border}]}>
             <Text style={[S.quoteLabel,{color:C.muted}]}>{t('quote_currency')}</Text>
-            <TouchableOpacity style={[S.quotePicker,{backgroundColor:C.card2}]} onPress={()=>setQuoteModal(true)}>
+            <TouchableOpacity style={[S.quotePicker,{backgroundColor:C.card2, borderColor: C.border, borderWidth: 1}]} onPress={()=>setQuoteModal(true)}>
               <SafeImage uri={quoteToken.image} size={20}/>
               <Text style={[S.quotePickerTxt,{color:C.text}]}>{quoteToken.symbol}</Text>
               <Ionicons name="chevron-down" size={14} color={C.muted}/>
@@ -477,12 +508,13 @@ export default function TradingScreen() {
           {orderType==='limit' && (
             <View style={S.limitPriceWrap}>
               <Text style={[S.inputLabel,{color:C.muted}]}>{t('limit_price')} ({quoteToken.symbol})</Text>
-              <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:C.warning+'80'}]}>
+              <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:C.warning+'40'}]}>
                 <Ionicons name="pricetag-outline" size={18} color={C.warning} style={{marginRight:8}}/>
                 <TextInput
-                  style={[S.input,{color:C.text}]}
+                  style={[S.input,{color:C.text, paddingVertical: 0}]}
                   value={limitPrice} onChangeText={setLimitPrice}
                   placeholder="0.000000" placeholderTextColor={C.muted} keyboardType="decimal-pad"
+                  autoCorrect={false}
                 />
                 <Text style={[S.inputCur,{color:C.muted}]}>{quoteToken.symbol}</Text>
               </View>
@@ -509,9 +541,9 @@ export default function TradingScreen() {
           <Text style={[S.inputLabel,{color:C.muted}]}>
             {orderSide==='buy'?`${t('amount_in')} ${quoteToken.symbol}`:`${t('amount')} (${selectedToken.symbol})`}
           </Text>
-          <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:orderSide==='buy'?C.success+'70':C.error+'70'}]}>
-            <TextInput style={[S.input,{color:C.text}]} value={orderAmount} onChangeText={setOrderAmount}
-              placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad"/>
+          <View style={[S.inputWrap,{backgroundColor:C.card2,borderColor:orderSide==='buy'?C.success+'40':C.error+'40'}]}>
+            <TextInput style={[S.input,{color:C.text, paddingVertical: 0}]} value={orderAmount} onChangeText={setOrderAmount}
+              placeholder="0.00" placeholderTextColor={C.muted} keyboardType="decimal-pad" autoCorrect={false}/>
             <Text style={[S.inputCur,{color:C.muted}]}>{orderSide==='buy'?quoteToken.symbol:selectedToken.symbol}</Text>
           </View>
 
@@ -519,7 +551,7 @@ export default function TradingScreen() {
             <Ionicons name="wallet-outline" size={14} color={C.muted}/>
             <Text style={[S.balanceLabel,{color:C.muted}]}>{t('available_balance')}</Text>
             <Text style={[S.balanceValue,{color:primaryColor}]}>{fmtBal(availBal)} {availCur}</Text>
-            <Text style={[S.balanceMax,{color:primaryColor}]}>{t('max')}</Text>
+            <Text style={[S.balanceMax,{color:primaryColor, backgroundColor: primaryColor+'12'}]}>{t('max')}</Text>
           </TouchableOpacity>
 
           <View style={[S.estimateRow,{borderColor:C.border}]}>
@@ -542,7 +574,7 @@ export default function TradingScreen() {
           >
             {executing ? <ActivityIndicator color="#FFF" size="small"/>
               : <>
-                  <Ionicons name={orderType==='limit'?'timer-outline':orderSide==='buy'?'trending-up':'trending-down'} size={20} color="#FFF"/>
+                  <Ionicons name={orderType==='limit'?'timer-outline':orderSide==='buy'?'trending-up':'trending-down'} size={18} color="#FFF"/>
                   <Text style={S.executeBtnTxt}>
                     {orderType==='limit' ? t('place_limit_order') : `${orderSide==='buy'?t('buy'):t('sell')} ${selectedToken.symbol}`}
                   </Text>
@@ -554,25 +586,25 @@ export default function TradingScreen() {
         </View>
 
         {openOrders.length > 0 && (
-          <View style={[S.ordersCard,{backgroundColor:C.card}]}>
+          <View style={[S.ordersCard,{backgroundColor:C.card, borderColor: C.border, borderWidth: 1}]}>
             <View style={S.ordersHeader}>
               <Text style={[S.ordersTitle,{color:C.text}]}>{t('open_orders')}</Text>
-              <View style={[S.ordersBadge,{backgroundColor:C.warning+'25'}]}>
+              <View style={[S.ordersBadge,{backgroundColor:C.warning+'20'}]}>
                 <Text style={[S.ordersBadgeTxt,{color:C.warning}]}>{openOrders.length}</Text>
               </View>
             </View>
             {ordersLoading ? <ActivityIndicator color={primaryColor} style={{marginVertical:16}}/>
               : openOrders.map((order,i)=>(
                 <View key={i} style={[S.orderItem,{borderColor:C.border}]}>
-                  <View style={[S.orderIcon,{backgroundColor:C.warning+'20'}]}>
+                  <View style={[S.orderIcon,{backgroundColor:C.warning+'15'}]}>
                     <Ionicons name="timer-outline" size={14} color={C.warning}/>
                   </View>
                   <View style={S.orderInfo}>
                     <Text style={[S.orderPair,{color:C.text}]}>{order.inputMint?.slice(0,4)}... → {order.outputMint?.slice(0,4)}...</Text>
                     <Text style={[S.orderDetails,{color:C.muted}]}>{order.inAmount} → {order.outAmount}</Text>
                   </View>
-                  <TouchableOpacity style={[S.cancelOrderBtn,{backgroundColor:C.error+'20',borderColor:C.error+'40'}]} onPress={()=>handleCancelOrder(order)}>
-                    <Ionicons name="close" size={14} color={C.error}/>
+                  <TouchableOpacity style={[S.cancelOrderBtn,{backgroundColor:C.error+'15',borderColor:C.error+'30'}]} onPress={()=>handleCancelOrder(order)}>
+                    <Ionicons name="close" size={12} color={C.error}/>
                     <Text style={[S.cancelOrderTxt,{color:C.error}]}>{t('cancel')}</Text>
                   </TouchableOpacity>
                 </View>
@@ -581,11 +613,11 @@ export default function TradingScreen() {
           </View>
         )}
 
-        <View style={[S.statsCard,{backgroundColor:C.card}]}>
+        <View style={[S.statsCard,{backgroundColor:C.card, borderColor: C.border, borderWidth: 1}]}>
           <Text style={[S.statsTitle,{color:C.text}]}>{t('market_stats')}</Text>
           <View style={S.statsGrid}>
             {[{label:t('ohlc_open'),value:fmtPrice(priceStats.open)},{label:t('ohlc_high'),value:fmtPrice(priceStats.high)},{label:t('ohlc_low'),value:fmtPrice(priceStats.low)},{label:t('volume_24h_label'),value:fmtBig(priceStats.volume)}].map(item=>(
-              <View key={item.label} style={[S.statItem,{backgroundColor:C.card2}]}>
+              <View key={item.label} style={[S.statItem,{backgroundColor:C.card2, borderColor: C.border, borderWidth: 1}]}>
                 <Text style={[S.statL,{color:C.muted}]}>{item.label}</Text>
                 <Text style={[S.statV,{color:C.text}]}>{item.value}</Text>
               </View>
@@ -593,9 +625,9 @@ export default function TradingScreen() {
           </View>
         </View>
 
-        <View style={{height:40}}/>
       </ScrollView>
 
+      {/* منتقي العملات الأساسية (Bottom Sheet) */}
       <Modal visible={quoteModal} transparent animationType="slide" onRequestClose={()=>setQuoteModal(false)}>
         <TouchableOpacity style={S.modalOverlay} activeOpacity={1} onPress={()=>setQuoteModal(false)}>
           <View style={[S.modalBox,{backgroundColor:C.card}]}>
@@ -606,9 +638,9 @@ export default function TradingScreen() {
                 style={[S.quoteOption,{borderColor:C.border},qt.symbol===quoteToken.symbol&&{borderColor:primaryColor,backgroundColor:primaryColor+'12'}]}
                 onPress={()=>{ setQuoteToken(qt); setQuoteModal(false); setOrderAmount(''); setLimitPrice(''); }}
               >
-                <SafeImage uri={qt.image} size={36}/>
+                <SafeImage uri={qt.image} size={32}/>
                 <Text style={[S.quoteOptionTxt,{color:C.text}]}>{qt.symbol}</Text>
-                {qt.symbol===quoteToken.symbol&&<Ionicons name="checkmark-circle" size={22} color={primaryColor}/>}
+                {qt.symbol===quoteToken.symbol&&<Ionicons name="checkmark-circle" size={18} color={primaryColor}/>}
               </TouchableOpacity>
             ))}
           </View>
@@ -623,73 +655,73 @@ const S = StyleSheet.create({
   header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:16,paddingVertical:12,borderBottomWidth:1},
   iconBtn:{width:40,height:40,borderRadius:12,justifyContent:'center',alignItems:'center'},
   headerCenter:{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:8},
-  headerSym:{fontSize:17,fontWeight:'800'},
+  headerSym:{fontSize:16,fontWeight:'800'},
   tokenRow:{paddingHorizontal:16,paddingVertical:10,gap:8},
-  tokenChip:{flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:7,borderRadius:20,borderWidth:1.5,borderColor:'rgba(128,128,128,0.2)',gap:5},
-  chipSym:{fontSize:13,fontWeight:'700'},chipChg:{fontSize:11,fontWeight:'600'},
+  tokenChip:{flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:6,borderRadius:16,borderWidth:1,borderColor:'rgba(128,128,128,0.15)',gap:5},
+  chipSym:{fontSize:12,fontWeight:'700'},chipChg:{fontSize:10,fontWeight:'600'},
   priceHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:18,paddingVertical:14},
-  priceMain:{fontSize:28,fontWeight:'900',letterSpacing:-0.5},
+  priceMain:{fontSize:26,fontWeight:'800',letterSpacing:-0.5},
   changePill:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:8,paddingVertical:4,borderRadius:10,marginTop:6},
-  changeTxt:{fontSize:13,fontWeight:'700'},
+  changeTxt:{fontSize:12,fontWeight:'700'},
   priceStats:{gap:6},priceStat:{flexDirection:'row',alignItems:'center',gap:6},
-  psL:{fontSize:11,width:16},psV:{fontSize:12,fontWeight:'700'},
+  psL:{fontSize:10,width:16},psV:{fontSize:11,fontWeight:'700'},
   chartWrap:{position:'relative'},
   chartOverlay:{position:'absolute',top:0,left:0,right:0,bottom:0,justifyContent:'center',alignItems:'center',zIndex:10},
   tfRow:{flexDirection:'row',justifyContent:'space-around',paddingVertical:10,borderTopWidth:1},
-  tfBtn:{paddingHorizontal:16,paddingVertical:8,borderRadius:12},
-  tfTxt:{fontSize:13,fontWeight:'700'},
-  orderPanel:{margin:16,borderRadius:24,padding:20,shadowColor:'#000',shadowOffset:{width:0,height:4},shadowOpacity:0.08,shadowRadius:12,elevation:4},
-  typeTabs:{flexDirection:'row',borderRadius:14,padding:4,marginBottom:14},
-  typeTab:{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'center',paddingVertical:10,borderRadius:10,gap:6},
-  typeTabTxt:{fontSize:14,fontWeight:'700'},
-  orderTabs:{flexDirection:'row',borderRadius:16,padding:4,marginBottom:16},
-  orderTab:{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'center',paddingVertical:12,borderRadius:12,gap:7},
-  orderTabTxt:{fontSize:15,fontWeight:'700'},
-  quoteRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingVertical:10,borderBottomWidth:1,marginBottom:14},
-  quoteLabel:{fontSize:13},
-  quotePicker:{flexDirection:'row',alignItems:'center',paddingHorizontal:12,paddingVertical:8,borderRadius:12,gap:6},
-  quotePickerTxt:{fontSize:14,fontWeight:'700'},
-  limitPriceWrap:{marginBottom:14},
-  limitHint:{flexDirection:'row',alignItems:'center',gap:5,padding:8,borderRadius:10,marginTop:6},
-  limitHintTxt:{fontSize:12,fontWeight:'600'},
-  currentPriceRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',padding:12,borderRadius:14,borderWidth:1,marginBottom:14},
-  cpL:{fontSize:13,fontWeight:'500'},cpV:{fontSize:16,fontWeight:'800'},
-  inputLabel:{fontSize:13,fontWeight:'600',marginBottom:8},
-  inputWrap:{flexDirection:'row',alignItems:'center',borderRadius:14,borderWidth:1.5,paddingHorizontal:14,height:54,marginBottom:8},
-  input:{flex:1,fontSize:18,fontWeight:'700'},
-  inputCur:{fontSize:14,fontWeight:'600'},
-  balanceRow:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,marginBottom:12,gap:6},
-  balanceLabel:{flex:1,fontSize:12},balanceValue:{fontSize:13,fontWeight:'700'},
-  balanceMax:{fontSize:12,fontWeight:'800',paddingHorizontal:8,paddingVertical:3,borderRadius:6},
-  estimateRow:{flexDirection:'row',justifyContent:'space-between',paddingVertical:10,borderTopWidth:1,marginBottom:14},
-  estimateL:{fontSize:13},estimateV:{fontSize:14,fontWeight:'700'},
-  quickRow:{flexDirection:'row',gap:8,marginBottom:18},
-  quickBtn:{flex:1,paddingVertical:10,borderRadius:12,borderWidth:1,alignItems:'center'},
-  quickBtnTxt:{fontSize:13,fontWeight:'700'},
-  executeBtn:{flexDirection:'row',alignItems:'center',justifyContent:'center',paddingVertical:18,borderRadius:18,gap:10,shadowColor:'#000',shadowOffset:{width:0,height:4},shadowOpacity:0.2,shadowRadius:8,elevation:6},
-  executeBtnTxt:{color:'#FFF',fontSize:17,fontWeight:'800'},
-  swapNote:{textAlign:'center',fontSize:11,marginTop:10},
-  ordersCard:{marginHorizontal:16,marginBottom:16,borderRadius:20,padding:18},
-  ordersHeader:{flexDirection:'row',alignItems:'center',gap:10,marginBottom:14},
-  ordersTitle:{fontSize:16,fontWeight:'700'},
-  ordersBadge:{paddingHorizontal:8,paddingVertical:3,borderRadius:10},
-  ordersBadgeTxt:{fontSize:12,fontWeight:'800'},
-  orderItem:{flexDirection:'row',alignItems:'center',paddingVertical:12,borderBottomWidth:1,gap:12},
-  orderIcon:{width:34,height:34,borderRadius:10,justifyContent:'center',alignItems:'center'},
+  tfBtn:{paddingHorizontal:14,paddingVertical:6,borderRadius:10},
+  tfTxt:{fontSize:12,fontWeight:'700'},
+  orderPanel:{margin:16,borderRadius:22,padding:16,shadowColor:'#000',shadowOffset:{width:0,height:2},shadowOpacity:0.02,shadowRadius:8,elevation:1,borderWidth:1},
+  typeTabs:{flexDirection:'row',borderRadius:12,padding:3},
+  typeTab:{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'center',paddingVertical:8,borderRadius:10,gap:6},
+  typeTabTxt:{fontSize:13,fontWeight:'700'},
+  orderTabs:{flexDirection:'row',borderRadius:12,padding:3},
+  orderTab:{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'center',paddingVertical:8,borderRadius:10,gap:6},
+  orderTabTxt:{fontSize:13,fontWeight:'700'},
+  quoteRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingVertical:8,borderBottomWidth:1,marginBottom:12},
+  quoteLabel:{fontSize:12},
+  quotePicker:{flexDirection:'row',alignItems:'center',paddingHorizontal:10,paddingVertical:6,borderRadius:10,gap:6,borderWidth:1},
+  quotePickerTxt:{fontSize:13,fontWeight:'700'},
+  limitPriceWrap:{marginBottom:12},
+  limitHint:{flexDirection:'row',alignItems:'center',gap:4,padding:6,borderRadius:10,marginTop:6},
+  limitHintTxt:{fontSize:11,fontWeight:'600'},
+  currentPriceRow:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',padding:10,borderRadius:12,borderWidth:1,marginBottom:12},
+  cpL:{fontSize:12,fontWeight:'500'},cpV:{fontSize:14,fontWeight:'800'},
+  inputLabel:{fontSize:12,fontWeight:'600',marginBottom:6},
+  inputWrap:{flexDirection:'row',alignItems:'center',borderRadius:12,borderWidth:1,paddingHorizontal:12,height:46,marginBottom:6},
+  input:{flex:1,fontSize:16,fontWeight:'700'},
+  inputCur:{fontSize:12,fontWeight:'600'},
+  balanceRow:{flexDirection:'row',alignItems:'center',paddingVertical:8,borderBottomWidth:1,marginBottom:10,gap:4},
+  balanceLabel:{flex:1,fontSize:11},balanceValue:{fontSize:12,fontWeight:'700'},
+  balanceMax:{fontSize:11,fontWeight:'700',paddingHorizontal:6,paddingVertical:2,borderRadius:6},
+  estimateRow:{flexDirection:'row',justifyContent:'space-between',paddingVertical:8,borderTopWidth:1,marginBottom:12},
+  estimateL:{fontSize:12},estimateV:{fontSize:13,fontWeight:'700'},
+  quickRow:{flexDirection:'row',gap:6,marginBottom:14},
+  quickBtn:{flex:1,paddingVertical:8,borderRadius:10,borderWidth:1,alignItems:'center'},
+  quickBtnTxt:{fontSize:12,fontWeight:'700'},
+  executeBtn:{flexDirection:'row',alignItems:'center',justifyContent:'center',paddingVertical:14,borderRadius:14,gap:8},
+  executeBtnTxt:{color:'#FFF',fontSize:15,fontWeight:'800'},
+  swapNote:{textAlign:'center',fontSize:10,marginTop:8},
+  ordersCard:{marginHorizontal:16,marginBottom:12,borderRadius:18,padding:16},
+  ordersHeader:{flexDirection:'row',alignItems:'center',gap:8,marginBottom:12},
+  ordersTitle:{fontSize:14,fontWeight:'800'},
+  ordersBadge:{paddingHorizontal:6,paddingVertical:2,borderRadius:8},
+  ordersBadgeTxt:{fontSize:11,fontWeight:'800'},
+  orderItem:{flexDirection:'row',alignItems:'center',paddingVertical:10,borderBottomWidth:1,gap:10},
+  orderIcon:{width:32,height:32,borderRadius:10,justifyContent:'center',alignItems:'center'},
   orderInfo:{flex:1},
-  orderPair:{fontSize:14,fontWeight:'700'},
+  orderPair:{fontSize:13,fontWeight:'700'},
   orderDetails:{fontSize:11,marginTop:2},
-  cancelOrderBtn:{flexDirection:'row',alignItems:'center',paddingHorizontal:10,paddingVertical:6,borderRadius:10,borderWidth:1,gap:4},
-  cancelOrderTxt:{fontSize:12,fontWeight:'700'},
-  statsCard:{marginHorizontal:16,marginBottom:16,borderRadius:20,padding:18},
-  statsTitle:{fontSize:16,fontWeight:'700',marginBottom:14},
-  statsGrid:{flexDirection:'row',flexWrap:'wrap',gap:10},
-  statItem:{width:(width-32-36-10)/2,padding:14,borderRadius:14},
-  statL:{fontSize:11,marginBottom:5},statV:{fontSize:14,fontWeight:'700'},
+  cancelOrderBtn:{flexDirection:'row',alignItems:'center',paddingHorizontal:8,paddingVertical:4,borderRadius:8,borderWidth:1,gap:4},
+  cancelOrderTxt:{fontSize:11,fontWeight:'700'},
+  statsCard:{marginHorizontal:16,marginBottom:12,borderRadius:18,padding:16},
+  statsTitle:{fontSize:14,fontWeight:'800',marginBottom:12},
+  statsGrid:{flexDirection:'row',flexWrap:'wrap',gap:8},
+  statItem:{width:(width-32-32-8)/2,padding:12,borderRadius:12,borderWidth:1},
+  statL:{fontSize:11,marginBottom:4},statV:{fontSize:13,fontWeight:'700'},
   modalOverlay:{flex:1,backgroundColor:'rgba(0,0,0,0.5)',justifyContent:'flex-end'},
-  modalBox:{borderTopLeftRadius:28,borderTopRightRadius:28,padding:24,paddingTop:12},
-  modalHandle:{width:40,height:4,borderRadius:2,alignSelf:'center',marginBottom:18},
-  modalTitle:{fontSize:18,fontWeight:'800',marginBottom:16},
-  quoteOption:{flexDirection:'row',alignItems:'center',padding:16,borderRadius:16,borderWidth:1.5,marginBottom:10,gap:14},
-  quoteOptionTxt:{flex:1,fontSize:16,fontWeight:'700'},
+  modalBox:{borderTopLeftRadius:24,borderTopRightRadius:24,padding:20,paddingTop:12,paddingBottom: Platform.OS==='ios'?36:20},
+  modalHandle:{width:36,height:4,borderRadius:2,alignSelf:'center',marginBottom:16},
+  modalTitle:{fontSize:18,fontWeight:'800',marginBottom:16,textAlign:'center'},
+  quoteOption:{flexDirection:'row',alignItems:'center',padding:14,borderRadius:14,borderWidth:1,marginBottom:8,gap:12},
+  quoteOptionTxt:{flex:1,fontSize:15,fontWeight:'700'},
 });
