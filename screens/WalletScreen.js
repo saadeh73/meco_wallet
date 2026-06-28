@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ استيراد لحساب الهوامش الآمنة بدقة
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSolBalance, getTokenAccounts, getTokenBalance } from '../services/heliusService';
 import { CORE_TOKENS, getJupiterMarketData, getCustomTokens } from '../services/jupiterMarketService';
@@ -33,6 +34,7 @@ export default function WalletScreen() {
   const theme        = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
+  const insets       = useSafeAreaInsets(); // جلب مسافات الأمان
 
   const accounts           = useAppStore(state => state.accounts);
   const activeAccountIndex = useAppStore(state => state.activeAccountIndex);
@@ -469,8 +471,8 @@ export default function WalletScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
 
-        {/* ── البطاقة العلوية الاحترافية والذكية (Solflare Header Layout) ── */}
-        <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }], borderColor: colors.border, borderWidth: 1 }]}>
+        {/* ── البطاقة العلوية مع هامش أمان متسع (تفادياً للتداخل) ── */}
+        <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }], borderColor: colors.border, borderWidth: 1, paddingTop: Platform.OS === 'ios' ? 20 : insets.top + 20 }]}>
           <View style={styles.topBar}>
             <View style={styles.walletInfoRow}>
               <TouchableOpacity
@@ -520,26 +522,26 @@ export default function WalletScreen() {
               </Animated.View>
             )}
           </View>
-
-          {/* أزرار الإجراءات السريعة ككبسولات تفاعلية متناسقة ومصممة بدقة */}
-          <View style={styles.actionsGrid}>
-            {[
-              { icon:'arrow-up',        color:colors.success, screen:'Send',    label:t('send')              },
-              { icon:'arrow-down',      color:'#6366F1',      screen:'Receive', label:t('receive')           },
-              { icon:'swap-horizontal', color:'#F59E0B',      screen:'Swap',    label:t('swap_title')        },
-              { icon:'trending-up',     color:'#EC4899',      screen:'Staking', label:t('staking.stake_tab') },
-            ].map(btn => (
-              <TouchableOpacity key={btn.screen} style={styles.actionBtn} onPress={() => navigation.navigate(btn.screen)}>
-                <View style={[styles.actionCircle, { backgroundColor: btn.color + '12' }]}>
-                  <Ionicons name={btn.icon} size={22} color={btn.color} />
-                </View>
-                <Text style={[styles.actionLabel, { color: colors.text }]}>{btn.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </Animated.View>
 
-        {/* ── قائمة الأصول (تصميم مسطح موحد) ── */}
+        {/* ── أزرار العمليات الأربعة الدائرية العائمة أسفل البطاقة مباشرة ── */}
+        <View style={styles.actionsGrid}>
+          {[
+            { icon:'arrow-up',        color:colors.success, screen:'Send',    label:t('send')              },
+            { icon:'arrow-down',      color:'#6366F1',      screen:'Receive', label:t('receive')           },
+            { icon:'swap-horizontal', color:'#F59E0B',      screen:'Swap',    label:t('swap_title')        },
+            { icon:'trending-up',     color:'#EC4899',      screen:'Staking', label:t('staking.stake_tab') },
+          ].map(btn => (
+            <TouchableOpacity key={btn.screen} style={styles.actionBtn} onPress={() => navigation.navigate(btn.screen)}>
+              <View style={[styles.actionCircle, { backgroundColor: btn.color + '12' }]}>
+                <Ionicons name={btn.icon} size={22} color={btn.color} />
+              </View>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>{btn.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Assets List */}
         <View style={styles.assetsSection}>
           <View style={styles.assetsHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('wallet_your_assets')}</Text>
@@ -741,11 +743,9 @@ export default function WalletScreen() {
   );
 }
 
-const S_CARD_HEIGHT = Platform.OS === 'ios' ? 300 : 280;
-
 const styles = StyleSheet.create({
   container:    { flex:1 },
-  headerCard:   { borderBottomLeftRadius:28, borderBottomRightRadius:28, paddingTop:Platform.OS==='ios'?56:32, paddingHorizontal:20, paddingBottom:20, elevation:4, shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.04, shadowRadius:10, zIndex:10, borderWidth: 1 },
+  headerCard:   { borderBottomLeftRadius:28, borderBottomRightRadius:28, paddingHorizontal:20, paddingBottom:20, elevation:4, shadowColor:'#000', shadowOffset:{width:0,height:4}, shadowOpacity:0.04, shadowRadius:10, zIndex:10, borderWidth: 1 },
   topBar:       { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:18 },
   walletInfoRow:{ flexDirection:'row', alignItems:'center', gap:10 },
   walletIconWrapper: { width:40, height:40, borderRadius:12, justifyContent:'center', alignItems:'center', borderWidth: 1 },
@@ -755,16 +755,18 @@ const styles = StyleSheet.create({
   inlineCopyBtn:{ padding:4 },
   accountsCount:{ fontSize:11, fontWeight:'500', marginTop:2 },
   dotsButton:   { width:40, height:40, borderRadius:12, justifyContent:'center', alignItems:'center', borderWidth: 1 },
-  balanceSection:{ alignItems:'center', marginBottom:20 },
+  balanceSection:{ alignItems:'center' },
   balanceLabel: { fontSize:13, fontWeight:'500', marginBottom:6 },
   balanceAmount:{ fontSize:36, fontWeight:'800', letterSpacing:-0.5 },
   loadingBalance:{ height:40, justifyContent:'center' },
-  actionsGrid:  { flexDirection:'row', justifyContent:'space-around', width: '100%', paddingHorizontal: 4 },
+  
+  // شريط الأزرار الأربعة العائمة الدائرية بقطر كامل وتنسيق رائع
+  actionsGrid:  { flexDirection:'row', justifyContent:'space-around', width: '100%', paddingHorizontal: 4, marginTop: 16, marginBottom: 12 },
   actionBtn:    { alignItems:'center', gap:6, flex: 1 },
-  actionCircle: { width:46, height:46, borderRadius:15, justifyContent:'center', alignItems:'center' },
+  actionCircle: { width:48, height:48, borderRadius:24, justifyContent:'center', alignItems:'center', shadowColor:'#000', shadowOffset:{width:0,height:2}, shadowOpacity:0.05, shadowRadius:6, elevation:2 },
   actionLabel:  { fontSize:12, fontWeight:'600' },
   
-  assetsSection:{ flex:1, paddingHorizontal:20, paddingTop:16 },
+  assetsSection:{ flex:1, paddingHorizontal:20, paddingTop:8 },
   assetsHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12 },
   sectionTitle: { fontSize:16, fontWeight:'800' },
   refreshBtn:   { width:36, height:36, borderRadius:12, justifyContent:'center', alignItems:'center' },
