@@ -34,7 +34,7 @@ export default function WalletScreen() {
   const theme        = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
-  const insets       = useSafeAreaInsets(); // جلب مسافات الأمان للـ Notch
+  const insets       = useSafeAreaInsets(); // جلب أبعاد الحواف الآمنة
 
   const accounts           = useAppStore(state => state.accounts);
   const activeAccountIndex = useAppStore(state => state.activeAccountIndex);
@@ -470,6 +470,9 @@ export default function WalletScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
 
+        {/* ✅ حل مشكلة التداخل: دفع البطاقة بالكامل أسفل منطقة الـ Status Bar */}
+        <View style={{ height: Platform.OS === 'ios' ? insets.top : insets.top + 12 }} />
+
         {/* ── البطاقة العلوية المغلقة والعائمة باحترافية (Solflare Style Floating Card) ── */}
         <Animated.View style={[styles.headerCard, { 
           backgroundColor: colors.card, 
@@ -477,9 +480,8 @@ export default function WalletScreen() {
           transform: [{ translateY: slideAnim }], 
           borderColor: colors.border, 
           borderWidth: 1, 
-          // تم إغلاق البطاقة بتدوير الحواف الأربعة بالكامل وإضافة مساحة علوية آمنة عائمة
+          // تم إغلاق البطاقة بتدوير الحواف الأربعة بالكامل وإلغاء التداخل مع أشرطة الهاتف
           borderRadius: 24,
-          marginTop: Platform.OS === 'ios' ? insets.top + 10 : insets.top + 16,
           marginHorizontal: 20,
           paddingTop: 18
         }]}>
