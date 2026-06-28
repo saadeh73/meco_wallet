@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ استيراد لحساب الهوامش الآمنة بدقة
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // حساب مسافات الأمان بدقة
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSolBalance, getTokenAccounts, getTokenBalance } from '../services/heliusService';
 import { CORE_TOKENS, getJupiterMarketData, getCustomTokens } from '../services/jupiterMarketService';
@@ -34,7 +34,7 @@ export default function WalletScreen() {
   const theme        = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark       = theme === 'dark';
-  const insets       = useSafeAreaInsets(); // جلب مسافات الأمان
+  const insets       = useSafeAreaInsets(); // جلب مسافات الأمان للـ Notch
 
   const accounts           = useAppStore(state => state.accounts);
   const activeAccountIndex = useAppStore(state => state.activeAccountIndex);
@@ -329,7 +329,6 @@ export default function WalletScreen() {
   };
 
   const renderAssetItem = ({ item, index }) => {
-    const isPositive = item.valueUSD > 0;
     return (
       <Animated.View style={[styles.assetItemWrapper, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }]}>
         <Swipeable
@@ -471,8 +470,19 @@ export default function WalletScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
 
-        {/* ── البطاقة العلوية مع هامش أمان متسع (تفادياً للتداخل) ── */}
-        <Animated.View style={[styles.headerCard, { backgroundColor: colors.card, opacity: fadeAnim, transform: [{ translateY: slideAnim }], borderColor: colors.border, borderWidth: 1, paddingTop: Platform.OS === 'ios' ? 20 : insets.top + 20 }]}>
+        {/* ── البطاقة العلوية المغلقة والعائمة باحترافية (Solflare Style Floating Card) ── */}
+        <Animated.View style={[styles.headerCard, { 
+          backgroundColor: colors.card, 
+          opacity: fadeAnim, 
+          transform: [{ translateY: slideAnim }], 
+          borderColor: colors.border, 
+          borderWidth: 1, 
+          // تم إغلاق البطاقة بتدوير الحواف الأربعة بالكامل وإضافة مساحة علوية آمنة عائمة
+          borderRadius: 24,
+          marginTop: Platform.OS === 'ios' ? insets.top + 10 : insets.top + 16,
+          marginHorizontal: 20,
+          paddingTop: 18
+        }]}>
           <View style={styles.topBar}>
             <View style={styles.walletInfoRow}>
               <TouchableOpacity
@@ -524,7 +534,7 @@ export default function WalletScreen() {
           </View>
         </Animated.View>
 
-        {/* ── أزرار العمليات الأربعة الدائرية العائمة أسفل البطاقة مباشرة ── */}
+        {/* ── أزرار العمليات الأربعة الدائرية العائمة عريضة النسق عائمة بالأسفل ── */}
         <View style={styles.actionsGrid}>
           {[
             { icon:'arrow-up',        color:colors.success, screen:'Send',    label:t('send')              },
