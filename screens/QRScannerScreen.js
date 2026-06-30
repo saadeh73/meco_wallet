@@ -1,12 +1,14 @@
+// screens/QRScannerScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
-  SafeAreaView, Dimensions, ActivityIndicator
+  Dimensions, ActivityIndicator, Platform
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ استيراد لحساب هوامش الأمان
 import { Ionicons } from '@expo/vector-icons';
 import { useAppStore } from '../store';
 import { pairWalletConnect } from '../services/walletConnectService';
@@ -19,6 +21,7 @@ export default function QRScannerScreen() {
   const theme = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
   const isDark = theme === 'dark';
+  const insets = useSafeAreaInsets(); // جلب مسافات الأمان للهاتف
 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
@@ -26,11 +29,11 @@ export default function QRScannerScreen() {
   const [processingImage, setProcessingImage] = useState(false);
 
   const colors = {
-    background: isDark ? '#0A0A0F' : '#F8FAFD',
-    text: isDark ? '#FFFFFF' : '#1A1A2E',
-    textSecondary: isDark ? '#A0A0B0' : '#6B7280',
-    card: isDark ? '#1A1A2E' : '#FFFFFF',
-    border: isDark ? '#2A2A3E' : '#E5E7EB',
+    background: isDark ? '#07070F' : '#F4F5F9',
+    text: isDark ? '#EEEEFF' : '#1C1C24',
+    textSecondary: isDark ? '#7E7EAA' : '#8A8A9E',
+    card: isDark ? '#111122' : '#FFFFFF',
+    border: isDark ? '#1E1E38' : '#E8E8F2',
   };
 
   useEffect(() => {
@@ -81,7 +84,7 @@ export default function QRScannerScreen() {
     setScanned(false);
   };
 
-  // ✅ دالة قراءة الـ QR من الصورة باستخدام خدمة سحابية (بدون الحاجة لمكتبات Native معقدة)
+  // ✅ دالة قراءة الـ QR من الصورة باستخدام خدمة سحابية
   const decodeQRFromImage = async (imageUri) => {
     try {
       const formData = new FormData();
@@ -91,7 +94,6 @@ export default function QRScannerScreen() {
         name: 'qr_code.jpg',
       });
 
-      // استخدام API مجاني وسريع جداً لقراءة الباركود من الصور
       const response = await fetch('https://api.qrserver.com/v1/read-qr-code/', {
         method: 'POST',
         body: formData,
@@ -102,9 +104,8 @@ export default function QRScannerScreen() {
 
       const data = await response.json();
       
-      // التحقق من نجاح القراءة
       if (data && data[0] && data[0].symbol && data[0].symbol[0].data) {
-        return data[0].symbol[0].data; // إرجاع النص الموجود في الـ QR
+        return data[0].symbol[0].data;
       }
       return null;
     } catch (error) {
@@ -124,21 +125,18 @@ export default function QRScannerScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
-        quality: 0.8, // تقليل الجودة قليلاً لسرعة الرفع
+        quality: 0.8,
       });
 
       if (!result.canceled && result.assets?.length > 0) {
         setProcessingImage(true);
         const imageUri = result.assets[0].uri;
 
-        // إرسال الصورة لفك التشفير
         const qrText = await decodeQRFromImage(imageUri);
 
         if (qrText) {
-          // تم العثور على QR Code في الصورة
           await processScannedData(qrText);
         } else {
-          // لم يتعرف النظام على أي QR في الصورة
           Alert.alert(t('error', 'تنبيه'), 'لم يتم العثور على رمز QR واضح في هذه الصورة. يرجى التأكد من وضوح الصورة والمحاولة مجدداً.');
         }
       }
@@ -153,53 +151,54 @@ export default function QRScannerScreen() {
 
   if (!permission) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.center}>
-          <Text style={[styles.text, { color: colors.text }]}>{t('qr_scanner.requesting', 'جاري طلب الإذن...')}</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={primaryColor} />
+        <Text style={[styles.text, { color: colors.textSecondary, marginTop: 12 }]}>{t('qr_scanner.requesting', 'جاري طلب الإذن...')}</Text>
+      </View>
     );
   }
 
   if (!permission.granted) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.center}>
-          <Ionicons name="camera-off" size={64} color={colors.textSecondary} />
-          <Text style={[styles.text, { color: colors.text, marginTop: 16 }]}>{t('qr_scanner.no_permission', 'لا يوجد إذن للكاميرا')}</Text>
-          <TouchableOpacity style={[styles.button, { backgroundColor: primaryColor, marginTop: 20 }]} onPress={requestPermission}>
-            <Text style={styles.buttonText}>{t('qr_scanner.grant', 'منح الإذن')}</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <Ionicons name="camera-off" size={54} color={colors.textSecondary} />
+        <Text style={[styles.text, { color: colors.text, marginTop: 16, fontWeight: '700' }]}>{t('qr_scanner.no_permission', 'لا يوجد إذن للكاميرا')}</Text>
+        <TouchableOpacity style={[styles.button, { backgroundColor: primaryColor, marginTop: 20 }]} onPress={requestPermission}>
+          <Text style={styles.buttonText}>{t('qr_scanner.grant', 'منح الإذن')}</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.card }]}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      
+      {/* ── هيدر الشاشة العلوي المتناسق والآمن ── */}
+      <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: Platform.OS === 'ios' ? 12 : insets.top + 10, paddingBottom: 14 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+          <Ionicons name="arrow-back" size={18} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>{t('qr_scanner.title', 'مسح رمز QR')}</Text>
+        
         <View style={styles.headerActions}>
           <TouchableOpacity
             onPress={pickImage}
-            style={[styles.torchButton, { backgroundColor: colors.card }]}
+            style={[styles.torchButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
             disabled={processingImage}
           >
             {processingImage ? (
               <ActivityIndicator size="small" color={primaryColor} />
             ) : (
-              <Ionicons name="image-outline" size={24} color={colors.text} />
+              <Ionicons name="image-outline" size={18} color={colors.text} />
             )}
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setTorch(!torch)} style={[styles.torchButton, { backgroundColor: colors.card }]}>
-            <Ionicons name={torch ? 'flash' : 'flash-off'} size={24} color={torch ? primaryColor : colors.textSecondary} />
+          <TouchableOpacity onPress={() => setTorch(!torch)} style={[styles.torchButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+            <Ionicons name={torch ? 'flash' : 'flash-off'} size={18} color={torch ? primaryColor : colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* حاوي الكاميرا الهندسي الأنيق */}
       <View style={styles.cameraContainer}>
         <CameraView
           style={styles.camera}
@@ -219,44 +218,48 @@ export default function QRScannerScreen() {
         </CameraView>
       </View>
 
-      <View style={[styles.instructions, { backgroundColor: colors.card }]}>
-        <Ionicons name="qr-code" size={20} color={primaryColor} />
+      {/* تعليمات المسح السفلية الآمنة */}
+      <View style={[styles.instructions, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, marginBottom: insets.bottom > 0 ? insets.bottom + 16 : 20 }]}>
+        <Ionicons name="qr-code" size={16} color={primaryColor} />
         <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
           {t('qr_scanner.instructions', 'ضع رمز QR داخل الإطار للمسح، أو اختر صورة من الألبوم')}
         </Text>
       </View>
 
+      {/* زر إعادة المسح الآمن والطفيف من الأسفل */}
       {scanned && !processingImage && (
-        <TouchableOpacity style={[styles.rescanButton, { backgroundColor: primaryColor }]} onPress={() => setScanned(false)}>
+        <TouchableOpacity style={[styles.rescanButton, { backgroundColor: primaryColor, bottom: insets.bottom > 0 ? insets.bottom + 80 : 100 }]} onPress={() => setScanned(false)}>
           <Text style={styles.rescanButtonText}>{t('qr_scanner.rescan', 'مسح مرة أخرى')}</Text>
         </TouchableOpacity>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 18, fontWeight: 'bold' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, borderBottomWidth: 1 },
+  backButton: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 16, fontWeight: '800' },
   headerActions: { flexDirection: 'row', gap: 8 },
-  torchButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  torchButton: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  text: { fontSize: 16, textAlign: 'center' },
-  button: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  cameraContainer: { flex: 1, overflow: 'hidden', borderRadius: 24, margin: 20 },
+  text: { fontSize: 14, textAlign: 'center' },
+  button: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  
+  cameraContainer: { flex: 1, overflow: 'hidden', borderRadius: 20, margin: 20 },
   camera: { flex: 1 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  scanArea: { width: width * 0.7, height: width * 0.7, backgroundColor: 'transparent', position: 'relative' },
-  corner: { position: 'absolute', width: 30, height: 30, borderWidth: 3 },
+  scanArea: { width: width * 0.65, height: width * 0.65, backgroundColor: 'transparent', position: 'relative' },
+  corner: { position: 'absolute', width: 24, height: 24, borderWidth: 3 },
   cornerTopLeft: { top: 0, left: 0, borderBottomWidth: 0, borderRightWidth: 0 },
   cornerTopRight: { top: 0, right: 0, borderBottomWidth: 0, borderLeftWidth: 0 },
   cornerBottomLeft: { bottom: 0, left: 0, borderTopWidth: 0, borderRightWidth: 0 },
   cornerBottomRight: { bottom: 0, right: 0, borderTopWidth: 0, borderLeftWidth: 0 },
-  instructions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, marginHorizontal: 20, marginBottom: 20, borderRadius: 16, gap: 8 },
-  instructionsText: { fontSize: 14, textAlign: 'center' },
-  rescanButton: { position: 'absolute', bottom: 100, alignSelf: 'center', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
-  rescanButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  
+  instructions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, marginHorizontal: 20, borderRadius: 14, gap: 6 },
+  instructionsText: { fontSize: 12, textAlign: 'center', fontWeight: '600' },
+  rescanButton: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 28, paddingVertical: 14, borderRadius: 30, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  rescanButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
 });
