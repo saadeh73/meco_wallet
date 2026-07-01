@@ -116,7 +116,7 @@ export default function TokenDetailsScreen() {
       return {
         description: symbol === 'MECO' ? t('meco_description') : (token.description || ''),
         links: symbol === 'MECO' ? {
-          website:'https://monycoin.github.io/meco-token/',
+          website:'https://monycoin.github.io/meco_web/',
           twitter:'https://twitter.com/MoniCoinMECO',
           telegram:'https://t.me/monycoin1',
         } : {},
