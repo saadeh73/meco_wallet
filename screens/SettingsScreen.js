@@ -74,7 +74,7 @@ export default function SettingsScreen() {
       const result     = await LocalAuthentication.authenticateAsync({
         promptMessage:         t(compatible && enrolled ? 'authenticate_to_view' : 'authenticate_with_passcode'),
         cancelLabel:           t('cancel'),
-        disableDeviceFallback: false,
+        disableDeviceFallback: false, // يسمح برمز الهاتف كخيار احتياطي
         fallbackLabel:         t('use_device_passcode'),
       });
       if (result.success) onSuccess();
@@ -92,14 +92,22 @@ export default function SettingsScreen() {
     });
   };
 
+  // ✅ التحديث المطور: تفعيل المصادقة بمطابقة البصمة أو رمز قفل الهاتف (PIN/Passcode) معاً دون قيود
   const handleBiometrics = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled   = await LocalAuthentication.isEnrolledAsync();
-    if (compatible && enrolled) {
-      const result = await LocalAuthentication.authenticateAsync({ promptMessage:t('authenticate_to_continue'), cancelLabel:t('cancel') });
-      Alert.alert(result.success ? t('success') : t('error'), result.success ? t('authentication_successful') : t('authentication_failed'), [{ text:t('ok') }]);
-    } else {
-      Alert.alert(t('biometric_not_available'), t('biometric_not_supported_message'), [{ text:t('ok') }]);
+    try {
+      const result = await LocalAuthentication.authenticateAsync({ 
+        promptMessage: t('authenticate_to_continue'), 
+        cancelLabel: t('cancel'),
+        disableDeviceFallback: false, // استخدام رمز مرور الهاتف (PIN/Passcode) كبديل فوري وبشكل آمن
+      });
+      
+      if (result.success) {
+        Alert.alert(t('success'), t('authentication_successful'), [{ text: t('ok') }]);
+      } else {
+        Alert.alert(t('error'), t('authentication_failed'), [{ text: t('ok') }]);
+      }
+    } catch (_) {
+      Alert.alert(t('error'), t('authentication_failed'), [{ text: t('ok') }]);
     }
   };
 
@@ -327,9 +335,6 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.version}>
-          <Text style={[styles.versionTxt, { color:C.textSecondary }]}>MECO Wallet {t('version')} 1.6.0</Text>
-        </View>
       </Animated.View>
 
       {/* منتقي الألوان (Color Picker) */}
