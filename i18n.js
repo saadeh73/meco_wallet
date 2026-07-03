@@ -168,6 +168,10 @@ const resources = {
       market_last_update: "آخر تحديث",
       market_unavailable: "غير متاح",
       market_balance: "رصيد",
+      global_markets: "الأسواق العالمية",
+      global_markets_desc: "أسعار العملات الرقمية الكبرى",
+      research: "بحث",
+      not_available: "غير متوفر",
 
       // ========== إضافة رمز مخصص (Market) ==========
       add_custom_token: 'إضافة رمز مخصص',
@@ -179,7 +183,6 @@ const resources = {
       token_already_added: 'هذا الرمز مضاف بالفعل',
       token_not_found: 'لم يتم العثور على بيانات لهذا الرمز',
       invalid_contract_address: 'عنوان العقد غير صالح',
-      research: 'إعادة البحث',
       delete_token_confirm: 'هل تريد حذف {{symbol}} من القائمة؟',
 
       // ========== TokenDetailsScreen (جديد) ==========
@@ -809,6 +812,10 @@ const resources = {
       market_last_update: "Last update",
       market_unavailable: "Unavailable",
       market_balance: "Balance",
+      global_markets: "Global Markets",
+      global_markets_desc: "Major cryptocurrency prices",
+      research: "Research",
+      not_available: "N/A",
 
       // ========== Custom Token (Market) ==========
       add_custom_token: 'Add Custom Token',
@@ -820,7 +827,6 @@ const resources = {
       token_already_added: 'This token is already added',
       token_not_found: 'No data found for this token',
       invalid_contract_address: 'Invalid contract address',
-      research: 'Search Again',
       delete_token_confirm: 'Remove {{symbol}} from the list?',
 
       // ========== TokenDetailsScreen (New) ==========

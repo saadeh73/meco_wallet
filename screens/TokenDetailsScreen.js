@@ -111,7 +111,9 @@ export default function TokenDetailsScreen() {
   };
 
   const fetchCoinMeta = async (symbol) => {
-    const coinId = COINGECKO_IDS[symbol];
+    // العملات الخارجية (isExternal) بتجيب coingeckoId جاهز من MarketScreen عبر التنقل،
+    // فبنفضّله على الخريطة المحلية اللي مقتصرة على عملات سولانا فقط
+    const coinId = token.coingeckoId || COINGECKO_IDS[symbol];
     if (!coinId) {
       return {
         description: symbol === 'MECO' ? t('meco_description') : (token.description || ''),
@@ -161,7 +163,7 @@ export default function TokenDetailsScreen() {
     if (!isRefresh) setLoading(true);
     try {
       const [chartResult, meta] = await Promise.all([
-        getFullChartData(token.symbol, tf.days, token.mint),
+        getFullChartData(token.symbol, tf.days, token.mint, token.coingeckoId),
         fetchCoinMeta(token.symbol),
       ]);
       setMetadata(meta);
@@ -211,9 +213,9 @@ export default function TokenDetailsScreen() {
   }, [timeframe]);
 
   const copy    = async () => {
-    if (token.mint) { await Clipboard.setStringAsync(token.mint); Alert.alert(t('success'), t('copied_to_clipboard')); }
+    if (token.mint && !token.isExternal) { await Clipboard.setStringAsync(token.mint); Alert.alert(t('success'), t('copied_to_clipboard')); }
   };
-  const openExp = () => { if (token.mint) Linking.openURL(`https://solscan.io/token/${token.mint}`); };
+  const openExp = () => { if (token.mint && !token.isExternal) Linking.openURL(`https://solscan.io/token/${token.mint}`); };
   const openUrl = (url) => { if (url) Linking.openURL(url); };
 
   const fmtBig = (n) => {
@@ -272,10 +274,12 @@ export default function TokenDetailsScreen() {
                 color={watchlist.includes(token.symbol) ? '#FFB800' : C.text}
               />
             </TouchableOpacity>
-            <TouchableOpacity onPress={copy}
-              style={[S.iconBtn, { backgroundColor:C.card, borderColor:C.border }]}>
-              <Ionicons name="copy-outline" size={18} color={C.text} />
-            </TouchableOpacity>
+            {!token.isExternal && (
+              <TouchableOpacity onPress={copy}
+                style={[S.iconBtn, { backgroundColor:C.card, borderColor:C.border }]}>
+                <Ionicons name="copy-outline" size={18} color={C.text} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -304,37 +308,39 @@ export default function TokenDetailsScreen() {
           )}
         </View>
 
-        {/* ── أزرار العمليات ── */}
-        <View style={S.actions}>
-          {/* إرسال */}
-          <TouchableOpacity
-            style={[S.actionBtn, { backgroundColor:C.primary }]}
-            onPress={() => navigation.navigate('Send', { preselectedToken:token.symbol })}
-          >
-            <Ionicons name="send" size={15} color="#FFF" />
-            <Text style={S.actionTxt}>{t('send')}</Text>
-          </TouchableOpacity>
-
-          {/* ✅ شراء — يفتح شاشة التداول بدلاً من Swap */}
-          {token.swapAvailable !== false && (
+        {/* ── أزرار العمليات (غير معروضة للعملات الخارجية — عرض بصري فقط) ── */}
+        {!token.isExternal && (
+          <View style={S.actions}>
+            {/* إرسال */}
             <TouchableOpacity
-              style={[S.actionBtn, { backgroundColor:C.success }]}
-              onPress={() => navigation.navigate('Trading', { token })}
+              style={[S.actionBtn, { backgroundColor:C.primary }]}
+              onPress={() => navigation.navigate('Send', { preselectedToken:token.symbol })}
             >
-              <Ionicons name="trending-up" size={15} color="#FFF" />
-              <Text style={S.actionTxt}>{t('buy', 'شراء')}</Text>
+              <Ionicons name="send" size={15} color="#FFF" />
+              <Text style={S.actionTxt}>{t('send')}</Text>
             </TouchableOpacity>
-          )}
 
-          {/* مستكشف */}
-          <TouchableOpacity
-            style={[S.actionBtn, { backgroundColor: isDark?'#171730':'#ECECF4', borderColor:C.border, borderWidth:1 }]}
-            onPress={openExp}
-          >
-            <Ionicons name="bar-chart-outline" size={15} color={C.text} />
-            <Text style={[S.actionTxt, { color:C.text }]}>{t('explorer')}</Text>
-          </TouchableOpacity>
-        </View>
+            {/* ✅ شراء — يفتح شاشة التداول بدلاً من Swap */}
+            {token.swapAvailable !== false && (
+              <TouchableOpacity
+                style={[S.actionBtn, { backgroundColor:C.success }]}
+                onPress={() => navigation.navigate('Trading', { token })}
+              >
+                <Ionicons name="trending-up" size={15} color="#FFF" />
+                <Text style={S.actionTxt}>{t('buy', 'شراء')}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* مستكشف */}
+            <TouchableOpacity
+              style={[S.actionBtn, { backgroundColor: isDark?'#171730':'#ECECF4', borderColor:C.border, borderWidth:1 }]}
+              onPress={openExp}
+            >
+              <Ionicons name="bar-chart-outline" size={15} color={C.text} />
+              <Text style={[S.actionTxt, { color:C.text }]}>{t('explorer')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── التبويب الزمني ── */}
         <View style={[S.card, { backgroundColor:C.card, borderColor:C.border, padding:12 }]}>
@@ -467,16 +473,18 @@ export default function TokenDetailsScreen() {
                   <Text style={[S.linkTxt, { color:C.text }]}>{l.label}</Text>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity style={[S.linkBtn, { backgroundColor:C.bg, borderColor:C.border }]} onPress={openExp}>
-                <Ionicons name="bar-chart-outline" size={14} color={C.primary} />
-                <Text style={[S.linkTxt, { color:C.text }]}>Solscan</Text>
-              </TouchableOpacity>
+              {!token.isExternal && (
+                <TouchableOpacity style={[S.linkBtn, { backgroundColor:C.bg, borderColor:C.border }]} onPress={openExp}>
+                  <Ionicons name="bar-chart-outline" size={14} color={C.primary} />
+                  <Text style={[S.linkTxt, { color:C.text }]}>Solscan</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
 
-        {/* ── عنوان العقد ── */}
-        {token.mint && (
+        {/* ── عنوان العقد (غير معروض للعملات الخارجية) ── */}
+        {token.mint && !token.isExternal && (
           <View style={[S.card, { backgroundColor:C.card, borderColor:C.border }]}>
             <Text style={[S.mintLabel, { color:C.muted }]}>{t('contract_address')}</Text>
             <View style={S.mintRow}>

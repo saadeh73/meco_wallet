@@ -72,10 +72,12 @@ async function buildOHLCFromDexScreener(symbol, mint, days) {
 }
 
 // ─── getOHLCData — موحد لكل العملات ──────────────────────────────────────────
-export async function getOHLCData(symbol, days = 7, mintOverride = null) {
+export async function getOHLCData(symbol, days = 7, mintOverride = null, coinIdOverride = null) {
   if (NO_CHART.has(symbol)) return empty(symbol, days);
 
-  const coinId = COINGECKO_IDS[symbol];
+  // العملات الخارجية (BTC/ETH/...) بتبعت coingeckoId جاهز من الشاشة، فبنفضّله
+  // على الخريطة المحلية اللي مقتصرة على عملات سولانا فقط
+  const coinId = coinIdOverride || COINGECKO_IDS[symbol];
 
   // بدون CoinGecko ID → DexScreener (MECO والرموز المخصصة)
   if (!coinId) {
@@ -120,13 +122,14 @@ export async function getOHLCData(symbol, days = 7, mintOverride = null) {
   }
 }
 
-export async function getVolumeData(symbol, days = 7) {
-  if (NO_CHART.has(symbol) || !COINGECKO_IDS[symbol]) return [];
+export async function getVolumeData(symbol, days = 7, coinIdOverride = null) {
+  const coinId = coinIdOverride || COINGECKO_IDS[symbol];
+  if (NO_CHART.has(symbol) || !coinId) return [];
   const key = `vol_${symbol}_${days}`;
   const now = Date.now();
   if (CACHE[key] && now - CACHE[key].ts < CACHE_DURATION) return CACHE[key].data;
   try {
-    const res = await fetchWT(`${COINGECKO_API}/coins/${COINGECKO_IDS[symbol]}/market_chart?vs_currency=usd&days=${days}&interval=daily`);
+    const res = await fetchWT(`${COINGECKO_API}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}&interval=daily`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     if (!Array.isArray(body?.total_volumes)) throw new Error('No volume');
@@ -136,10 +139,10 @@ export async function getVolumeData(symbol, days = 7) {
   } catch (_) { return []; }
 }
 
-export async function getFullChartData(symbol, days = 7, mintOverride = null) {
+export async function getFullChartData(symbol, days = 7, mintOverride = null, coinIdOverride = null) {
   const [ohlc, vol] = await Promise.all([
-    getOHLCData(symbol, days, mintOverride),
-    getVolumeData(symbol, days),
+    getOHLCData(symbol, days, mintOverride, coinIdOverride),
+    getVolumeData(symbol, days, coinIdOverride),
   ]);
   return { ...ohlc, volumeData: vol };
 }
