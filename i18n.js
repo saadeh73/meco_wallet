@@ -39,7 +39,9 @@ const resources = {
         plan_60d: "60 يوم",
         plan_60d_duration: "قفل شهرين",
         amount_label: "الكمية (MECO)",
-        max: "الحد الأقصى"
+        max: "الحد الأقصى",
+        platform_fee_notice: "رسوم المنصة: {{fee}} SOL{{feeUsd}} بالإضافة إلى رسوم شبكة سولانا",
+        platform_fee_label: "رسوم المنصة"
       },
 
       // ========== مفاتيح الشاشات الأساسية ==========
@@ -317,6 +319,9 @@ const resources = {
         title: "إرسال",
         subtitle: "تحويل إلى محفظة أخرى",
         sendingFrom: "الإرسال من",
+        confirm_title: "تأكيد عملية الإرسال",
+        confirm_message: "سيتم إرسال {{amount}} {{symbol}} إلى {{recipient}}\n\nإجمالي الرسوم: {{totalFee}} SOL{{feeUsd}}\n(رسوم شبكة سولانا + رسوم منصة ثابتة قدرها {{platformFee}} SOL)",
+        total_fees_label: "إجمالي الرسوم",
         balance: {
           available: "الرصيد المتاح",
           solForFees: "رصيد SOL للرسوم:"
@@ -427,6 +432,7 @@ const resources = {
       swap_balance: "الرصيد المتاح",
       swap_loading_quote: "جاري البحث عن أفضل سعر...",
       swap_receive: "ستستلم تقريباً",
+      swap_platform_fee_notice: "رسوم المنصة: {{fee}} SOL{{feeUsd}} + رسوم شبكة سولانا",
 
       // ========== TradingScreen (جديد) ==========
       trading: 'تداول',
@@ -456,6 +462,8 @@ const resources = {
       trade_success: 'تمت العملية بنجاح',
       trade_failed: 'فشلت العملية',
       amount_in: 'المبلغ بـ',
+      platform_fee_notice: 'سيتم خصم رسوم منصة ثابتة قدرها {{sol}} SOL{{usd}} بالإضافة إلى رسوم شبكة سولانا القياسية.',
+      platform_fee_label: 'رسوم المنصة',
 
       // ========== TransactionHistoryScreen ==========
       all: 'الكل',
@@ -683,7 +691,9 @@ const resources = {
         plan_60d: "60 Days",
         plan_60d_duration: "2 Months Lock",
         amount_label: "Amount (MECO)",
-        max: "Max"
+        max: "Max",
+        platform_fee_notice: "Platform fee: {{fee}} SOL{{feeUsd}}, in addition to the Solana network fee",
+        platform_fee_label: "Platform Fee"
       },
 
       // ========== Basic Screen Keys ==========
@@ -961,6 +971,9 @@ const resources = {
         title: "Send",
         subtitle: "Transfer to another wallet",
         sendingFrom: "Sending from",
+        confirm_title: "Confirm Send",
+        confirm_message: "You are about to send {{amount}} {{symbol}} to {{recipient}}\n\nTotal fees: {{totalFee}} SOL{{feeUsd}}\n(Solana network fee + fixed platform fee of {{platformFee}} SOL)",
+        total_fees_label: "Total Fees",
         balance: {
           available: "Available Balance",
           solForFees: "SOL Balance for Fees:"
@@ -1071,6 +1084,7 @@ const resources = {
       swap_balance: "Available Balance",
       swap_loading_quote: "Finding the best price...",
       swap_receive: "You will roughly receive",
+      swap_platform_fee_notice: "Platform fee: {{fee}} SOL{{feeUsd}} + Solana network fee",
 
       // ========== TradingScreen (New) ==========
       trading: 'Trading',
@@ -1100,6 +1114,8 @@ const resources = {
       trade_success: 'Trade executed successfully',
       trade_failed: 'Trade failed',
       amount_in: 'Amount in',
+      platform_fee_notice: 'A fixed platform fee of {{sol}} SOL{{usd}} will be deducted, in addition to the standard Solana network fee.',
+      platform_fee_label: 'Platform Fee',
 
       // ========== TransactionHistoryScreen ==========
       all: 'All',

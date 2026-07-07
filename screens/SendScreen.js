@@ -20,7 +20,7 @@ import * as web3 from '@solana/web3.js';
 import bs58 from 'bs58';
 import * as splToken from '@solana/spl-token';
 import * as Clipboard from 'expo-clipboard';
-import { CORE_TOKENS } from '../services/jupiterMarketService';
+import { CORE_TOKENS, getSolPriceUsd } from '../services/jupiterMarketService';
 
 const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
 const SERVICE_FEE_SOL       = 0.0005;
@@ -80,6 +80,7 @@ export default function SendScreen() {
     loading:                  false,
     loadingTokens:            false,
     networkFee:               0.000005,
+    solPriceUsd:               0,
     recipientExists:          null,
     recipientHasTokenAccount: true,
   });
@@ -101,6 +102,7 @@ export default function SendScreen() {
       if (activeAccount?.publicKey) {
         loadInitialBalance();
         updateNetworkFee();
+        updateSolPrice();
         loadAddressBook();
       }
       return () => {
@@ -134,6 +136,13 @@ export default function SendScreen() {
       if (!isMounted.current) return;
       const fee = await getCurrentNetworkFee();
       setState(prev => ({ ...prev, networkFee: fee || 0.000005 }));
+    } catch (_) {}
+  }, []);
+
+  const updateSolPrice = useCallback(async () => {
+    try {
+      const price = await getSolPriceUsd();
+      if (isMounted.current) setState(prev => ({ ...prev, solPriceUsd: price || 0 }));
     } catch (_) {}
   }, []);
 
@@ -256,14 +265,37 @@ export default function SendScreen() {
       );
     }
 
-    setState(prev => ({ ...prev, loading: true }));
-    try {
-      await executeTransaction(amountNum, recipient, currentToken);
-    } catch (error) {
-      if (!error.handled) Alert.alert(t('error'), error.message || t('sendScreen.alerts.sendFailed'));
-    } finally {
-      if (isMounted.current) setState(prev => ({ ...prev, loading: false }));
-    }
+    const feeUsdText = state.solPriceUsd > 0 ? ` (≈ $${(totalFees * state.solPriceUsd).toFixed(2)})` : '';
+    const recipientShort = `${recipient.slice(0, 6)}...${recipient.slice(-4)}`;
+
+    Alert.alert(
+      t('sendScreen.confirm_title', { defaultValue: 'تأكيد عملية الإرسال' }),
+      t('sendScreen.confirm_message', {
+        amount:      amountNum,
+        symbol:      currentToken.symbol,
+        recipient:   recipientShort,
+        totalFee:    totalFees.toFixed(5),
+        feeUsd:      feeUsdText,
+        platformFee: SERVICE_FEE_SOL,
+        defaultValue: `سيتم إرسال {{amount}} {{symbol}} إلى {{recipient}}\n\nإجمالي الرسوم: {{totalFee}} SOL{{feeUsd}}\n(رسوم شبكة سولانا + رسوم منصة ثابتة قدرها {{platformFee}} SOL)`,
+      }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('confirm'),
+          onPress: async () => {
+            setState(prev => ({ ...prev, loading: true }));
+            try {
+              await executeTransaction(amountNum, recipient, currentToken);
+            } catch (error) {
+              if (!error.handled) Alert.alert(t('error'), error.message || t('sendScreen.alerts.sendFailed'));
+            } finally {
+              if (isMounted.current) setState(prev => ({ ...prev, loading: false }));
+            }
+          },
+        },
+      ]
+    );
   }, [state, currentBalance, balances.sol, totalFees, currentToken, t, activeAccount]);
 
   const executeTransaction = useCallback(async (amount, recipient, token) => {
@@ -448,6 +480,10 @@ export default function SendScreen() {
             {/* الرصيد المتاح يظهر بدقة تحت حقل المبلغ مباشرة */}
             <Text style={[styles.balanceHintText, { color: colors.textSecondary }]}>
               {t('sendScreen.balance.available')}: {currentBalance.toFixed(6)} {state.currency}
+            </Text>
+            <Text style={[styles.balanceHintText, { color: colors.textSecondary }]}>
+              {t('sendScreen.total_fees_label', { defaultValue: 'إجمالي الرسوم' })}: {totalFees.toFixed(5)} SOL
+              {state.solPriceUsd > 0 ? ` (≈ $${(totalFees * state.solPriceUsd).toFixed(2)})` : ''}
             </Text>
           </View>
 

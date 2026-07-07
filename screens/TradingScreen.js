@@ -38,6 +38,12 @@ const QUOTE_TOKENS = [
   { symbol:'SOL',  mint:'So11111111111111111111111111111111111111112',   decimals:9, image:'https://assets.coingecko.com/coins/images/4128/large/solana.png'  },
 ];
 
+// ✅ رسوم المنصة الثابتة لكل عملية تنفيذ (بالإضافة لرسوم شبكة سولانا القياسية)
+// ملاحظة: هذا الرقم يجب أن ينتقل لاحقًا لملف constants.js المشترك، لأن نفس
+// الرسم مطبّق كمان في Send وSwap وStaking — تكراره في 4 ملفات منفصلة يعرّضنا
+// لنفس مشكلة تضارب البيانات اللي واجهناها قبل كده مع عنوان MECO
+const PLATFORM_FEE_SOL = 0.0005;
+
 // دمج لون كروت التداول الخلفي لتنسيق شمعات الرسم البياني بشكل مدمج
 const buildChartHtml = (isDark, accent) => `
 <!DOCTYPE html><html><head>
@@ -263,10 +269,11 @@ export default function TradingScreen() {
 
     const typeLabel = orderType==='market' ? t('market_order') : t('limit_order');
     const priceInfo = orderType==='limit'  ? `\n${t('at_price')}: ${limitPrice} ${quoteToken.symbol}` : '';
+    const feeNotice = `\n\n${getFeeNotice()}`;
 
     Alert.alert(
       `${typeLabel} — ${orderSide==='buy'?t('buy'):t('sell')}`,
-      `${amt} ${inputToken.symbol} → ${outputToken.symbol}${priceInfo}`,
+      `${amt} ${inputToken.symbol} → ${outputToken.symbol}${priceInfo}${feeNotice}`,
       [
         { text: t('cancel'), style: 'cancel' },
         {
@@ -307,7 +314,7 @@ export default function TradingScreen() {
                   if (limitErr.message === 'limit_order_unavailable') {
                     Alert.alert(
                       t('limit_order','أمر محدد'),
-                      t('limit_order_unavailable_msg','خدمة الأوامر المحددة غير متاحة حالياً. هل تريد التنفيذ بسعر السوق الحالي؟'),
+                      `${t('limit_order_unavailable_msg','خدمة الأوامر المحددة غير متاحة حالياً. هل تريد التنفيذ بسعر السوق الحالي؟')}\n\n${getFeeNotice()}`,
                       [
                         { text: t('cancel'), style: 'cancel' },
                         {
@@ -385,6 +392,28 @@ export default function TradingScreen() {
     const lp  = orderType==='limit'&&limitPrice ? parseFloat(limitPrice) : priceStats.current;
     if (!lp) return '0';
     return orderSide==='buy' ? (amt/lp).toFixed(6) : (amt*lp).toFixed(4);
+  };
+
+  // ✅ رسوم المنصة — نحسب القيمة بالدولار حيًا من سعر SOL الحالي بدل رقم دولار
+  // ثابت هيتقادم مع تغيّر السعر (نفس درس الأسعار الجامدة)
+  const getSolPrice = () => tokens.find(tk => tk.symbol === 'SOL')?.current_price || 0;
+
+  // نسخة قصيرة تصلح لسطر ملخص دائم فوق زر التنفيذ
+  const getFeeAmountShort = () => {
+    const solPrice = getSolPrice();
+    return solPrice > 0
+      ? `${PLATFORM_FEE_SOL} SOL (≈ $${(PLATFORM_FEE_SOL * solPrice).toFixed(2)})`
+      : `${PLATFORM_FEE_SOL} SOL`;
+  };
+
+  // نسخة كاملة كجملة توضيحية لرسائل التأكيد قبل التنفيذ
+  const getFeeNotice = () => {
+    const solPrice = getSolPrice();
+    if (solPrice > 0) {
+      const usd = (PLATFORM_FEE_SOL * solPrice).toFixed(2);
+      return t('platform_fee_notice', { sol: PLATFORM_FEE_SOL, usd, defaultValue: `سيتم خصم رسوم منصة ثابتة قدرها {{sol}} SOL (≈ ${{usd}}) بالإضافة إلى رسوم شبكة سولانا القياسية.` });
+    }
+    return t('platform_fee_notice_no_usd', { sol: PLATFORM_FEE_SOL, defaultValue: `سيتم خصم رسوم منصة ثابتة قدرها {{sol}} SOL بالإضافة إلى رسوم شبكة سولانا القياسية.` });
   };
 
   return (
@@ -557,6 +586,11 @@ export default function TradingScreen() {
           <View style={[S.estimateRow,{borderColor:C.border}]}>
             <Text style={[S.estimateL,{color:C.muted}]}>{t('you_receive')} ≈</Text>
             <Text style={[S.estimateV,{color:C.text}]}>{estimatedTotal()} {orderSide==='buy'?selectedToken.symbol:quoteToken.symbol}</Text>
+          </View>
+
+          <View style={[S.estimateRow,{borderColor:C.border, marginBottom: 12}]}>
+            <Text style={[S.estimateL,{color:C.muted}]}>{t('platform_fee_label', { defaultValue: 'رسوم المنصة' })}</Text>
+            <Text style={[S.estimateV,{color:C.muted, fontSize:12}]}>{getFeeAmountShort()}</Text>
           </View>
 
           <View style={S.quickRow}>

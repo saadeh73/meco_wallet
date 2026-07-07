@@ -13,13 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ✅ اس�
 import * as Clipboard from 'expo-clipboard';
 import * as SwapAPI from '../services/swapService';
 import NetInfo from '@react-native-community/netinfo';
-import { CORE_TOKENS } from '../services/jupiterMarketService';
+import { CORE_TOKENS, getSolPriceUsd } from '../services/jupiterMarketService';
 import { getSolBalance, getTokenBalance } from '../services/heliusService';
 
 const { height, width } = Dimensions.get('window');
 
 // ── ثوابت ──────────────────────────────────────────────────────────────────
-const SOL_FEE_RESERVE = 0.001; // الحد الأدنى لرسوم الشبكة
+const SOL_FEE_RESERVE  = 0.001;  // الحد الأدنى لرسوم الشبكة
+const PLATFORM_FEE_SOL = 0.0005; // رسوم المنصة الثابتة — نفس القيمة المطبّقة في Send/Staking/Trading
 
 const ERROR_TYPE = {
   NETWORK: 'network',
@@ -70,6 +71,7 @@ export default function SwapScreen() {
   const [errorMsg,         setErrorMsg]         = useState('');
   const [errorType,        setErrorType]        = useState(ERROR_TYPE.NONE);
   const [isOffline,        setIsOffline]        = useState(false);
+  const [solPriceUsd,      setSolPriceUsd]      = useState(0);
 
   // ── Colours ───────────────────────────────────────────────────────────────
   const colors = {
@@ -96,6 +98,11 @@ export default function SwapScreen() {
   useEffect(() => {
     const unsub = NetInfo.addEventListener(state => setIsOffline(!state.isConnected));
     return () => unsub();
+  }, []);
+
+  // ── سعر SOL لعرض القيمة التقديرية بالدولار لرسوم المنصة ──────────────────
+  useEffect(() => {
+    getSolPriceUsd().then(p => setSolPriceUsd(p || 0)).catch(() => {});
   }, []);
 
   // ── Load balances on focus (مع cache) ────────────────────────────────────
@@ -219,9 +226,16 @@ export default function SwapScreen() {
     const isMecoInvolved = fromToken.symbol === 'MECO' || toToken.symbol === 'MECO';
     const slippageBps    = isMecoInvolved ? 300 : 100;
 
+    const feeUsdText = solPriceUsd > 0 ? ` (≈ $${(PLATFORM_FEE_SOL * solPriceUsd).toFixed(2)})` : '';
+    const feeNotice = t('swap_platform_fee_notice', {
+      fee: PLATFORM_FEE_SOL,
+      feeUsd: feeUsdText,
+      defaultValue: `رسوم المنصة: {{fee}} SOL{{feeUsd}} + رسوم شبكة سولانا`,
+    });
+
     Alert.alert(
       t('swap_confirm'),
-      `${t('swap_from')}: ${fromAmount} ${fromToken.symbol}\n${t('swap_to')}: ${parseFloat(toAmount).toFixed(6)} ${toToken.symbol}\n${t('swap_rate')}: 1 ${fromToken.symbol} = ${rate?.toFixed(6)} ${toToken.symbol}`,
+      `${t('swap_from')}: ${fromAmount} ${fromToken.symbol}\n${t('swap_to')}: ${parseFloat(toAmount).toFixed(6)} ${toToken.symbol}\n${t('swap_rate')}: 1 ${fromToken.symbol} = ${rate?.toFixed(6)} ${toToken.symbol}\n\n${feeNotice}`,
       [
         { text: t('cancel'), style: 'cancel' },
         {
@@ -519,6 +533,16 @@ export default function SwapScreen() {
                   </Text>
                 </View>
               )}
+
+              <View style={styles.rateRow}>
+                <View style={styles.rateLabelWrapper}>
+                  <Ionicons name="receipt-outline" size={14} color={colors.textSecondary} />
+                  <Text style={[styles.rateLabel, { color: colors.textSecondary }]}>{t('platform_fee_label', { defaultValue: 'رسوم المنصة' })}</Text>
+                </View>
+                <Text style={[styles.rateValue, { color: colors.text }]}>
+                  {PLATFORM_FEE_SOL} SOL{solPriceUsd > 0 ? ` (≈ $${(PLATFORM_FEE_SOL * solPriceUsd).toFixed(2)})` : ''}
+                </Text>
+              </View>
 
               <View style={[styles.rateRow, { marginBottom: 0, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }]}>
                 <View style={styles.rateLabelWrapper}>

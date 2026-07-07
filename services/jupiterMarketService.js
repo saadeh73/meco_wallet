@@ -83,6 +83,19 @@ const fetchJupiterPrices = async (mints) => {
   return result;
 };
 
+// ─── سعر SOL فقط بالدولار ─────────────────────────────────────────────────────
+// دالة خفيفة تُستخدم في شاشات Send/Swap/Staking لعرض القيمة التقديرية بالدولار
+// لرسوم المنصة الثابتة (0.0005 SOL)، بدون الحاجة لجلب بيانات السوق كاملة
+export async function getSolPriceUsd() {
+  const SOL_MINT = 'So11111111111111111111111111111111111111112';
+  try {
+    const map = await fetchJupiterPrices([SOL_MINT]);
+    return map.get(SOL_MINT.toLowerCase())?.price || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 // ─── الدالة الرئيسية ──────────────────────────────────────────────────────────
 export async function getJupiterMarketData() {
   try {

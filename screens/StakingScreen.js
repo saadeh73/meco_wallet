@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { checkBalance } from '../services/swapService';
 import { stakeMeco, unstakeMeco, getUserStakingData } from '../services/stakingService';
+import { getSolPriceUsd } from '../services/jupiterMarketService';
 
 const STAKING_PLANS = [
   { id: 'flex', nameKey: 'plan_flex', apy: 15, durationKey: 'plan_flex_duration' },
@@ -18,6 +19,8 @@ const STAKING_PLANS = [
 ];
 
 const STAKING_TREASURY_ADDRESS = 'FoNBts4U25jm1YbZ3siT5hHzCmfuvrkzsRRJ4MWQkMQs';
+// رسوم المنصة الثابتة — نفس القيمة المطبّقة في Send/Swap/Trading
+const PLATFORM_FEE_SOL = 0.0005;
 
 export default function StakingScreen() {
   const navigation   = useNavigation();
@@ -51,6 +54,11 @@ export default function StakingScreen() {
   const [amount,       setAmount]       = useState('');
   const [loading,      setLoading]      = useState(false);
   const [stakingData,  setStakingData]  = useState({ stakedAmount: 0, pendingRewards: 0 });
+  const [solPriceUsd,  setSolPriceUsd]  = useState(0);
+
+  useEffect(() => {
+    getSolPriceUsd().then(p => setSolPriceUsd(p || 0)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     isMounted.current = true;
@@ -80,6 +88,15 @@ export default function StakingScreen() {
     } catch (_) { console.warn('Failed to load staking data'); }
   };
 
+  const getFeeNotice = () => {
+    const feeUsdText = solPriceUsd > 0 ? ` (≈ $${(PLATFORM_FEE_SOL * solPriceUsd).toFixed(2)})` : '';
+    return t('staking.platform_fee_notice', {
+      fee: PLATFORM_FEE_SOL,
+      feeUsd: feeUsdText,
+      defaultValue: `رسوم المنصة: {{fee}} SOL{{feeUsd}} بالإضافة إلى رسوم شبكة سولانا`,
+    });
+  };
+
   const handleStake = async () => {
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) return Alert.alert(t('staking.error'), t('staking.enter_valid_amount'));
@@ -87,7 +104,7 @@ export default function StakingScreen() {
 
     Alert.alert(
       t('staking.confirm_stake'),
-      t('staking.stake_confirmation_message', { val, planName: t(`staking.${selectedPlan.nameKey}`) }),
+      `${t('staking.stake_confirmation_message', { val, planName: t(`staking.${selectedPlan.nameKey}`) })}\n\n${getFeeNotice()}`,
       [
         { text: t('staking.cancel'), style: 'cancel' },
         { text: t('staking.confirm'), onPress: async () => {
@@ -125,7 +142,7 @@ export default function StakingScreen() {
 
     Alert.alert(
       t('staking.request_unstake'),
-      t('staking.unstake_confirmation_message', { val }),
+      `${t('staking.unstake_confirmation_message', { val })}\n\n${getFeeNotice()}`,
       [
         { text: t('staking.cancel'), style: 'cancel' },
         { text: t('staking.confirm'), onPress: async () => {
@@ -247,6 +264,10 @@ export default function StakingScreen() {
               <TextInput style={[styles.input, { color: colors.text }]} placeholder="0.00" placeholderTextColor={colors.textSecondary} keyboardType="numeric" value={amount} onChangeText={setAmount} />
               <Text style={[styles.currencyLabel, { color: colors.text }]}>MECO</Text>
             </View>
+            <Text style={[styles.feeHintText, { color: colors.textSecondary }]}>
+              {t('staking.platform_fee_label', { defaultValue: 'رسوم المنصة' })}: {PLATFORM_FEE_SOL} SOL
+              {solPriceUsd > 0 ? ` (≈ $${(PLATFORM_FEE_SOL * solPriceUsd).toFixed(2)})` : ''}
+            </Text>
           </View>
 
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: primaryColor, opacity: loading ? 0.7 : 1 }]} onPress={activeTab === 'stake' ? handleStake : handleUnstake} disabled={loading}>
@@ -294,6 +315,7 @@ const styles = StyleSheet.create({
   inputContainer:           { marginBottom: 24 },
   inputHeader:              { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   inputLabel:               { fontSize: 14 },
+  feeHintText:              { fontSize: 11, marginTop: 8, fontWeight: '600' },
   maxText:                  { fontSize: 14, fontWeight: 'bold' },
   inputBox:                 { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingHorizontal: 16 },
   input:                    { flex: 1, height: 56, fontSize: 18 },
