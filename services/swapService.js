@@ -47,21 +47,18 @@ export const TOKEN_DECIMALS = {
 };
 
 // ─── ثوابت ────────────────────────────────────────────────────────────────────
-const FEE_COLLECTOR_ADDRESS  = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
-const SERVICE_FEE_SOL        = 0.0005;
-const JUPITER_QUOTE_API      = 'https://quote-api.jup.ag/v6/quote';
-const JUPITER_SWAP_API       = 'https://quote-api.jup.ag/v6/swap';
-const JUPITER_LITE_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
-const JUPITER_LITE_SWAP_API  = 'https://lite-api.jup.ag/swap/v1/swap';
-const JUPITER_API_KEY        = 'jup_c50a1fd6f89facc37df71bf8bb1dbc83ad49e3ce896d33fc171291d11e28efd2';
+const FEE_COLLECTOR_ADDRESS = 'BkaJsFAJKPQZgreBFLrY2pPUi44fTJzXhmeBc8LeuF5W';
+const SERVICE_FEE_SOL       = 0.0005;
+// ✅ lite-api.jup.ag هو المسار الموثّق حاليًا من Jupiter بعد ترحيل منصة
+// المطورين (نفس المسار المستخدم أصلاً لخدمة الأسعار في التطبيق) — مجاني
+// وبدون مفتاح API، فلا يوجد سر يمكن تسريبه ولا خطر تعطّل بسبب إلغاء مفتاح.
+// quote-api.jup.ag/v6 القديم وأي مفتاح مُستخرَج من الموقع العام أُزيلا بالكامل.
+const JUPITER_QUOTE_API = 'https://lite-api.jup.ag/swap/v1/quote';
+const JUPITER_SWAP_API  = 'https://lite-api.jup.ag/swap/v1/swap';
 
-const BROWSER_HEADERS = {
+const API_HEADERS = {
   'Accept':       'application/json',
   'Content-Type': 'application/json',
-  'User-Agent':   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  'Origin':       'https://jup.ag',
-  'Referer':      'https://jup.ag/',
-  'x-api-key':    JUPITER_API_KEY,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -103,72 +100,69 @@ async function getConnection() {
   }
 }
 
+// ✅ يتحقق من حالة توقيع معاملة فعليًا على الشبكة — منفصل عن confirmTransaction
+// المحلي الذي قد يفشل أو يتوقف بسبب تايم آوت حتى لو المعاملة نجحت بالفعل
+async function checkSignatureConfirmed(connection, signature) {
+  try {
+    const { value } = await connection.getSignatureStatuses([signature]);
+    const status = value?.[0];
+    if (!status) return null;      // لا يوجد أثر للمعاملة على الشبكة إطلاقًا
+    if (status.err) return false;  // فشلت فعليًا على الشبكة
+    if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') return true;
+    return null;                    // لسه غير مؤكدة (pending)
+  } catch (_) {
+    return null;
+  }
+}
+
 // ─── getSwapQuote ─────────────────────────────────────────────────────────────
 export async function getSwapQuote(inputMint, outputMint, amount, slippageBps = 100) {
   if (!inputMint || !outputMint) throw new Error('عملة غير مدعومة في التبادل');
 
   const isMeco      = inputMint === TOKEN_MINTS.MECO || outputMint === TOKEN_MINTS.MECO;
   const extraParams = isMeco ? '&onlyDirectRoutes=false' : '';
+  const url = `${JUPITER_QUOTE_API}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}${extraParams}`;
 
-  const endpoints = [
-    { name: 'Main V6',  url: JUPITER_QUOTE_API      },
-    { name: 'Lite API', url: JUPITER_LITE_QUOTE_API },
-  ];
-
-  let lastError;
-  for (const ep of endpoints) {
-    const url = `${ep.url}?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}${extraParams}`;
-    console.log(`🔍 [Quote] محاولة ${ep.name}...`);
-    try {
-      const res = await fetchWithTimeout(url, { method: 'GET', headers: BROWSER_HEADERS }, 15000);
-      if (!res.ok) throw new Error(await res.text());
-      const quote = await res.json();
-      if (!quote?.routePlan) throw new Error('لا يوجد مسار للتبادل (السيولة قد تكون ضعيفة)');
-      console.log(`✅ [Quote] نجح عبر ${ep.name}`);
-      return quote;
-    } catch (err) {
-      console.warn(`❌ [Quote] ${ep.name} فشل:`, err.message);
-      lastError = err;
-    }
+  try {
+    console.log('🔍 [Quote] جاري الطلب من lite-api...');
+    const res = await fetchWithTimeout(url, { method: 'GET', headers: API_HEADERS }, 15000);
+    if (!res.ok) throw new Error(await res.text());
+    const quote = await res.json();
+    if (!quote?.routePlan) throw new Error('لا يوجد مسار للتبادل (السيولة قد تكون ضعيفة)');
+    console.log('✅ [Quote] نجح');
+    return quote;
+  } catch (err) {
+    console.warn('❌ [Quote] فشل:', err.message);
+    throw new Error(`تعذر الحصول على سعر التبادل. ${err.message || ''}`);
   }
-  throw new Error(`تعذر الحصول على سعر التبادل. ${lastError?.message || ''}`);
 }
 
 // ─── buildSwapTransaction (Versioned) ────────────────────────────────────────
 export async function buildSwapTransaction(quote, userPublicKey) {
-  const endpoints = [
-    { name: 'Main V6',  url: JUPITER_SWAP_API      },
-    { name: 'Lite API', url: JUPITER_LITE_SWAP_API },
-  ];
+  try {
+    console.log('🛠️ [Build] جاري بناء المعاملة عبر lite-api...');
+    const res = await fetchWithTimeout(JUPITER_SWAP_API, {
+      method:  'POST',
+      headers: API_HEADERS,
+      body:    JSON.stringify({
+        quoteResponse:             quote,
+        userPublicKey:             userPublicKey.toString(),
+        wrapAndUnwrapSol:          true,
+        dynamicComputeUnitLimit:   true,
+        prioritizationFeeLamports: 'auto',
+        asLegacyTransaction:       false,
+      }),
+    }, 20000);
 
-  let lastError;
-  for (const ep of endpoints) {
-    try {
-      console.log(`🛠️ [Build] محاولة ${ep.name}...`);
-      const res = await fetchWithTimeout(ep.url, {
-        method:  'POST',
-        headers: BROWSER_HEADERS,
-        body:    JSON.stringify({
-          quoteResponse:             quote,
-          userPublicKey:             userPublicKey.toString(),
-          wrapAndUnwrapSol:          true,
-          dynamicComputeUnitLimit:   true,
-          prioritizationFeeLamports: 'auto',
-          asLegacyTransaction:       false,
-        }),
-      }, 20000);
-
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      if (!data.swapTransaction) throw new Error('بيانات المعاملة غير مكتملة');
-      console.log(`✅ [Build] نجح عبر ${ep.name}`);
-      return data;
-    } catch (err) {
-      console.warn(`❌ [Build] ${ep.name} فشل:`, err.message);
-      lastError = err;
-    }
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if (!data.swapTransaction) throw new Error('بيانات المعاملة غير مكتملة');
+    console.log('✅ [Build] نجح');
+    return data;
+  } catch (err) {
+    console.warn('❌ [Build] فشل:', err.message);
+    throw new Error(`فشل بناء المعاملة: ${err.message || ''}`);
   }
-  throw new Error(`فشل بناء المعاملة: ${lastError?.message || ''}`);
 }
 
 // ─── executeSwapTransaction ───────────────────────────────────────────────────
@@ -242,6 +236,16 @@ async function executeSwapTransaction(quote, userPubKey, keypair, connection) {
         currentBlockhash = await connection.getLatestBlockhash('confirmed');
         await new Promise(r => setTimeout(r, 2000));
       } else {
+        // ✅ قبل الاستسلام: نتحقق فعليًا من حالة هذا التوقيع على الشبكة.
+        // فشل confirmTransaction المحلي (تايم آوت مثلاً) لا يعني بالضرورة
+        // فشل المعاملة فعليًا — لو تأكدت بالفعل، نعتبرها نجاح بدل ما نرجع
+        // للحلقة الخارجية فتبني معاملة جديدة وتخصم رسوم المنصة مرة تانية
+        // على نفس العملية.
+        const actuallyConfirmed = await checkSignatureConfirmed(connection, swapSignature);
+        if (actuallyConfirmed === true) {
+          confirmation = { value: { err: null } };
+          break;
+        }
         throw confirmErr;
       }
     }
@@ -308,8 +312,6 @@ export async function executeSwap(
       console.log(`🎉 [Swap] نجاح تام: ${swapSignature}`);
 
       const outputAmount = parseInt(quote.outAmount) / Math.pow(10, outputDecimals);
-
-     
 
       return {
         success:      true,
