@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { pairWalletConnect } from '../services/walletConnectService'; // ✅ استيراد دالة الربط
 
 const BOOKMARKS_KEY = '@meco_bookmarks';
+const HISTORY_KEY   = '@meco_browsing_history';
+const HISTORY_MAX   = 50;
 
 export default function DappBrowserScreen() {
   const { t }        = useTranslation();
@@ -47,6 +49,7 @@ export default function DappBrowserScreen() {
   const [newBookmark,      setNewBookmark]     = useState({ name: '', url: '', iconUrl: '' });
 
   const webviewRefs = useRef({});
+  const historyDebounceRef = useRef({}); // ✅ مؤقتات سجل التصفح فقط — منفصلة تمامًا عن WalletConnect
 
   // 1. فتح التبويب الأول عند تشغيل المتصفح برابط خارجي
   useEffect(() => {
@@ -58,6 +61,8 @@ export default function DappBrowserScreen() {
     }
   }, [initialUrl, initialName]);
 
+  // ⚠️ منطق حساس — حلقة الوصل الأساسية لربط المحفظة بأي dApp خارجي عبر
+  // WalletConnect. لم يُعدَّل أي سطر هنا إطلاقًا أثناء إضافة سجل التصفح.
   // ✅ 2. الاستماع لكود الـ QR بعد العودة من كاميرا الكود أو اختيار لقطة شاشة
   useEffect(() => {
     const scanned = route.params?.scannedAddress;
@@ -141,6 +146,21 @@ export default function DappBrowserScreen() {
     } catch (_) {}
     setNewBookmark({ name: '', url: '', iconUrl: '' });
     setAddModalVisible(false);
+  };
+
+  // ✅ تسجيل سجل التصفح — منفصلة تمامًا عن منطق WalletConnect أعلاه، بلا أي تأثير عليه
+  const recordHistoryEntry = async (url, title) => {
+    if (!url) return;
+    try {
+      const s = await AsyncStorage.getItem(HISTORY_KEY);
+      const list = s ? JSON.parse(s) : [];
+      if (list[0]?.url === url) return; // نفس آخر رابط مسجّل، تجاهل لتفادي التكرار
+      const updated = [
+        { id: Date.now().toString(), url, name: title || url, visitedAt: Date.now() },
+        ...list,
+      ].slice(0, HISTORY_MAX);
+      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+    } catch (_) {}
   };
 
   const activeTab = tabs.find(t => t.id === activeTabId);
@@ -232,7 +252,15 @@ export default function DappBrowserScreen() {
                     ? { ...t, url: nav.url, title: nav.title || t.title, canGoBack: nav.canGoBack, canGoForward: nav.canGoForward }
                     : t
                 ));
-                if (tab.id === activeTabId) setInputUrl(nav.url);
+                if (tab.id === activeTabId) {
+                  setInputUrl(nav.url);
+                  // ✅ تسجيل السجل بعد استقرار الرابط فقط (تأخير 1.5 ثانية) لتفادي
+                  // عشرات الإدخالات المكررة أثناء تنقل الـSPA الداخلي — إضافة معزولة
+                  if (historyDebounceRef.current[tab.id]) clearTimeout(historyDebounceRef.current[tab.id]);
+                  historyDebounceRef.current[tab.id] = setTimeout(() => {
+                    if (!nav.loading) recordHistoryEntry(nav.url, nav.title);
+                  }, 1500);
+                }
               }}
             />
           </View>
