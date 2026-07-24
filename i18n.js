@@ -83,6 +83,16 @@ const resources = {
       liquidity_pool: 'مجمع السيولة',
       unclaimed_fees: 'رسوم غير محصودة',
 
+      // ========== عمليات مجمع السيولة (Orca Liquidity Pool Operations) ==========
+      op_initialize_pool: 'إنشاء مجمع سيولة جديد',
+      op_open_position: 'فتح مركز سيولة',
+      op_increase_liquidity: 'إضافة سيولة',
+      op_decrease_liquidity: 'سحب سيولة',
+      op_collect_fees: 'سحب الرسوم المكتسبة',
+      op_collect_reward: 'سحب المكافآت',
+      op_close_position: 'إغلاق مركز السيولة',
+      op_swap: 'تبادل عبر Orca',
+
       // ========== حسابات متعددة (Multi-Account) ==========
       accounts: 'الحسابات',
       add_account: 'إضافة حساب',
@@ -744,6 +754,16 @@ const resources = {
       price_impact: 'Price Impact',
       liquidity_pool: 'Liquidity Pool',
       unclaimed_fees: 'Unclaimed Fees',
+
+      // ========== Orca Liquidity Pool Operations ==========
+      op_initialize_pool: 'Create New Liquidity Pool',
+      op_open_position: 'Open Liquidity Position',
+      op_increase_liquidity: 'Add Liquidity',
+      op_decrease_liquidity: 'Remove Liquidity',
+      op_collect_fees: 'Collect Earned Fees',
+      op_collect_reward: 'Collect Rewards',
+      op_close_position: 'Close Liquidity Position',
+      op_swap: 'Swap via Orca',
 
       // ========== Multi-Account ==========
       accounts: 'Accounts',

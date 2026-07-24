@@ -11,6 +11,7 @@ import { Buffer } from 'buffer';
 import { default as heliusService } from './heliusService';
 
 const PROJECT_ID = '21dc279d9fb09e92a14421d4a189efec';
+const WHIRLPOOL_PROGRAM_ID = 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc';
 export let web3wallet;
 
 const listeners = {};
@@ -31,9 +32,58 @@ async function getLookupTables(vTx, connection) {
   return tables.filter(Boolean);
 }
 
+// ✅ Anchor instruction discriminators لبرنامج Orca Whirlpool
+// كل قيمة = أول 8 بايت من sha256("global:<اسم التعليمة بصيغة snake_case>")
+// دي نفس آلية الـ sighash القياسية اللي بيستخدمها Anchor لكل برامجه، محسوبة يدويًا هنا
+// بدل ما نضيف مكتبة IDL/anchor كاملة عشان تعليمة واحدة بس محتاجينها: تحديد نوع العملية
+const WHIRLPOOL_DISCRIMINATORS = {
+  '87802f4d0f98f031': 'open_position',        // open_position
+  'f21d86303a6e0e3c': 'open_position',        // open_position_with_metadata
+  'd42f5f5c726683fa': 'open_position',        // open_position_with_token_extensions
+  '2e9cf3760dcdfbb2': 'add_liquidity',        // increase_liquidity
+  '851d59df45eeb00a': 'add_liquidity',        // increase_liquidity_v2
+  'a026d06f685b2c01': 'remove_liquidity',     // decrease_liquidity
+  '3a7fbc3e4f52c460': 'remove_liquidity',     // decrease_liquidity_v2
+  'a498cf631eba13b6': 'collect_fees',         // collect_fees
+  'cf755fbfe5b4e20f': 'collect_fees',         // collect_fees_v2
+  '4605845756ebb122': 'collect_reward',       // collect_reward
+  'b16b25b4a01331d1': 'collect_reward',       // collect_reward_v2
+  '7b86510031446262': 'close_position',       // close_position
+  'f8c69e91e17587c8': 'swap',                 // swap
+  '2b04ed0b1ac91e62': 'swap',                 // swap_v2
+  'c360ed6c44a2dbe6': 'swap',                 // two_hop_swap
+  'ba8fd11dfe02c275': 'swap',                 // two_hop_swap_v2
+  '5fb40aac54aee828': 'create_pool',          // initialize_pool
+  'cf2d57f21b3fcc43': 'create_pool',          // initialize_pool_v2
+};
+
+// لو المعاملة فيها أكتر من تعليمة Whirlpool، دي أولوية العرض (الأهم للمستخدم يعرفه الأول)
+const OPERATION_PRIORITY = [
+  'create_pool', 'open_position', 'close_position',
+  'add_liquidity', 'remove_liquidity',
+  'collect_fees', 'collect_reward', 'swap',
+];
+
+// ✅ بيدور على تعليمات Orca Whirlpool جوه المعاملة ويرجع نوع العملية الرئيسي (أو null لو مفيش)
+function detectWhirlpoolOperation(instructions) {
+  const found = new Set();
+  for (const ix of instructions) {
+    const pid = ix.programId?.toBase58?.();
+    if (pid !== WHIRLPOOL_PROGRAM_ID) continue;
+    const data = ix.data;
+    if (!data || data.length < 8) continue;
+    const disc = Buffer.from(data).slice(0, 8).toString('hex');
+    const type = WHIRLPOOL_DISCRIMINATORS[disc];
+    if (type) found.add(type);
+  }
+  if (found.size === 0) return null;
+  const primary = OPERATION_PRIORITY.find(t => found.has(t)) || [...found][0];
+  return { type: primary };
+}
+
 async function parseTransactionDetails(method, params) {
   try {
-    if (method === 'solana_signMessage') return { instructionCount: 0, programs: [] };
+    if (method === 'solana_signMessage') return { instructionCount: 0, programs: [], operation: null };
     const buffer     = Buffer.from(params.transaction, 'base64');
     const connection = await heliusService.getConnection();
     let   instructions = [];
@@ -46,7 +96,7 @@ async function parseTransactionDetails(method, params) {
       instructions = web3.Transaction.from(buffer).instructions;
     }
     const KNOWN = {
-      'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc': 'Orca Whirlpool',
+      [WHIRLPOOL_PROGRAM_ID]:                          'Orca Whirlpool',
       'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA': 'Token',
       'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1gdS': 'AToken',
       '11111111111111111111111111111111':             'System',
@@ -56,9 +106,10 @@ async function parseTransactionDetails(method, params) {
       const pid = ix.programId?.toBase58?.();
       return KNOWN[pid] || (pid ? pid.slice(0,6)+'...' : '?');
     }))];
-    return { instructionCount: instructions.length, programs };
+    const operation = detectWhirlpoolOperation(instructions);
+    return { instructionCount: instructions.length, programs, operation };
   } catch (_) {
-    return { instructionCount: 0, programs: [] };
+    return { instructionCount: 0, programs: [], operation: null };
   }
 }
 
@@ -122,14 +173,15 @@ function setupEventListeners() {
     const appIcon  = session?.peer?.metadata?.icons?.[0] || null;
 
     if (listeners['sign_request']) {
-      const details = await parseTransactionDetails(request.method, request.params);
+      const { instructionCount, programs, operation } = await parseTransactionDetails(request.method, request.params);
       WCEvents.emit('sign_request', {
         event,
         method: request.method,
         appName,
         appUrl,
         appIcon,
-        details,
+        details: { instructionCount, programs },
+        operation,
         onApprove: () => handleRequestApproval(event),
         onReject:  () => handleRequestRejection(topic, id),
       });
