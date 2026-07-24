@@ -6,7 +6,7 @@ export const MINT_ADDRESSES = {
   SOL: 'So11111111111111111111111111111111111111112',
   USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-  MECO: '7hBNyFfwYTv65z3ZudMAyKBw3BLMKxyKXsr5xM51Za4i',
+  MECO: 'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W',
 };
 
 export const RPC_ENDPOINTS = {
@@ -29,7 +29,7 @@ export const API_ENDPOINTS = {
 export const APP_CONFIG = {
   NAME: 'MECO Wallet',
   SCHEME: 'meco-wallet', // يجب أن يتطابق مع scheme في app.json
-  VERSION: '1.10.0',
+  VERSION: '1.17.0',
   BUILD: 10,
   MINIMUM_SOL_BALANCE: 0.001, // الحد الأدنى من SOL لتغطية رسوم الشبكة
   DEFAULT_SLIPPAGE_BPS: 100,   // 1% انزلاق سعري افتراضي
