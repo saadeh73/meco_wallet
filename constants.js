@@ -63,6 +63,6 @@ export const SUPPORTED_TOKENS = [
     name: 'MonyCoin',
     mint: MINT_ADDRESSES.MECO,
     decimals: 6,
-    logoURI: 'https://monycoin.github.io/assets/meco-logo.png', // تأكد من وجود الشعار
+    logoURI: 'https://raw.githubusercontent.com/MonyCoin/meco-token/refs/heads/main/meco.logo.png',
   },
 ];
