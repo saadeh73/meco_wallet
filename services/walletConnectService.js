@@ -6,6 +6,7 @@ import { Alert } from 'react-native';
 import i18n from '../i18n';
 import { useAppStore } from '../store';
 import * as web3 from '@solana/web3.js';
+import { getAssociatedTokenAddress, AccountLayout, getMint } from '@solana/spl-token';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
 import { default as heliusService } from './heliusService';
@@ -81,19 +82,101 @@ function detectWhirlpoolOperation(instructions) {
   return { type: primary };
 }
 
+// ✅ نفس مجموعة العملات الأساسية المدعومة فعليًا فى SendScreen (SOL, USDC, USDT) + MECO
+const KNOWN_TOKENS = {
+  'So11111111111111111111111111111111111111112': 'SOL',
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': 'USDC',
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': 'USDT',
+  'A5Ln25cfww33kfUSzBb89bMha7j1PnFQTy7H3FsQHN7W': 'MECO',
+};
+
+// ✅ عدد الخانات العشرية بنجيبه من حساب الـ mint نفسه على السلسلة، مش بنخمنه —
+// أي غلطة فى عدد الخانات بتخلي الرقم المعروض غلط بمضاعفات كاملة (×10, ×1000..)
+// فمفيش داعي نخاطر ونثبّته يدويًا، والقيمة بتتخزن (cache) عشان منسألش عليها كل مرة
+const decimalsCache = {};
+async function getMintDecimals(connection, mint) {
+  if (decimalsCache[mint] != null) return decimalsCache[mint];
+  const info = await getMint(connection, new web3.PublicKey(mint));
+  decimalsCache[mint] = info.decimals;
+  return info.decimals;
+}
+
+// ✅ بيحسب الفرق الحقيقي (قبل/بعد) فى رصيد SOL + كل توكن معروف لصاحب المحفظة
+// عن طريق محاكاة المعاملة (simulateTransaction) بدل ما نحاول نفك تشفير أرقام المبالغ
+// من جوه بيانات التعليمة نفسها — لأن تعليمات زي collectFees أصلاً مالهاش "amount" كـ argument،
+// المبلغ بيتحسب on-chain وقت التنفيذ، فمفيش طريقة نقرأه غير إننا نحاكي التنفيذ فعليًا
+async function getBalanceChanges(connection, ownerPubkey, txForSim) {
+  try {
+    const owner = new web3.PublicKey(ownerPubkey);
+    const mints = Object.keys(KNOWN_TOKENS);
+    const atas  = await Promise.all(mints.map(m => getAssociatedTokenAddress(new web3.PublicKey(m), owner)));
+
+    const [preSol, preInfos, decimalsList] = await Promise.all([
+      connection.getBalance(owner),
+      connection.getMultipleAccountsInfo(atas),
+      Promise.all(mints.map(m => getMintDecimals(connection, m).catch(() => null))),
+    ]);
+
+    const sim = await connection.simulateTransaction(txForSim, {
+      accounts: { encoding: 'base64', addresses: [owner.toBase58(), ...atas.map(a => a.toBase58())] },
+      sigVerify: false,
+    });
+    if (sim.value.err || !sim.value.accounts) return null;
+
+    const [postOwner, ...postTokenAccs] = sim.value.accounts;
+    const changes = [];
+
+    const solDelta = ((postOwner?.lamports ?? preSol) - preSol) / web3.LAMPORTS_PER_SOL;
+    if (Math.abs(solDelta) > 0.000001) changes.push({ symbol: 'SOL', amount: solDelta });
+
+    mints.forEach((mint, i) => {
+      if (decimalsList[i] == null) return; // فشلنا نجيب decimals حقيقية — منعرضش رقم ممكن يكون غلط
+      const preAmt  = preInfos[i] ? AccountLayout.decode(preInfos[i].data).amount : 0n;
+      const postRaw = postTokenAccs[i]?.data?.[0];
+      let    postAmt = preAmt;
+      if (postRaw) {
+        try { postAmt = AccountLayout.decode(Buffer.from(postRaw, 'base64')).amount; } catch (_) {}
+      }
+      const delta = postAmt - preAmt;
+      if (delta !== 0n) changes.push({ symbol: KNOWN_TOKENS[mint], amount: Number(delta) / 10 ** decimalsList[i] });
+    });
+
+    return changes.length ? changes : null;
+  } catch (e) {
+    console.warn('⚠️ [getBalanceChanges] رجعنا للعرض العام:', e.message);
+    return null; // أي فشل هنا يرجعنا تلقائيًا للعرض العام القديم، مش هيوقف التوقيع أبدًا
+  }
+}
+
+// ✅ رسوم الشبكة الفعلية (مش تخمين) عن طريق getFeeForMessage القياسية فى web3.js
+async function getNetworkFee(connection, message) {
+  try {
+    const { value } = await connection.getFeeForMessage(message, 'confirmed');
+    return value != null ? value / web3.LAMPORTS_PER_SOL : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function parseTransactionDetails(method, params) {
   try {
-    if (method === 'solana_signMessage') return { instructionCount: 0, programs: [], operation: null };
+    if (method === 'solana_signMessage') return { instructionCount: 0, programs: [], operation: null, estimatedFee: null };
     const buffer     = Buffer.from(params.transaction, 'base64');
     const connection = await heliusService.getConnection();
     let   instructions = [];
+    let   txForSim, messageForFee;
     try {
       const vTx  = web3.VersionedTransaction.deserialize(buffer);
       const luts = await getLookupTables(vTx, connection);
       const msg  = web3.TransactionMessage.decompile(vTx.message, { addressLookupTableAccounts: luts });
-      instructions = msg.instructions;
+      instructions  = msg.instructions;
+      txForSim      = vTx;
+      messageForFee = vTx.message;
     } catch (_) {
-      instructions = web3.Transaction.from(buffer).instructions;
+      const legacyTx = web3.Transaction.from(buffer);
+      instructions   = legacyTx.instructions;
+      txForSim        = legacyTx;
+      messageForFee   = legacyTx.compileMessage();
     }
     const KNOWN = {
       [WHIRLPOOL_PROGRAM_ID]:                          'Orca Whirlpool',
@@ -107,9 +190,27 @@ async function parseTransactionDetails(method, params) {
       return KNOWN[pid] || (pid ? pid.slice(0,6)+'...' : '?');
     }))];
     const operation = detectWhirlpoolOperation(instructions);
-    return { instructionCount: instructions.length, programs, operation };
+
+    // ✅ لو عرفنا نوع العملية (سيولة/رسوم..)، نجيب المبالغ الحقيقية + رسوم الشبكة
+    let estimatedFee = null;
+    if (operation) {
+      const ownerPubkey = useAppStore.getState().walletPublicKey;
+      const [changes, fee] = await Promise.all([
+        ownerPubkey ? getBalanceChanges(connection, ownerPubkey, txForSim) : null,
+        getNetworkFee(connection, messageForFee),
+      ]);
+      estimatedFee = fee;
+      if (changes) {
+        operation.summary = changes.map(c => ({
+          label: c.amount < 0 ? i18n.t('walletConnect.amount_sent') : i18n.t('walletConnect.amount_received'),
+          value: `${Math.abs(c.amount).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${c.symbol}`,
+        }));
+      }
+    }
+
+    return { instructionCount: instructions.length, programs, operation, estimatedFee };
   } catch (_) {
-    return { instructionCount: 0, programs: [], operation: null };
+    return { instructionCount: 0, programs: [], operation: null, estimatedFee: null };
   }
 }
 
@@ -173,14 +274,14 @@ function setupEventListeners() {
     const appIcon  = session?.peer?.metadata?.icons?.[0] || null;
 
     if (listeners['sign_request']) {
-      const { instructionCount, programs, operation } = await parseTransactionDetails(request.method, request.params);
+      const { instructionCount, programs, operation, estimatedFee } = await parseTransactionDetails(request.method, request.params);
       WCEvents.emit('sign_request', {
         event,
         method: request.method,
         appName,
         appUrl,
         appIcon,
-        details: { instructionCount, programs },
+        details: { instructionCount, programs, estimatedFee },
         operation,
         onApprove: () => handleRequestApproval(event),
         onReject:  () => handleRequestRejection(topic, id),

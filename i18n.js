@@ -134,6 +134,8 @@ const resources = {
         method_sign_tx: 'توقيع معاملة',
         method_sign_send_tx: 'إرسال معاملة للشبكة',
         sign_failed: 'فشل التوقيع',
+        amount_sent: 'مُرسَل',
+        amount_received: 'مُستلَم',
       },
 
       // ========== HomeScreen ==========
@@ -806,6 +808,8 @@ const resources = {
         method_sign_tx: 'Sign Transaction',
         method_sign_send_tx: 'Send Transaction',
         sign_failed: 'Signing failed',
+        amount_sent: 'Sent',
+        amount_received: 'Received',
       },
 
       // ========== HomeScreen ==========
