@@ -83,16 +83,6 @@ const resources = {
       liquidity_pool: 'مجمع السيولة',
       unclaimed_fees: 'رسوم غير محصودة',
 
-      // ========== عمليات مجمع السيولة (Orca Liquidity Pool Operations) ==========
-      op_initialize_pool: 'إنشاء مجمع سيولة جديد',
-      op_open_position: 'فتح مركز سيولة',
-      op_increase_liquidity: 'إضافة سيولة',
-      op_decrease_liquidity: 'سحب سيولة',
-      op_collect_fees: 'سحب الرسوم المكتسبة',
-      op_collect_reward: 'سحب المكافآت',
-      op_close_position: 'إغلاق مركز السيولة',
-      op_swap: 'تبادل عبر Orca',
-
       // ========== حسابات متعددة (Multi-Account) ==========
       accounts: 'الحسابات',
       add_account: 'إضافة حساب',
@@ -134,8 +124,6 @@ const resources = {
         method_sign_tx: 'توقيع معاملة',
         method_sign_send_tx: 'إرسال معاملة للشبكة',
         sign_failed: 'فشل التوقيع',
-        amount_sent: 'مُرسَل',
-        amount_received: 'مُستلَم',
       },
 
       // ========== HomeScreen ==========
@@ -757,16 +745,6 @@ const resources = {
       liquidity_pool: 'Liquidity Pool',
       unclaimed_fees: 'Unclaimed Fees',
 
-      // ========== Orca Liquidity Pool Operations ==========
-      op_initialize_pool: 'Create New Liquidity Pool',
-      op_open_position: 'Open Liquidity Position',
-      op_increase_liquidity: 'Add Liquidity',
-      op_decrease_liquidity: 'Remove Liquidity',
-      op_collect_fees: 'Collect Earned Fees',
-      op_collect_reward: 'Collect Rewards',
-      op_close_position: 'Close Liquidity Position',
-      op_swap: 'Swap via Orca',
-
       // ========== Multi-Account ==========
       accounts: 'Accounts',
       add_account: 'Add Account',
@@ -808,8 +786,6 @@ const resources = {
         method_sign_tx: 'Sign Transaction',
         method_sign_send_tx: 'Send Transaction',
         sign_failed: 'Signing failed',
-        amount_sent: 'Sent',
-        amount_received: 'Received',
       },
 
       // ========== HomeScreen ==========
@@ -1372,6 +1348,47 @@ const initI18n = () => {
 };
 
 initI18n();
+
+// ✅ مفاتيح بطاقة توقيع WalletConnect (كانت ناقصة، ده سبب ظهور نصوص إنجليزية/مفاتيح خام فى وضع العربي)
+// مضافة بـ addResourceBundle بدل ما تتحط جوه resources فوق، عشان تبقى إضافة مؤكدة ومعزولة
+// من غير أي خطر إننا نلمس أو نكسر حاجة من الكتلة الكبيرة اللي فوق دي
+i18n.addResourceBundle('ar', 'translation', {
+  walletConnect: {
+    instruction_count: 'عدد التعليمات',
+    programs_involved: 'البرامج المتضمّنة',
+    trust_warning: 'تأكد من موثوقية التطبيق قبل الموافقة',
+    estimated_fee: 'رسوم الشبكة التقديرية',
+    op_initialize_pool: 'إنشاء مجمع سيولة جديد',
+    op_open_position: 'فتح مركز سيولة',
+    op_increase_liquidity: 'إضافة سيولة',
+    op_decrease_liquidity: 'سحب سيولة',
+    op_collect_fees: 'سحب الرسوم المكتسبة',
+    op_collect_reward: 'سحب المكافآت',
+    op_close_position: 'إغلاق مركز السيولة',
+    op_swap: 'تبادل عبر Orca',
+    amount_sent: 'مُرسَل',
+    amount_received: 'مُستلَم',
+  },
+}, true, true);
+
+i18n.addResourceBundle('en', 'translation', {
+  walletConnect: {
+    instruction_count: 'Instruction Count',
+    programs_involved: 'Programs Involved',
+    trust_warning: 'Make sure you trust this app before approving',
+    estimated_fee: 'Estimated Network Fee',
+    op_initialize_pool: 'Create New Liquidity Pool',
+    op_open_position: 'Open Liquidity Position',
+    op_increase_liquidity: 'Add Liquidity',
+    op_decrease_liquidity: 'Remove Liquidity',
+    op_collect_fees: 'Collect Earned Fees',
+    op_collect_reward: 'Collect Rewards',
+    op_close_position: 'Close Liquidity Position',
+    op_swap: 'Swap via Orca',
+    amount_sent: 'Sent',
+    amount_received: 'Received',
+  },
+}, true, true);
 
 export const changeLanguage = (lng) => {
   i18n.changeLanguage(lng);
