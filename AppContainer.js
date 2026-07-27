@@ -1,7 +1,7 @@
 import { LogBox } from 'react-native';
 LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -27,7 +27,7 @@ import SettingsScreen           from './screens/SettingsScreen';
 import ReceiveScreen            from './screens/ReceiveScreen';
 import SendScreen               from './screens/SendScreen';
 import BackupScreen             from './screens/BackupScreen';
-import MarketScreen             from './screens/MarketScreen';
+import MarketScreen              from './screens/MarketScreen';
 import AppPortalScreen          from './screens/AppPortalScreen';
 import TokenDetailsScreen       from './screens/TokenDetailsScreen';
 import QRScannerScreen          from './screens/QRScannerScreen';
@@ -128,13 +128,19 @@ export default function AppContainer() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      await useAppStore.getState().loadLanguage();
       await useAppStore.getState().loadPrimaryColor();
     };
     loadSettings();
   }, []);
 
+  const didMountLanguageSync = useRef(false);
   useEffect(() => {
+    // ✅ أول تشغيل بيتعامل معاه init() نفسه بالترتيب الصحيح — هنا بس بنستجيب
+    // لتغيير لغة لاحق حقيقي (زرار الإعدادات)، عشان منسابقش نداء init() بنداء تاني هنا
+    if (!didMountLanguageSync.current) {
+      didMountLanguageSync.current = true;
+      return;
+    }
     if (language) {
       i18n.changeLanguage(language);
       I18nManager.forceRTL(language === 'ar');
@@ -160,34 +166,54 @@ export default function AppContainer() {
     return () => sub.remove();
   }, []);
 
+  // ✅ بوابة الدخول: بصمة لو متاحة وإلا رمز قفل الهاتف مباشرة — نفس آلية زرار
+  // "عرض العبارة السرية" فى الإعدادات بالظبط (disableDeviceFallback: false)،
+  // من غير شرط hasHardwareAsync/isEnrolledAsync اللي كان بيقصر البوابة على البصمة بس
+  // ✅ منعتمدش على t()/i18next هنا خالص — بنقرأ اللغة المحمّلة مباشرة ونختار
+  // النص الجاهز بيها، عشان الصحة متبقاش متوقفة على توقيت جاهزية i18next عند فتح التطبيق
+  const authenticateDevice = async () => {
+    const lang = useAppStore.getState().language;
+    const strings = lang === 'ar'
+      ? { prompt: 'أدخل رمز قفل هاتفك للمتابعة', cancel: 'إلغاء', fallback: 'استخدام رمز الهاتف' }
+      : { prompt: 'Enter your phone passcode to continue', cancel: 'Cancel', fallback: 'Use device passcode' };
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage:         strings.prompt,
+        cancelLabel:           strings.cancel,
+        disableDeviceFallback: false,
+        fallbackLabel:         strings.fallback,
+      });
+      return result.success || result.error === 'passcode_not_set';
+    } catch (_) {
+      return true; // أي خطأ غير متوقع فى المصادقة نفسها منمنعش المستخدم من دخول محفظته
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       try {
+        // ✅ نحمّل تفضيل اللغة ونطبقه فورًا هنا (متسلسل) قبل أي استدعاء لـ t()،
+        // عشان نضمن إن authenticateDevice() تحت مايشتغلش قبل ما اللغة الصحيحة تتحمل
+        await useAppStore.getState().loadLanguage();
+        const savedLanguage = useAppStore.getState().language;
+        if (savedLanguage) {
+          await i18n.changeLanguage(savedLanguage);
+          I18nManager.forceRTL(savedLanguage === 'ar');
+        }
+
         const success = await useAppStore.getState().loadActiveAccount();
         if (success) {
-          const hasHW  = await LocalAuthentication.hasHardwareAsync();
-          const hasBio = await LocalAuthentication.isEnrolledAsync();
-          if (hasHW && hasBio) {
-            const result = await LocalAuthentication.authenticateAsync({
-              promptMessage: 'تأكيد الهوية للدخول', cancelLabel: 'إلغاء', disableDeviceFallback: true,
-            });
-            if (!result.success) { setInitialRoute('Home'); return; }
-          }
-          setInitialRoute('BottomTabs'); return;
+          const ok = await authenticateDevice();
+          setInitialRoute(ok ? 'BottomTabs' : 'Home');
+          return;
         }
         const initialized = await SecureStore.getItemAsync('wallet_initialized');
         if (initialized === 'true') {
           const ok = await useAppStore.getState().loadWallet();
           if (ok) {
-            const hasHW  = await LocalAuthentication.hasHardwareAsync();
-            const hasBio = await LocalAuthentication.isEnrolledAsync();
-            if (hasHW && hasBio) {
-              const result = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'تأكيد الهوية للدخول', cancelLabel: 'إلغاء', disableDeviceFallback: true,
-              });
-              if (!result.success) { setInitialRoute('Home'); return; }
-            }
-            setInitialRoute('BottomTabs'); return;
+            const authOk = await authenticateDevice();
+            setInitialRoute(authOk ? 'BottomTabs' : 'Home');
+            return;
           }
         }
         setInitialRoute('Home');

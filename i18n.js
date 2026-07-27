@@ -1390,6 +1390,51 @@ i18n.addResourceBundle('en', 'translation', {
   },
 }, true, true);
 
+// ✅ مفاتيح كود الحماية (PIN) والقفل التلقائي — نفس أسلوب addResourceBundle الآمن
+i18n.addResourceBundle('ar', 'translation', {
+  set_pin_code: 'تعيين كود الحماية',
+  change_pin_code: 'تغيير كود الحماية',
+  pin_code_set_desc: 'احمِ محفظتك بكود مكوّن من 6 أرقام',
+  enter_new_pin: 'أدخل كود جديد',
+  confirm_new_pin: 'أعد إدخال الكود للتأكيد',
+  pin_mismatch: 'الكودان غير متطابقين، حاول تاني',
+  pin_set_success: 'تم تعيين كود الحماية بنجاح',
+  incorrect_pin: 'كود غير صحيح',
+  too_many_attempts: 'محاولات كتير غلط، حاول تاني بعد {{seconds}} ثانية',
+  auto_lock: 'القفل التلقائي',
+  auto_lock_desc: 'قفل المحفظة تلقائيًا عند مغادرة التطبيق',
+  lock_immediately: 'فورًا',
+  lock_after_1min: 'بعد دقيقة',
+  lock_after_5min: 'بعد 5 دقائق',
+  lock_never: 'أبدًا',
+  unlock_wallet: 'افتح محفظتك',
+  unlock_passcode_prompt: 'أدخل رمز قفل هاتفك للمتابعة',
+  forgot_pin_hint: 'نسيت الكود؟',
+  pin_reset_warning: 'هيتم مسح كود الحماية بس، مفاتيح محفظتك مش هتتأثر. تقدر تحط كود جديد من الإعدادات بعدين.',
+}, true, true);
+
+i18n.addResourceBundle('en', 'translation', {
+  set_pin_code: 'Set Passcode',
+  change_pin_code: 'Change Passcode',
+  pin_code_set_desc: 'Protect your wallet with a 6-digit code',
+  enter_new_pin: 'Enter New Passcode',
+  confirm_new_pin: 'Re-enter to Confirm',
+  pin_mismatch: "Passcodes don't match, try again",
+  pin_set_success: 'Passcode set successfully',
+  incorrect_pin: 'Incorrect passcode',
+  too_many_attempts: 'Too many attempts, try again in {{seconds}}s',
+  auto_lock: 'Auto-Lock',
+  auto_lock_desc: 'Automatically lock the wallet when leaving the app',
+  lock_immediately: 'Immediately',
+  lock_after_1min: 'After 1 minute',
+  lock_after_5min: 'After 5 minutes',
+  lock_never: 'Never',
+  unlock_wallet: 'Unlock Your Wallet',
+  unlock_passcode_prompt: 'Enter your phone passcode to continue',
+  forgot_pin_hint: 'Forgot passcode?',
+  pin_reset_warning: 'This will only clear your passcode — your wallet keys are not affected. You can set a new one from Settings afterward.',
+}, true, true);
+
 export const changeLanguage = (lng) => {
   i18n.changeLanguage(lng);
   SecureStore.setItemAsync('app_language', lng);
