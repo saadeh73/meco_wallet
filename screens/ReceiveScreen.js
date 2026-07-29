@@ -13,7 +13,6 @@ import {
   Vibration
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import * as SecureStore from 'expo-secure-store';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'react-native-qrcode-styled';
@@ -22,9 +21,13 @@ import { Ionicons } from '@expo/vector-icons';
 const { width } = Dimensions.get('window');
 
 export default function ReceiveScreen() {
-  const { theme, primaryColor } = useAppStore();
+  // ✅ selectors منفصلة بدل ما نجيب الـ store كله مرة واحدة (نفس أسلوب WalletScreen.js)
+  const theme          = useAppStore(state => state.theme);
+  const primaryColor   = useAppStore(state => state.primaryColor);
+  // ✅ العنوان بييجي مباشرة من الـ store — بيتحدث تلقائيًا مع أي تبديل حساب فى أي مكان بالتطبيق
+  const walletPublicKey = useAppStore(state => state.walletPublicKey);
+
   const { t } = useTranslation();
-  const [walletAddress, setWalletAddress] = useState('');
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(30));
   const [copied, setCopied] = useState(false);
@@ -57,22 +60,13 @@ export default function ReceiveScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    // Fetch wallet address
-    SecureStore.getItemAsync('wallet_public_key')
-      .then((addr) => {
-        if (addr) {
-          setWalletAddress(addr);
-        }
-      })
-      .catch(console.log);
   }, []);
 
   const copyToClipboard = async () => {
-    if (!walletAddress) return;
+    if (!walletPublicKey) return;
     
     try {
-      await Clipboard.setStringAsync(walletAddress);
+      await Clipboard.setStringAsync(walletPublicKey);
       Vibration.vibrate(50); // Light vibration instead of Haptics
       
       setCopied(true);
@@ -86,11 +80,11 @@ export default function ReceiveScreen() {
   };
 
   const shareAddress = async () => {
-    if (!walletAddress) return;
+    if (!walletPublicKey) return;
     
     try {
       await Share.share({
-        message: t('share_message_with_address', { address: walletAddress }),
+        message: t('share_message_with_address', { address: walletPublicKey }),
         title: t('wallet_address')
       });
     } catch (error) {
@@ -138,10 +132,10 @@ export default function ReceiveScreen() {
             </View>
             
             <View style={styles.qrContainer}>
-              {walletAddress ? (
+              {walletPublicKey ? (
                 <>
                   <QRCode
-                    data={walletAddress}
+                    data={walletPublicKey}
                     size={width * 0.55}
                     color={colors.text}
                     bgColor={colors.card}
@@ -180,12 +174,12 @@ export default function ReceiveScreen() {
             
             <View style={[styles.addressContainer, { backgroundColor: colors.background }]}>
               <Text style={[styles.addressText, { color: colors.text }]}>
-                {getTruncatedAddress(walletAddress)}
+                {getTruncatedAddress(walletPublicKey)}
               </Text>
             </View>
             
             <Text style={[styles.fullAddress, { color: colors.textSecondary }]}>
-              {walletAddress || '...'}
+              {walletPublicKey || '...'}
             </Text>
           </View>
 
@@ -201,7 +195,7 @@ export default function ReceiveScreen() {
                 }
               ]}
               onPress={copyToClipboard}
-              disabled={!walletAddress}
+              disabled={!walletPublicKey}
             >
               <Ionicons 
                 name={copied ? "checkmark" : "copy-outline"} 
@@ -223,7 +217,7 @@ export default function ReceiveScreen() {
                 }
               ]}
               onPress={shareAddress}
-              disabled={!walletAddress}
+              disabled={!walletPublicKey}
             >
               <Ionicons name="share-outline" size={20} color={colors.text} />
               <Text style={[styles.shareButtonText, { color: colors.text }]}>
