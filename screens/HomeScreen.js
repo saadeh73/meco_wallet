@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, Image, TouchableOpacity,
-  useColorScheme, SafeAreaView, Modal
+  SafeAreaView, Modal
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -11,9 +11,10 @@ import { Ionicons } from '@expo/vector-icons';
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { t, i18n } = useTranslation();
-  const colorScheme = useColorScheme();
   const theme = useAppStore(state => state.theme);
   const primaryColor = useAppStore(state => state.primaryColor || '#6C63FF');
+  // ✅ محتاجينها عشان نحفظ اختيار اللغة صح (زي SettingsScreen بالظبط)
+  const setLanguage = useAppStore(state => state.setLanguage);
 
   const [langModalVisible, setLangModalVisible] = useState(false);
 
@@ -24,8 +25,8 @@ export default function HomeScreen() {
 
   const currentLang = LANGUAGES.find(l => l.code === i18n.language) || LANGUAGES[0];
 
-  // ✅ تأمين قيمة isDark لتكون Boolean حقيقية فقط
-  const isDark = theme === 'dark' ? true : (colorScheme === 'dark' ? true : false);
+  // ✅ نفس ثيم التطبيق بس، زي كل الشاشات التانية — مش هنخلط بثيم الجهاز
+  const isDark = theme === 'dark';
   
   const colors = {
     background: isDark ? '#0A0A0F' : '#F8FAFD',
@@ -35,7 +36,10 @@ export default function HomeScreen() {
     border: isDark ? '#2A2A3E' : '#E5E7EB',
   };
 
+  // ✅ بنحفظ الاختيار فى الـ store (بيتخزن فى AsyncStorage ويتزامن مع باقي
+  // التطبيق) قبل ما نطبقه على i18next مباشرة — نفس ترتيب SettingsScreen.toggleLanguage
   const changeLanguage = (langCode) => {
+    setLanguage(langCode);
     i18n.changeLanguage(langCode);
     setLangModalVisible(false);
   };
