@@ -2,9 +2,9 @@
 
 <div align="center">
   
-  [![Version](https://img.shields.io/badge/version-1.11.0-blue.svg)](https://github.com/MonyCoin/meco_wallet/releases)
+  [![Version](https://img.shields.io/badge/version-1.17.0-blue.svg)](https://github.com/MonyCoin/meco_wallet/releases)
   [![License](https://img.shields.io/badge/license-0BSD-green.svg)](LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](https://monycoin.github.io/meco_wallet-app/)
+  [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](https://monycoin.github.io/meco_web/)
   [![Network](https://img.shields.io/badge/network-Solana-9945FF.svg)](https://solana.com)
   
 </div>
@@ -52,7 +52,7 @@
 | :--- | :--- | :--- |
 | 🪙 **MECO Token** |[GitHub Repository](https://github.com/monycoin/meco-token) | المستودع الرئيسي للتوكنوميكس والعقود الذكية |
 | 📱 **MECO Wallet** | [GitHub Repository](https://github.com/monycoin/meco_wallet) | هذا المستودع - الكود المصدري للتطبيق |
-| ⬇️ **تحميل التطبيق** | [Official App Store](https://monycoin.github.io/meco_wallet-app/) | تنزيل أحدث إصدار (APK) |
+| ⬇️ **تحميل التطبيق** | [Official App Store](https://monycoin.github.io/meco_web/) | تنزيل أحدث إصدار (APK) |
 
 ---
 
@@ -107,10 +107,10 @@
 
 <div align="center">
 
-[![Download APK](https://img.shields.io/badge/📲_تحميل_تطبيق_ميكو-6C63FF?style=for-the-badge&logo=android&logoColor=white)](https://monycoin.github.io/meco_wallet-app/)
+[![Download APK](https://img.shields.io/badge/📲_تحميل_تطبيق_ميكو-6C63FF?style=for-the-badge&logo=android&logoColor=white)](https://monycoin.github.io/meco_web/)
 
-**الإصدار الحالي:** `v1.13.0`  
-**تاريخ التحديث:** أبريل 2026  
+**الإصدار الحالي:** `v1.17.0`  
+**تاريخ التحديث:** أغسطس 2026  
 
 </div>
 
