@@ -124,7 +124,7 @@
 |:------:|:------:|
 | ![X](https://img.shields.io/badge/X_Twitter-1DA1F2?style=flat-square&logo=x&logoColor=white) | [@MoniCoinMECO](https://x.com/MoniCoinMECO) |
 | ![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white) | [@monycoin1](https://t.me/monycoin1) |
-| ![Web](https://img.shields.io/badge/Website-6C63FF?style=flat-square&logo=google-chrome&logoColor=white) | [MonyCoin Blog](https://monycoin73.blogspot.com/) |
+| ![Web](https://img.shields.io/badge/Website-6C63FF?style=flat-square&logo=google-chrome&logoColor=white) | [MonyCoin Website](https://monycoin.github.io/meco_web/) |
 | ![Facebook](https://img.shields.io/badge/Facebook-1877F2?style=flat-square&logo=facebook&logoColor=white) |[MonyCoin Community](https://www.facebook.com/share/1ZUbCbssCU/) |
 
 </div>
