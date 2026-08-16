@@ -166,24 +166,27 @@ export default function AppContainer() {
     return () => sub.remove();
   }, []);
 
-  // ✅ بوابة الدخول: بصمة لو متاحة وإلا رمز قفل الهاتف مباشرة — نفس آلية زرار
-  // "عرض العبارة السرية" فى الإعدادات بالظبط (disableDeviceFallback: false)،
-  // من غير شرط hasHardwareAsync/isEnrolledAsync اللي كان بيقصر البوابة على البصمة بس
-  // ✅ منعتمدش على t()/i18next هنا خالص — بنقرأ اللغة المحمّلة مباشرة ونختار
-  // النص الجاهز بيها، عشان الصحة متبقاش متوقفة على توقيت جاهزية i18next عند فتح التطبيق
+  // ✅ رجّعنا لمنطق البصمة الأصلي بس (زي ما كان قبل إضافة رمز قفل الهاتف):
+  // لو مفيش بصمة متاحة أو مسجلة، بندخل عادي من غير أي بوابة. لو موجودة، البصمة
+  // إجبارية (disableDeviceFallback: true) — من غير بديل برمز الهاتف، عشان لو
+  // التطبيق راح للخلفية والطلب اتلغى تلقائيًا من النظام، الحالة دي بترجع "فشل"
+  // مش "نجاح جزئي"، وده كان بيوجّه المستخدم غلط لشاشة Home رغم إن محفظته موجودة
   const authenticateDevice = async () => {
-    const lang = useAppStore.getState().language;
-    const strings = lang === 'ar'
-      ? { prompt: 'أدخل رمز قفل هاتفك للمتابعة', cancel: 'إلغاء', fallback: 'استخدام رمز الهاتف' }
-      : { prompt: 'Enter your phone passcode to continue', cancel: 'Cancel', fallback: 'Use device passcode' };
     try {
+      const hasHW  = await LocalAuthentication.hasHardwareAsync();
+      const hasBio = await LocalAuthentication.isEnrolledAsync();
+      if (!hasHW || !hasBio) return true;
+
+      const lang = useAppStore.getState().language;
+      const prompt = lang === 'ar' ? 'تأكيد الهوية للدخول' : 'Confirm your identity to continue';
+      const cancel = lang === 'ar' ? 'إلغاء' : 'Cancel';
+
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage:         strings.prompt,
-        cancelLabel:           strings.cancel,
-        disableDeviceFallback: false,
-        fallbackLabel:         strings.fallback,
+        promptMessage:         prompt,
+        cancelLabel:           cancel,
+        disableDeviceFallback: true,
       });
-      return result.success || result.error === 'passcode_not_set';
+      return result.success;
     } catch (_) {
       return true; // أي خطأ غير متوقع فى المصادقة نفسها منمنعش المستخدم من دخول محفظته
     }
