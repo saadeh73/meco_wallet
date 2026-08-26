@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { ActivityIndicator, View, I18nManager } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppStore } from './store';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
@@ -35,7 +35,7 @@ import SwapScreen               from './screens/SwapScreen';
 import StakingScreen            from './screens/StakingScreen';
 import TradingScreen            from './screens/TradingScreen';
 import PortfolioScreen          from './screens/PortfolioScreen';
-import DappBrowserScreen        from './screens/DappBrowserScreen'; // ✅ استيراد الشاشة الجديدة للمتصفح
+import DappBrowserScreen        from './screens/DappBrowserScreen';
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -135,8 +135,6 @@ export default function AppContainer() {
 
   const didMountLanguageSync = useRef(false);
   useEffect(() => {
-    // ✅ أول تشغيل بيتعامل معاه init() نفسه بالترتيب الصحيح — هنا بس بنستجيب
-    // لتغيير لغة لاحق حقيقي (زرار الإعدادات)، عشان منسابقش نداء init() بنداء تاني هنا
     if (!didMountLanguageSync.current) {
       didMountLanguageSync.current = true;
       return;
@@ -166,11 +164,6 @@ export default function AppContainer() {
     return () => sub.remove();
   }, []);
 
-  // ✅ رجّعنا لمنطق البصمة الأصلي بس (زي ما كان قبل إضافة رمز قفل الهاتف):
-  // لو مفيش بصمة متاحة أو مسجلة، بندخل عادي من غير أي بوابة. لو موجودة، البصمة
-  // إجبارية (disableDeviceFallback: true) — من غير بديل برمز الهاتف، عشان لو
-  // التطبيق راح للخلفية والطلب اتلغى تلقائيًا من النظام، الحالة دي بترجع "فشل"
-  // مش "نجاح جزئي"، وده كان بيوجّه المستخدم غلط لشاشة Home رغم إن محفظته موجودة
   const authenticateDevice = async () => {
     try {
       const hasHW  = await LocalAuthentication.hasHardwareAsync();
@@ -188,15 +181,13 @@ export default function AppContainer() {
       });
       return result.success;
     } catch (_) {
-      return true; // أي خطأ غير متوقع فى المصادقة نفسها منمنعش المستخدم من دخول محفظته
+      return true;
     }
   };
 
   useEffect(() => {
     const init = async () => {
       try {
-        // ✅ نحمّل تفضيل اللغة ونطبقه فورًا هنا (متسلسل) قبل أي استدعاء لـ t()،
-        // عشان نضمن إن authenticateDevice() تحت مايشتغلش قبل ما اللغة الصحيحة تتحمل
         await useAppStore.getState().loadLanguage();
         const savedLanguage = useAppStore.getState().language;
         if (savedLanguage) {
@@ -239,43 +230,44 @@ export default function AppContainer() {
   const isDark = theme === 'dark';
 
   return (
-    <NavigationContainer theme={theme==='dark' ? DarkTheme : DefaultTheme}>
-      <Stack.Navigator initialRouteName={initialRoute}>
-        <Stack.Screen name="Home"               component={HomeScreen}               options={{ headerShown:false }} />
-        <Stack.Screen name="CreateWallet"       component={CreateWalletScreen}       options={{ title: t('create_wallet') }} />
-        <Stack.Screen name="ImportWallet"       component={ImportWalletScreen}       options={{ title: t('import_wallet') }} />
-        <Stack.Screen name="ImportPrivateKey"   component={ImportPrivateKeyScreen}   options={{}} />
-        <Stack.Screen name="BottomTabs"         component={BottomTabs}               options={{ headerShown:false }} />
-        <Stack.Screen name="Send"               component={SendScreen}               options={{ title: t('send') }} />
-        <Stack.Screen name="Receive"            component={ReceiveScreen}            options={{ title: t('receive') }} />
-        <Stack.Screen name="Backup"             component={BackupScreen}             options={{ title: t('backup_wallet') }} />
-        <Stack.Screen name="Swap"               component={SwapScreen}               options={{ title: t('swap_title')||'تبادل', headerBackTitle: t('back')||'رجوع' }} />
-        <Stack.Screen name="Staking"            component={StakingScreen}            options={{ title: t('staking.title')||'تخزين السيولة', headerBackTitle: t('back')||'رجوع' }} />
-        <Stack.Screen name="QRScanner"          component={QRScannerScreen}          options={{ headerShown:false }} />
-        <Stack.Screen name="TokenDetails"       component={TokenDetailsScreen}       options={{ title: t('token_details'), headerBackTitle: t('back') }} />
-        <Stack.Screen name="AppPortal"          component={AppPortalScreen}          options={{ title: t('explore')||'استكشف' }} />
-        <Stack.Screen name="Trading"            component={TradingScreen}            options={{ headerShown:false }} />
-        <Stack.Screen name="Settings"           component={SettingsScreen}           options={{ headerShown:false }} />
-        <Stack.Screen name="Portfolio"          component={PortfolioScreen}          options={{ headerShown:false }} />
+    <SafeAreaProvider>
+      <NavigationContainer theme={theme==='dark' ? DarkTheme : DefaultTheme}>
+        <Stack.Navigator initialRouteName={initialRoute}>
+          <Stack.Screen name="Home"               component={HomeScreen}               options={{ headerShown:false }} />
+          <Stack.Screen name="CreateWallet"       component={CreateWalletScreen}       options={{ title: t('create_wallet') }} />
+          <Stack.Screen name="ImportWallet"       component={ImportWalletScreen}       options={{ title: t('import_wallet') }} />
+          <Stack.Screen name="ImportPrivateKey"   component={ImportPrivateKeyScreen}   options={{}} />
+          <Stack.Screen name="BottomTabs"         component={BottomTabs}               options={{ headerShown:false }} />
+          <Stack.Screen name="Send"               component={SendScreen}               options={{ title: t('send') }} />
+          <Stack.Screen name="Receive"            component={ReceiveScreen}            options={{ title: t('receive') }} />
+          <Stack.Screen name="Backup"             component={BackupScreen}             options={{ title: t('backup_wallet') }} />
+          <Stack.Screen name="Swap"               component={SwapScreen}               options={{ title: t('swap_title')||'تبادل', headerBackTitle: t('back')||'رجوع' }} />
+          <Stack.Screen name="Staking"            component={StakingScreen}            options={{ title: t('staking.title')||'تخزين السيولة', headerBackTitle: t('back')||'رجوع' }} />
+          <Stack.Screen name="QRScanner"          component={QRScannerScreen}          options={{ headerShown:false }} />
+          <Stack.Screen name="TokenDetails"       component={TokenDetailsScreen}       options={{ title: t('token_details'), headerBackTitle: t('back') }} />
+          <Stack.Screen name="AppPortal"          component={AppPortalScreen}          options={{ title: t('explore')||'استكشف' }} />
+          <Stack.Screen name="Trading"            component={TradingScreen}            options={{ headerShown:false }} />
+          <Stack.Screen name="Settings"           component={SettingsScreen}           options={{ headerShown:false }} />
+          <Stack.Screen name="Portfolio"          component={PortfolioScreen}          options={{ headerShown:false }} />
 
-        {/* ✅ شاشة المتصفح المخصصة لـ Web3 خالية تماماً من شريط التبويبات السفلية */}
-        <Stack.Screen 
-          name="DappBrowser" 
-          component={DappBrowserScreen} 
-          options={{ 
-            title: 'Web3 Browser',
-            headerShown: true, // يظهر شريط علوي مع زر الرجوع للخروج من المتصفح
-            headerBackTitle: t('back') || 'رجوع',
-            headerStyle: {
-              backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
-              elevation: 0,
-              shadowOpacity: 0,
-            },
-            headerTintColor: isDark ? '#FFFFFF' : '#000000',
-          }} 
-        />
-      </Stack.Navigator>
-      <WalletConnectSignModal />
-    </NavigationContainer>
+          <Stack.Screen 
+            name="DappBrowser" 
+            component={DappBrowserScreen} 
+            options={{ 
+              title: 'Web3 Browser',
+              headerShown: true,
+              headerBackTitle: t('back') || 'رجوع',
+              headerStyle: {
+                backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF',
+                elevation: 0,
+                shadowOpacity: 0,
+              },
+              headerTintColor: isDark ? '#FFFFFF' : '#000000',
+            }} 
+          />
+        </Stack.Navigator>
+        <WalletConnectSignModal />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
