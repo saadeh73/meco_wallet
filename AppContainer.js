@@ -11,6 +11,9 @@ import { useAppStore } from './store';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 
+// استيراد حزمة الشاشة الترحيبية للتحكم بالوميض ومنعه
+import * as SplashScreen from 'expo-splash-screen';
+
 import * as Linking from 'expo-linking';
 import { initWalletConnect, pairWalletConnect } from './services/walletConnectService';
 import WalletConnectSignModal from './components/WalletConnectSignModal';
@@ -35,6 +38,9 @@ import StakingScreen            from './screens/StakingScreen';
 import TradingScreen            from './screens/TradingScreen';
 import PortfolioScreen          from './screens/PortfolioScreen';
 import DappBrowserScreen        from './screens/DappBrowserScreen';
+
+// منع الشاشة الترحيبية الأصلية من الاختفاء تلقائياً لتفادي الوميض الأبيض
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -218,9 +224,23 @@ export default function AppContainer() {
     init();
   }, []);
 
+  // مستمع لمراقبة جاهزية التطبيق وإخفاء الشاشة الترحيبية فور تحديد المسار النهائي
+  useEffect(() => {
+    if (initialRoute) {
+      const hideSplash = async () => {
+        try {
+          await SplashScreen.hideAsync();
+        } catch (e) {
+          console.warn('Error hiding splash screen:', e);
+        }
+      };
+      hideSplash();
+    }
+  }, [initialRoute]);
+
   if (!initialRoute) {
     return (
-      <View style={{ flex:1, justifyContent:'center', alignItems:'center', backgroundColor: theme==='dark'?'#000':'#fff' }}>
+      <View style={{ flex:1, justifyContent:'center', alignItems:'center', backgroundColor: theme==='dark'?'#0A0A0F':'#fff' }}>
         <ActivityIndicator size="large" color={primaryColor} />
       </View>
     );
