@@ -1,7 +1,7 @@
-import { LogBox } from 'react-native';
-LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 
 import React, { useEffect, useState, useRef } from 'react';
+import { LogBox } from 'react-native';
+LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
