@@ -1,7 +1,4 @@
-
 import React, { useEffect, useState, useRef } from 'react';
-import { LogBox } from 'react-native';
-LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -17,6 +14,8 @@ import i18n from './i18n';
 import * as Linking from 'expo-linking';
 import { initWalletConnect, pairWalletConnect } from './services/walletConnectService';
 import WalletConnectSignModal from './components/WalletConnectSignModal';
+import { LogBox } from 'react-native';
+LogBox.ignoreLogs(['"solana" is not a valid icon name']);
 
 import HomeScreen               from './screens/HomeScreen';
 import CreateWalletScreen       from './screens/CreateWalletScreen';
